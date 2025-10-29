@@ -1,0 +1,149 @@
+# ===============================
+# CYBERSÉCURITÉ - DONNÉES SENSIBLES
+# ===============================
+
+# Variables d'environnement et configurations locales
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Clés API et tokens d'authentification
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+**/api-keys/**
+**/tokens/**
+**/secrets/**
+**/credentials/**
+
+# Fichiers de session et cookies
+.session
+*.sess
+session-*
+cookies.txt
+
+# Logs potentiellement sensibles
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===============================
+# FICHIERS GÉNÉRÉS ET TEMPORAIRES
+# ===============================
+
+# Dépendances Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# Builds et distributions
+dist/
+dist-ssr/
+build/
+.output/
+.nuxt/
+.next/
+out/
+
+# Cache et fichiers temporaires
+.cache/
+.temp/
+.tmp/
+*.tsbuildinfo
+.eslintcache
+
+# ===============================
+# ENVIRONNEMENTS DE DÉVELOPPEMENT
+# ===============================
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# IDE divers
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Système d'exploitation
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===============================
+# DONNÉES UTILISATEUR ET BACKUPS
+# ===============================
+
+# Données locales de l'application
+/data/local/
+/data/user/
+/data/backup/
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads et fichiers utilisateur
+uploads/
+user-data/
+workspace-data/
+*.backup
+
+# ===============================
+# DÉVELOPPEMENT ET TESTS
+# ===============================
+
+# Coverage et tests
+coverage/
+.nyc_output/
+*.lcov
+
+# Storybook
+storybook-static/
+
+# ===============================
+# SPÉCIFIQUE AU PROJET A-IR-DD2
+# ===============================
+
+# Exports de démonstration (contiennent des clés d'exemple)
+/export/demo-package/.env.local
+/export/*.zip
+
+# Fichiers de test avec potentiels tokens
+test-*.js
+**/test-data/**
+
+# ===============================
+# DOCUMENTATION INTERNE (PRIVÉE)
+# ===============================
+# Exclure toute la documentation interne privée
+documentation/*
+# Mais inclure les dossiers publics futurs
+!documentation/tutoriel/
+!documentation/API/
+
+# Documentation générée avec exemples sensibles
+/documentation/*EXAMPLE*
+
+# Métadonnées locales
+metadata.local.json

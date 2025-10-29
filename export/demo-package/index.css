@@ -1,0 +1,123 @@
+/* Using Tailwind directives for base styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom global styles */
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Laser-style custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.5); /* gray-800 with opacity */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(45deg, #06b6d4, #3b82f6); /* cyan to blue gradient */
+  border-radius: 4px;
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(45deg, #0891b2, #2563eb); /* brighter on hover */
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.6);
+}
+
+/* Custom thin scrollbar for specific components */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.3);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.6);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.8);
+}
+
+/* Laser glow animation for interactive elements */
+@keyframes laser-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(6, 182, 212, 0.4), 0 0 10px rgba(6, 182, 212, 0.2);
+  }
+  50% { 
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 0 20px rgba(6, 182, 212, 0.3);
+  }
+}
+
+.laser-glow {
+  animation: laser-pulse 2s ease-in-out infinite;
+}
+
+/* Subtle text selection with laser theme */
+::selection {
+  background: rgba(6, 182, 212, 0.3);
+  color: white;
+}
+
+/* Simple line-clamp utility if not available in default Tailwind */
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Laser border animation */
+@keyframes laser-border {
+  0% { border-color: rgba(6, 182, 212, 0.5); }
+  25% { border-color: rgba(59, 130, 246, 0.5); }
+  50% { border-color: rgba(147, 51, 234, 0.5); }
+  75% { border-color: rgba(59, 130, 246, 0.5); }
+  100% { border-color: rgba(6, 182, 212, 0.5); }
+}
+
+.laser-border-animated {
+  animation: laser-border 3s ease-in-out infinite;
+}
+
+/* React Flow edge styling for laser theme */
+.react-flow__edge-path {
+  stroke: #06b6d4; /* cyan-500 */
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(6, 182, 212, 0.6));
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #0891b2; /* cyan-600 */
+  stroke-width: 3;
+  filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.8));
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5;
+  animation: flow 1s ease-in-out infinite;
+}
+
+@keyframes flow {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* React Flow node selection styling */
+.react-flow__node.selected {
+  outline: 2px solid #06b6d4;
+  outline-offset: 2px;
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+}

@@ -1,0 +1,5 @@
+{
+  "name": "LLM Agent Workflow Orchestrator",
+  "description": "A web application to create, configure, and orchestrate AI agents from various LLM providers in a visual workflow builder. This tool allows for creating complex interactions and chains between different AI models.",
+  "requestFramePermissions": []
+}
