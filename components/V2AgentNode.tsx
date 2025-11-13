@@ -74,7 +74,10 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
     navigationHandler,
     onDeleteNode,
     onToggleNodeMinimize,
-    onUpdateNodePosition
+    onUpdateNodePosition,
+    onOpenImagePanel,
+    onOpenImageModificationPanel,
+    onOpenFullscreen
   } = useWorkflowCanvasContext();
 
   // Design store for agent data (not node operations)
@@ -436,11 +439,27 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   };
 
   const handleOpenImagePanel = () => {
-    setImagePanelOpen(true, id);
+    if (onOpenImagePanel) {
+      onOpenImagePanel(id);
+    }
   };
 
   const handleImageClick = (imageBase64: string, mimeType: string) => {
-    setFullscreenImage({ src: imageBase64, mimeType });
+    // Cette fonction est maintenant utilisée pour le bouton fullscreen dans l'overlay
+    // On ne fait rien ici car le fullscreen est géré par App.tsx via setFullscreenImage
+    console.log('Image clicked - fullscreen handled by overlay button');
+  };
+
+  const handleOpenFullscreenImage = (imageBase64: string, mimeType: string) => {
+    if (onOpenFullscreen) {
+      onOpenFullscreen(imageBase64, mimeType);
+    }
+  };
+
+  const handleEditImage = (imageBase64: string, mimeType: string) => {
+    if (onOpenImageModificationPanel) {
+      onOpenImageModificationPanel(id, imageBase64, mimeType);
+    }
   };
 
   const renderMessage = (message: ChatMessage) => {
@@ -476,15 +495,44 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                 : 'bg-gray-700 text-gray-100'
             }
           `}>
-            {/* Image preview */}
+            {/* Image preview with overlay buttons */}
             {message.image && (
-              <div className="mb-2">
+              <div className="mb-2 relative group">
                 <img
                   src={`data:${message.mimeType};base64,${message.image}`}
-                  alt="Uploaded"
-                  className="max-w-full h-auto rounded cursor-pointer hover:opacity-80"
-                  onClick={() => handleImageClick(message.image!, message.mimeType!)}
+                  alt="Image"
+                  className="max-w-full h-auto rounded"
                 />
+
+                {/* Overlay buttons - appear on hover with gaming style */}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 
+                              transition-opacity duration-200 rounded flex items-center justify-center gap-3">
+                  {/* Fullscreen button */}
+                  <button
+                    onClick={() => handleOpenFullscreenImage(message.image!, message.mimeType || 'image/png')}
+                    className="p-3 bg-cyan-500/20 hover:bg-cyan-500/40 border-2 border-cyan-400/50 
+                             hover:border-cyan-400 rounded-lg transition-all duration-200 
+                             hover:scale-110 hover:shadow-lg hover:shadow-cyan-500/50
+                             text-cyan-300 hover:text-cyan-100"
+                    title={t('fullscreen')}
+                  >
+                    <ExpandIcon width={20} height={20} />
+                  </button>
+
+                  {/* Edit button - only if agent has ImageModification capability */}
+                  {agent.capabilities?.includes(LLMCapability.ImageModification) && (
+                    <button
+                      onClick={() => handleEditImage(message.image!, message.mimeType || 'image/png')}
+                      className="p-3 bg-purple-500/20 hover:bg-purple-500/40 border-2 border-purple-400/50 
+                               hover:border-purple-400 rounded-lg transition-all duration-200 
+                               hover:scale-110 hover:shadow-lg hover:shadow-purple-500/50
+                               text-purple-300 hover:text-purple-100"
+                      title={t('edit_image')}
+                    >
+                      <EditIcon width={20} height={20} />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -737,21 +785,22 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                     </Button>
                   )}
 
-                  {/* Image generation */}
-                  {agent?.capabilities?.includes(LLMCapability.ImageGeneration) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="p-2 h-8 w-8 text-gray-400 hover:text-purple-400 
+                  {/* Image generation/modification */}
+                  {(agent?.capabilities?.includes(LLMCapability.ImageGeneration) ||
+                    agent?.capabilities?.includes(LLMCapability.ImageModification)) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="p-2 h-8 w-8 text-gray-400 hover:text-purple-400 
                                  hover:bg-purple-500/20 hover:shadow-lg hover:shadow-purple-500/40
                                  transition-all duration-200 rounded-md
                                  hover:scale-110 active:scale-95"
-                      onClick={handleOpenImagePanel}
-                      disabled={isLoading}
-                    >
-                      <ImageIcon width={14} height={14} />
-                    </Button>
-                  )}
+                        onClick={handleOpenImagePanel}
+                        disabled={isLoading}
+                      >
+                        <ImageIcon width={14} height={14} />
+                      </Button>
+                    )}
 
                   {/* Send - avec effet spécial quand actif */}
                   <Button

@@ -224,7 +224,6 @@ export default {
     max_calls_limit: "Limite max appels",
     time_window_hours: "Fenêtre temporelle (heures)",
     create_event: "Créer Événement",
-    cancel: "Annuler",
     no_events_configured: "Aucun événement configuré",
     create_first_event: "Créez votre premier événement pour commencer",
     type_label: "Type:",

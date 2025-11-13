@@ -25,7 +25,7 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
 
     const node = workflowNodes.find(n => n.id === nodeId);
     const agentConfig = llmConfigs.find(c => c.provider === node?.agent.llmProvider);
-    
+
     // Reset state when panel is closed or node changes
     React.useEffect(() => {
         if (!isOpen) {
@@ -59,21 +59,21 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
 
         setIsLoading(false);
     };
-    
+
     const handleAddToChat = () => {
         if (generatedImage && nodeId) {
             onImageGenerated(nodeId, generatedImage);
             onClose();
         }
     };
-    
+
     const handleEditImage = () => {
         if (generatedImage && nodeId) {
             onOpenImageModificationPanel(nodeId, generatedImage, 'image/png');
             onClose();
         }
     };
-    
+
     const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file && nodeId) {
@@ -81,8 +81,9 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
                 setIsLoading(true);
                 setError(null);
                 const imageBase64 = await fileToBase64(file);
-                onOpenImageModificationPanel(nodeId, imageBase64, file.type);
-                onClose();
+                // Store the imported image so user can add to chat or edit
+                setGeneratedImage(imageBase64);
+                setIsLoading(false);
             } catch (err) {
                 console.error("Image import failed:", err);
                 setError(t('imageGen_error_importFailed'));
@@ -100,20 +101,23 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
     return (
         <SlideOver title={t('imageGen_title', { agentName: node.agent.name })} isOpen={isOpen} onClose={onClose}>
             <div className="space-y-4 h-full flex flex-col">
-                <div>
-                    <label htmlFor="image-prompt" className="block text-sm font-medium text-gray-300 mb-1">
-                        {t('imageGen_promptLabel')}
-                    </label>
-                    <textarea
-                        id="image-prompt"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        rows={4}
-                        className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder={t('imageGen_promptPlaceholder')}
-                        disabled={isLoading}
-                    />
-                </div>
+                {/* Only show prompt field if agent can generate images */}
+                {node?.agent.capabilities.includes(LLMCapability.ImageGeneration) && (
+                    <div>
+                        <label htmlFor="image-prompt" className="block text-sm font-medium text-gray-300 mb-1">
+                            {t('imageGen_promptLabel')}
+                        </label>
+                        <textarea
+                            id="image-prompt"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            rows={4}
+                            className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder={t('imageGen_promptPlaceholder')}
+                            disabled={isLoading}
+                        />
+                    </div>
+                )}
 
                 <div className="flex-1 flex items-center justify-center bg-gray-900/50 rounded-lg overflow-hidden">
                     {isLoading && (
@@ -121,19 +125,19 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
                             <p className="animate-pulse">{t('imageGen_generating')}</p>
                         </div>
                     )}
-                    
+
                     {error && <p className="text-sm text-red-400 p-4">{error}</p>}
-                    
+
                     {generatedImage && (
-                        <img 
-                            src={`data:image/png;base64,${generatedImage}`} 
-                            alt="Generated content" 
+                        <img
+                            src={`data:image/png;base64,${generatedImage}`}
+                            alt="Generated content"
                             className="rounded-lg object-contain max-w-full max-h-full"
                         />
                     )}
-                     {!isLoading && !generatedImage && !error && (
-                         <div className="text-gray-500">{t('imageGen_placeholder')}</div>
-                     )}
+                    {!isLoading && !generatedImage && !error && (
+                        <div className="text-gray-500">{t('imageGen_placeholder')}</div>
+                    )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
@@ -164,9 +168,11 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
                                     />
                                 </>
                             )}
-                            <Button onClick={handleGenerate} disabled={isLoading || !prompt.trim()} variant="primary">
-                                {isLoading ? t('imageGen_generating_button') : t('imageGen_generate')}
-                            </Button>
+                            {node?.agent.capabilities.includes(LLMCapability.ImageGeneration) && (
+                                <Button onClick={handleGenerate} disabled={isLoading || !prompt.trim()} variant="primary">
+                                    {isLoading ? t('imageGen_generating_button') : t('imageGen_generate')}
+                                </Button>
+                            )}
                         </>
                     )}
                 </div>

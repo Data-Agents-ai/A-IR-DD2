@@ -60,8 +60,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     onUpdateWorkflowNode,
     onRemoveFromWorkflow,
     onNavigate
-  } = props;  // Mémoriser nodeTypes pour éviter le warning React Flow
-  const nodeTypes = useMemo(() => NODE_TYPES, []);
+  } = props;
 
   // ISOLATION COMPLÈTE: un seul useState pour éviter les conflits React Flow
   const [internalState, setInternalState] = useState({
@@ -84,8 +83,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     },
     actualNodes: [] as WorkflowNode[],
     agents: [] as Agent[],
-    reactFlowNodes: [] as Node[],
-    nodeTypes: NODE_TYPES
+    reactFlowNodes: [] as Node[]
   });
 
   // Hooks React Flow - MAIS nous allons les contrôler manuellement
@@ -209,7 +207,10 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     onDeleteNode,
     onToggleNodeMinimize,
     onUpdateNodePosition,
-  }), [handleEditPrototype, onNavigate, onDeleteNode, onToggleNodeMinimize, onUpdateNodePosition]);
+    onOpenImagePanel,
+    onOpenImageModificationPanel,
+    onOpenFullscreen,
+  }), [handleEditPrototype, onNavigate, onDeleteNode, onToggleNodeMinimize, onUpdateNodePosition, onOpenImagePanel, onOpenImageModificationPanel, onOpenFullscreen]);
 
   return (
     <WorkflowCanvasProvider value={contextValue}>
@@ -266,7 +267,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          nodeTypes={nodeTypes}
+          nodeTypes={NODE_TYPES}
           fitView
           style={{ background: 'transparent' }}
           defaultViewport={{ x: 0, y: 0, zoom: 1 }}

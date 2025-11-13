@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Agent, LLMConfig, LLMProvider, WorkflowNode, LLMCapability, ChatMessage, HistoryConfig, RobotId } from './types';
-import { AgentSidebar } from './components/AgentSidebar';
 import { NavigationLayout } from './components/NavigationLayout';
 import { RobotPageRouter } from './components/RobotPageRouter';
 import WorkflowCanvas from './components/WorkflowCanvas';
@@ -116,7 +115,7 @@ function App() {
   const { t } = useLocalization();
 
   // V2 Runtime Store access
-  const { updateLLMConfigs, setNavigationHandler } = useRuntimeStore();
+  const { updateLLMConfigs, setNavigationHandler, addNodeMessage } = useRuntimeStore();
 
   // V2 Design Store access for integrity validation  
   const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance } = useDesignStore();
@@ -267,7 +266,9 @@ function App() {
       image: imageBase64,
       mimeType: 'image/png',
     };
+    // Update both React state (for legacy compatibility) and Zustand store (for V2AgentNode)
     handleUpdateNodeMessages(nodeId, prev => [...prev, imageMessage]);
+    addNodeMessage(nodeId, imageMessage);
   };
 
   const handleOpenImageModificationPanel = (nodeId: string, sourceImage: string, mimeType: string = 'image/png') => {
@@ -283,7 +284,9 @@ function App() {
       image: newImage,
       mimeType: 'image/png',
     };
+    // Update both React state (for legacy compatibility) and Zustand store (for V2AgentNode)
     handleUpdateNodeMessages(nodeId, prev => [...prev, message]);
+    addNodeMessage(nodeId, message);
   };
 
   const handleToggleNodeMinimize = (nodeId: string) => {

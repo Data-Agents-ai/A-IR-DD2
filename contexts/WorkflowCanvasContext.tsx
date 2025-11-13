@@ -6,6 +6,9 @@ interface WorkflowCanvasContextType {
   onDeleteNode?: (nodeId: string) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
+  onOpenImagePanel?: (nodeId: string) => void;
+  onOpenImageModificationPanel?: (nodeId: string, sourceImage: string, mimeType?: string) => void;
+  onOpenFullscreen?: (imageBase64: string, mimeType: string) => void;
 }
 
 const WorkflowCanvasContext = createContext<WorkflowCanvasContextType | undefined>(undefined);
