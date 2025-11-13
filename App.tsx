@@ -3,7 +3,7 @@ import { Agent, LLMConfig, LLMProvider, WorkflowNode, LLMCapability, ChatMessage
 import { AgentSidebar } from './components/AgentSidebar';
 import { NavigationLayout } from './components/NavigationLayout';
 import { RobotPageRouter } from './components/RobotPageRouter';
-import { WorkflowCanvas } from './components/WorkflowCanvas';
+import WorkflowCanvas from './components/WorkflowCanvas';
 import { AgentFormModal } from './components/modals/AgentFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { Header } from './components/Header';
@@ -36,6 +36,8 @@ const initialLLMConfigs: LLMConfig[] = [
   { provider: LLMProvider.Perplexity, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.WebSearch]: true } },
   { provider: LLMProvider.Qwen, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
   { provider: LLMProvider.Kimi, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
+  { provider: LLMProvider.DeepSeek, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Reasoning]: true, [LLMCapability.CacheOptimization]: true } },
+  { provider: LLMProvider.LMStudio, enabled: false, apiKey: 'http://localhost:3928', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.LocalDeployment]: true, [LLMCapability.CodeSpecialization]: true } },
 ];
 
 const loadLLMConfigs = (): LLMConfig[] => {
@@ -86,14 +88,14 @@ const loadLLMConfigs = (): LLMConfig[] => {
 
 
 interface DeleteConfirmationState {
-    agentId: string;
-    agentName: string;
+  agentId: string;
+  agentName: string;
 }
 
 interface UpdateConfirmationState {
-    agentData: Omit<Agent, 'id'>;
-    agentId: string;
-    count: number;
+  agentData: Omit<Agent, 'id'>;
+  agentId: string;
+  count: number;
 }
 
 
@@ -110,38 +112,38 @@ function App() {
   const [currentImageNodeId, setCurrentImageNodeId] = useState<string | null>(null);
   const [editingImageInfo, setEditingImageInfo] = useState<EditingImageInfo | null>(null);
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [fullscreenImage, setFullscreenImage] = useState<{src: string; mimeType: string} | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<{ src: string; mimeType: string } | null>(null);
   const { t } = useLocalization();
-  
+
   // V2 Runtime Store access
   const { updateLLMConfigs, setNavigationHandler } = useRuntimeStore();
-  
+
   // V2 Design Store access for integrity validation  
-  const { validateWorkflowIntegrity, cleanupOrphanedInstances } = useDesignStore();
-  
+  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance } = useDesignStore();
+
   // Sync LLM configs with runtime store
   useEffect(() => {
     updateLLMConfigs(llmConfigs);
   }, [llmConfigs, updateLLMConfigs]);
-  
+
   // Configure navigation handler for V2AgentNodes
   useEffect(() => {
     setNavigationHandler(handleRobotNavigation);
   }, [setNavigationHandler]);
-  
+
   // PHASE 1B: Integrity validation on app startup
   useEffect(() => {
     // Clean up any orphaned instances first
     const cleanedCount = cleanupOrphanedInstances();
-    
+
     // Then validate workflow integrity
     const { fixedCount } = validateWorkflowIntegrity();
-    
+
     if (cleanedCount > 0 || fixedCount > 0) {
       console.log(`🚀 App startup integrity check completed: cleaned ${cleanedCount} instances, fixed ${fixedCount} nodes`);
     }
   }, [cleanupOrphanedInstances, validateWorkflowIntegrity]);
-  
+
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmationState | null>(null);
   const [updateConfirmation, setUpdateConfirmation] = useState<UpdateConfirmationState | null>(null);
 
@@ -163,7 +165,7 @@ function App() {
       console.error("Failed to save settings to localStorage", error);
     }
   };
-  
+
   const handleOpenEditAgentModal = (agent: Agent) => {
     setEditingAgent(agent);
     setAgentModalOpen(true);
@@ -185,19 +187,19 @@ function App() {
     setAgentModalOpen(false);
     setEditingAgent(null);
   };
-  
+
   const handleUpdateConfirmation = (updateInstances: boolean) => {
     if (updateConfirmation) {
       const { agentData, agentId } = updateConfirmation;
       const updatedAgent = { ...agentData, id: agentId };
-      
+
       // Update the prototype agent
       setAgents(prev => prev.map(a => a.id === agentId ? updatedAgent : a));
 
       if (updateInstances) {
-        setWorkflowNodes(prev => prev.map(node => 
-          node.agent.id === agentId 
-            ? { ...node, agent: updatedAgent } 
+        setWorkflowNodes(prev => prev.map(node =>
+          node.agent.id === agentId
+            ? { ...node, agent: updatedAgent }
             : node
         ));
       }
@@ -208,32 +210,39 @@ function App() {
   const handleDeleteAgent = (agentId: string) => {
     const agentToDelete = agents.find(agent => agent.id === agentId);
     if (agentToDelete) {
-        setDeleteConfirmation({ agentId, agentName: agentToDelete.name });
+      setDeleteConfirmation({ agentId, agentName: agentToDelete.name });
     }
   };
-  
+
   const confirmDeleteAgent = () => {
     if (deleteConfirmation) {
-        const { agentId } = deleteConfirmation;
-        setAgents(prev => prev.filter(agent => agent.id !== agentId));
-        setWorkflowNodes(prev => prev.filter(node => node.agent.id !== agentId));
-        setDeleteConfirmation(null);
+      const { agentId } = deleteConfirmation;
+      setAgents(prev => prev.filter(agent => agent.id !== agentId));
+      setWorkflowNodes(prev => prev.filter(node => node.agent.id !== agentId));
+      setDeleteConfirmation(null);
     }
   };
 
   const addAgentToWorkflow = useCallback((agent: Agent) => {
+    // Calculate position based on existing instances
+    const position = {
+      x: (workflowNodes.length % 4) * 420 + 20,
+      y: Math.floor(workflowNodes.length / 4) * 540 + 20,
+    };
+
+    // Add agent instance to DesignStore instead of local state
+    const instanceId = addAgentInstance(agent.id, position);
+
+    // Legacy: Also add to local state for now to maintain compatibility
     const newNode: WorkflowNode = {
       id: `node-${Date.now()}`,
       agent,
-      position: { 
-        x: (workflowNodes.length % 4) * 420 + 20,
-        y: Math.floor(workflowNodes.length / 4) * 540 + 20,
-      },
+      position,
       messages: [],
       isMinimized: false,
     };
     setWorkflowNodes(prev => [...prev, newNode]);
-  }, [workflowNodes]);
+  }, [workflowNodes, addAgentInstance]);
 
   const handleDeleteNode = (nodeId: string) => {
     setWorkflowNodes(prev => prev.filter(node => node.id !== nodeId));
@@ -244,7 +253,7 @@ function App() {
       prev.map(node => (node.id === nodeId ? { ...node, position } : node))
     );
   };
-  
+
   const handleOpenImagePanel = (nodeId: string) => {
     setCurrentImageNodeId(nodeId);
     setImagePanelOpen(true);
@@ -260,12 +269,12 @@ function App() {
     };
     handleUpdateNodeMessages(nodeId, prev => [...prev, imageMessage]);
   };
-  
+
   const handleOpenImageModificationPanel = (nodeId: string, sourceImage: string, mimeType: string = 'image/png') => {
     setEditingImageInfo({ nodeId, sourceImage, mimeType });
     setImageModificationPanelOpen(true);
   };
-  
+
   const handleImageModified = (nodeId: string, newImage: string, text: string) => {
     const message: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -284,8 +293,8 @@ function App() {
   };
 
   const handleUpdateNodeMessages = (nodeId: string, messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
-    setWorkflowNodes(prev => prev.map(node => 
-      node.id === nodeId 
+    setWorkflowNodes(prev => prev.map(node =>
+      node.id === nodeId
         ? { ...node, messages: typeof messages === 'function' ? messages(node.messages) : messages }
         : node
     ));
@@ -293,6 +302,10 @@ function App() {
 
   const handleOpenFullscreen = (src: string, mimeType: string) => {
     setFullscreenImage({ src, mimeType });
+  };
+
+  const handleAddToWorkflow = (agent: Agent) => {
+    addAgentToWorkflow(agent);
   };
 
   return (
@@ -304,62 +317,74 @@ function App() {
           isV2Mode={useV2Navigation}
         />
         <div className="flex flex-1 overflow-hidden">
-        <NavigationLayout
-          // V1 props
-          agents={agents}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
-          onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
-          onAddToWorkflow={addAgentToWorkflow}
-          onDeleteAgent={handleDeleteAgent}
-          onEditAgent={handleOpenEditAgentModal}
-          // V2 props
-          useV2Navigation={useV2Navigation}
-          currentPath={currentPath}
-          onNavigate={handleRobotNavigation}
-        />
-        <main className="flex-1 bg-gray-800/50 overflow-hidden">
-          {useV2Navigation ? (
-            <RobotPageRouter 
-              currentPath={currentPath}
-              llmConfigs={llmConfigs}
-              onNavigate={handleRobotNavigation}
-            />
-          ) : (
-            <WorkflowCanvas 
-              nodes={workflowNodes} 
-              llmConfigs={llmConfigs}
-              onDeleteNode={handleDeleteNode}
-              onUpdateNodeMessages={handleUpdateNodeMessages}
-              onUpdateNodePosition={handleUpdateNodePosition}
-              onToggleNodeMinimize={handleToggleNodeMinimize}
-              onOpenImagePanel={handleOpenImagePanel}
-              onOpenImageModificationPanel={handleOpenImageModificationPanel}
-              onOpenFullscreen={handleOpenFullscreen}
-            />
-          )}
-        </main>
-      </div>
+          <NavigationLayout
+            // V1 props
+            agents={agents}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
+            onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
+            onAddToWorkflow={addAgentToWorkflow}
+            onDeleteAgent={handleDeleteAgent}
+            onEditAgent={handleOpenEditAgentModal}
+            // V2 props
+            useV2Navigation={useV2Navigation}
+            currentPath={currentPath}
+            onNavigate={handleRobotNavigation}
+          />
+          <main className="flex-1 bg-gray-800/50 overflow-hidden">
+            {useV2Navigation ? (
+              <RobotPageRouter
+                currentPath={currentPath}
+                llmConfigs={llmConfigs}
+                onNavigate={handleRobotNavigation}
+                agents={agents}
+                workflowNodes={workflowNodes}
+                onDeleteNode={handleDeleteNode}
+                onUpdateNodeMessages={handleUpdateNodeMessages}
+                onUpdateNodePosition={handleUpdateNodePosition}
+                onToggleNodeMinimize={handleToggleNodeMinimize}
+                onOpenImagePanel={handleOpenImagePanel}
+                onOpenImageModificationPanel={handleOpenImageModificationPanel}
+                onOpenFullscreen={handleOpenFullscreen}
+                onAddToWorkflow={handleAddToWorkflow}
+              />
+            ) : (
+              <WorkflowCanvas
+                nodes={workflowNodes}
+                llmConfigs={llmConfigs}
+                agents={agents}
+                onDeleteNode={handleDeleteNode}
+                onUpdateNodeMessages={handleUpdateNodeMessages}
+                onUpdateNodePosition={handleUpdateNodePosition}
+                onToggleNodeMinimize={handleToggleNodeMinimize}
+                onOpenImagePanel={handleOpenImagePanel}
+                onOpenImageModificationPanel={handleOpenImageModificationPanel}
+                onOpenFullscreen={handleOpenFullscreen}
+                onNavigate={handleRobotNavigation}
+              />
+            )}
+          </main>
+        </div>
 
-      {isSettingsModalOpen && (
-        <SettingsModal
-          llmConfigs={llmConfigs}
-          onClose={() => setSettingsModalOpen(false)}
-          onSave={handleSaveSettings}
-        />
-      )}
+        {isSettingsModalOpen && (
+          <SettingsModal
+            llmConfigs={llmConfigs}
+            onClose={() => setSettingsModalOpen(false)}
+            onSave={handleSaveSettings}
+          />
+        )}
 
-      {isAgentModalOpen && (
-        <AgentFormModal
-          onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
-          onSave={handleSaveAgent}
-          llmConfigs={llmConfigs}
-          existingAgent={editingAgent}
-        />
-      )}
-      
-      {updateConfirmation && (
-        <ConfirmationModal
+        {isAgentModalOpen && (
+          <AgentFormModal
+            onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
+            onSave={handleSaveAgent}
+            llmConfigs={llmConfigs}
+            existingAgent={editingAgent}
+          />
+        )}
+
+        {updateConfirmation && (
+          <ConfirmationModal
             isOpen={true}
             title={t('dialog_update_title')}
             message={t('dialog_update_message', { count: updateConfirmation.count })}
@@ -367,11 +392,11 @@ function App() {
             cancelText={t('dialog_update_cancelButton')}
             onConfirm={() => handleUpdateConfirmation(true)}
             onCancel={() => handleUpdateConfirmation(false)}
-        />
-      )}
-      
-      {deleteConfirmation && (
-        <ConfirmationModal
+          />
+        )}
+
+        {deleteConfirmation && (
+          <ConfirmationModal
             isOpen={true}
             title={t('dialog_delete_title')}
             message={t('dialog_delete_message', { agentName: deleteConfirmation.agentName })}
@@ -379,55 +404,55 @@ function App() {
             onConfirm={confirmDeleteAgent}
             onCancel={() => setDeleteConfirmation(null)}
             variant="danger"
-        />
-      )}
-
-      <ImageGenerationPanel
-        isOpen={isImagePanelOpen}
-        nodeId={currentImageNodeId}
-        llmConfigs={llmConfigs}
-        workflowNodes={workflowNodes}
-        onClose={() => setImagePanelOpen(false)}
-        onImageGenerated={handleImageGenerated}
-        onOpenImageModificationPanel={handleOpenImageModificationPanel}
-      />
-      
-      <ImageModificationPanel
-        isOpen={isImageModificationPanelOpen}
-        editingImageInfo={editingImageInfo}
-        llmConfigs={llmConfigs}
-        workflowNodes={workflowNodes}
-        onClose={() => setImageModificationPanelOpen(false)}
-        onImageModified={handleImageModified}
-      />
-
-      {fullscreenImage && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm" 
-          onClick={() => setFullscreenImage(null)}
-        >
-          <img 
-            src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`} 
-            alt={t('fullscreenModal_alt')}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
           />
-          <Button 
-            variant="ghost" 
-            onClick={() => setFullscreenImage(null)} 
-            className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
-            aria-label={t('fullscreenModal_close_aria')}
+        )}
+
+        <ImageGenerationPanel
+          isOpen={isImagePanelOpen}
+          nodeId={currentImageNodeId}
+          llmConfigs={llmConfigs}
+          workflowNodes={workflowNodes}
+          onClose={() => setImagePanelOpen(false)}
+          onImageGenerated={handleImageGenerated}
+          onOpenImageModificationPanel={handleOpenImageModificationPanel}
+        />
+
+        <ImageModificationPanel
+          isOpen={isImageModificationPanelOpen}
+          editingImageInfo={editingImageInfo}
+          llmConfigs={llmConfigs}
+          workflowNodes={workflowNodes}
+          onClose={() => setImageModificationPanelOpen(false)}
+          onImageModified={handleImageModified}
+        />
+
+        {fullscreenImage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
+            onClick={() => setFullscreenImage(null)}
           >
-            &times;
-          </Button>
-        </div>
-      )}
-      
-      {/* Fullscreen Chat Modal */}
-      <FullscreenChatModal />
-      
-      <NotificationDisplay />
-    </div>
+            <img
+              src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`}
+              alt={t('fullscreenModal_alt')}
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <Button
+              variant="ghost"
+              onClick={() => setFullscreenImage(null)}
+              className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
+              aria-label={t('fullscreenModal_close_aria')}
+            >
+              &times;
+            </Button>
+          </div>
+        )}
+
+        {/* Fullscreen Chat Modal */}
+        <FullscreenChatModal />
+
+        <NotificationDisplay />
+      </div>
     </NotificationProvider>
   );
 }

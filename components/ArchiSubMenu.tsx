@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { RobotMenuItem, RobotId } from '../types';
 import { PlusIcon, SettingsIcon, WrenchIcon } from './Icons';
+import { useLocalization } from '../hooks/useLocalization';
 
 interface ArchiSubMenuProps {
   /** Items de navigation spécifiques à Archi */
@@ -34,6 +35,7 @@ export const ArchiSubMenu: React.FC<ArchiSubMenuProps> = ({
   onClose,
   position = { top: 0, left: 64 }
 }) => {
+  const { t } = useLocalization();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Click outside handler pour fermer le menu
@@ -72,10 +74,10 @@ export const ArchiSubMenu: React.FC<ArchiSubMenuProps> = ({
       {/* Header du submenu */}
       <div className="px-4 py-3 border-b border-gray-600">
         <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wide">
-          Archi • Prototypage
+          {t('archi_prototyping_header')}
         </h3>
         <p className="text-xs text-gray-400 mt-1">
-          Création et orchestration d'agents
+          {t('archi_prototyping_desc')}
         </p>
       </div>
 
@@ -92,8 +94,8 @@ export const ArchiSubMenu: React.FC<ArchiSubMenuProps> = ({
               className={`
                 w-full px-4 py-3 flex items-center space-x-3 text-left transition-all duration-200
                 hover:bg-indigo-500/20 hover:border-l-2 hover:border-indigo-400
-                ${isActive 
-                  ? 'bg-indigo-500/30 border-l-2 border-indigo-400 text-indigo-300' 
+                ${isActive
+                  ? 'bg-indigo-500/30 border-l-2 border-indigo-400 text-indigo-300'
                   : 'text-gray-300 hover:text-white'
                 }
               `}
@@ -112,11 +114,11 @@ export const ArchiSubMenu: React.FC<ArchiSubMenuProps> = ({
                   text-sm font-medium transition-colors duration-200
                   ${isActive ? 'text-indigo-300' : 'text-gray-300'}
                 `}>
-                  {item.name}
+                  {t(item.name)}
                 </div>
                 {item.description && (
                   <div className="text-xs text-gray-500 mt-0.5 truncate">
-                    {item.description}
+                    {t(item.description)}
                   </div>
                 )}
               </div>
@@ -133,7 +135,7 @@ export const ArchiSubMenu: React.FC<ArchiSubMenuProps> = ({
       {/* Footer avec raccourci rapide */}
       <div className="px-4 py-2 border-t border-gray-600 bg-gray-900/50">
         <div className="text-xs text-gray-500 flex items-center justify-between">
-          <span>Prototypage</span>
+          <span>{t('prototyping')}</span>
           <kbd className="px-1.5 py-0.5 text-xs bg-gray-700 rounded border border-gray-600">
             Ctrl+Shift+A
           </kbd>

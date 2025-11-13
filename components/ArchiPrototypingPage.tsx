@@ -17,43 +17,45 @@ import { TodoModal } from './modals/TodoModal';
 interface ArchiPrototypingPageProps {
   llmConfigs: LLMConfig[];
   onNavigateToWorkflow?: () => void;
+  onAddToWorkflow?: (agent: Agent) => void;
 }
 
-export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({ 
-  llmConfigs, 
-  onNavigateToWorkflow 
+export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
+  llmConfigs,
+  onNavigateToWorkflow,
+  onAddToWorkflow
 }) => {
   const { t } = useLocalization();
   const { addNotification } = useNotifications();
-  const { 
-    agents, 
+  const {
+    agents,
     currentRobotId,
     setCurrentRobot,
-    addAgent, 
-    updateAgent, 
-    deleteAgent, 
-    selectAgent, 
-    selectedAgentId, 
-    addNode, 
+    addAgent,
+    updateAgent,
+    deleteAgent,
+    selectAgent,
+    selectedAgentId,
+    addNode,
     addAgentInstance,
     getPrototypeImpact
   } = useDesignStore();
-  
+
   const [agentModalOpen, setAgentModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [addedAgentPopup, setAddedAgentPopup] = useState<{ agent: Agent; nodeId: string } | null>(null);
-  
+
   // PHASE 2A: Confirmation modals
   const [deletionConfirmOpen, setDeletionConfirmOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
-  
+
   // PHASE 2A: Workflow validation
   const [workflowValidationOpen, setWorkflowValidationOpen] = useState(false);
   const [agentToAdd, setAgentToAdd] = useState<Agent | null>(null);
-  
+
   // PHASE 2B: Template selection
   const [templateSelectionOpen, setTemplateSelectionOpen] = useState(false);
-  
+
   // Prototype Impact Confirmation
   const [impactConfirmOpen, setImpactConfirmOpen] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<{ agentId: string; agentData: Omit<Agent, 'id'> } | null>(null);
@@ -63,24 +65,25 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
 
   // Todo Modal
   const [todoModalOpen, setTodoModalOpen] = useState(false);
-  
+
   const handleCreateAgent = () => {
     setEditingAgent(null);
     setAgentModalOpen(true);
   };
-  
+
   // PHASE 2B: Template-based agent creation
   const handleCreateFromTemplate = () => {
     setTemplateSelectionOpen(true);
   };
-  
+
   const handleTemplateSelected = (template: AgentTemplate) => {
-    const agentData = createAgentFromTemplate(template.id);
+    const agentData = createAgentFromTemplate(template.id, undefined, llmConfigs);
+
     if (agentData) {
       setEditingAgent({ ...agentData, id: 'temp' } as Agent);
       setTemplateSelectionOpen(false);
       setAgentModalOpen(true);
-      
+
       addNotification({
         type: 'info',
         title: 'Template chargé',
@@ -89,112 +92,48 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
       });
     }
   };
-  
+
   const handleEditAgent = (agent: Agent) => {
     setEditingAgent(agent);
     setAgentModalOpen(true);
   };
-  
+
   const handleAddToWorkflow = (agent: Agent) => {
     // PHASE 2A: Show validation modal first
     setAgentToAdd(agent);
     setWorkflowValidationOpen(true);
   };
-  
+
   const confirmAddToWorkflow = () => {
     if (!agentToAdd) return;
-    
-    // Anti-collision: Find a position that doesn't overlap with existing nodes
-    const existingNodes = useDesignStore.getState().nodes;
-    const nodeWidth = 384; // 96 * 4 (w-96 in Tailwind)
-    const nodeHeight = 400; // Approximate height
-    const margin = 20; // Margin between nodes
-    
-    let position = { x: 50, y: 50 };
-    let attempts = 0;
-    const maxAttempts = 100;
-    
-    while (attempts < maxAttempts) {
-      let hasCollision = false;
-      
-      for (const existingNode of existingNodes) {
-        const existingPos = existingNode.position;
-        const distance = Math.sqrt(
-          Math.pow(position.x - existingPos.x, 2) + 
-          Math.pow(position.y - existingPos.y, 2)
-        );
-        
-        // Check if nodes would overlap (considering their size + margin)
-        const minDistance = Math.sqrt(
-          Math.pow(nodeWidth + margin, 2) + 
-          Math.pow(nodeHeight + margin, 2)
-        ) / 2;
-        
-        if (distance < minDistance) {
-          hasCollision = true;
-          break;
-        }
+
+    // Use the global onAddToWorkflow prop instead of local store
+    if (onAddToWorkflow) {
+      onAddToWorkflow(agentToAdd);
+
+      // Show success notification
+      addNotification({
+        type: 'success',
+        title: 'Agent ajouté au workflow',
+        message: `${agentToAdd.name} a été ajouté au workflow global`,
+        duration: 3000
+      });
+
+      // Auto-navigate to workflow to show the newly added agent
+      if (onNavigateToWorkflow) {
+        onNavigateToWorkflow();
       }
-      
-      if (!hasCollision) {
-        break; // Found a good position
-      }
-      
-      // Try next position in a spiral pattern
-      attempts++;
-      const angle = attempts * 0.5;
-      const radius = 50 + attempts * 10;
-      position = {
-        x: 300 + radius * Math.cos(angle),
-        y: 300 + radius * Math.sin(angle)
-      };
     }
-    
-    // Create an agent instance
-    const instanceName = `${agentToAdd.name} #${useDesignStore.getState().getInstanceCount(agentToAdd.id) + 1}`;
-    const instanceId = addAgentInstance(agentToAdd.id, position, instanceName);
-    
-    // Get the created instance
-    const agentInstance = useDesignStore.getState().agentInstances.find(inst => inst.id === instanceId);
-    if (!agentInstance) {
-      console.error('Failed to create agent instance');
-      return;
-    }
-    
-    // Create the workflow node
-    const newNode = {
-      type: 'agent' as const,
-      position,
-      data: {
-        robotId: RobotId.Archi,
-        label: agentInstance.name,
-        agentInstance,
-        isMinimized: false
-      }
-    };
-    const nodeId = addNode(newNode);
-    
-    // Show confirmation popup with navigation option
-    setAddedAgentPopup({ agent: agentToAdd, nodeId });
-    
-    // PHASE 2A: Success notification
-    addNotification({
-      type: 'success',
-      title: 'Agent ajouté au workflow',
-      message: `"${agentToAdd.name}" est maintenant disponible sur la canvas.`,
-      duration: 3000
-    });
-    
-    // Close validation modal
+
     setWorkflowValidationOpen(false);
     setAgentToAdd(null);
   };
-  
+
   const handleSaveAgent = (agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>, agentId?: string) => {
-    if (agentId) {
+    if (agentId && agentId !== 'temp') { // Exclure l'ID temporaire des templates
       // Check impact before updating existing agent
       const impact = getPrototypeImpact(agentId);
-      
+
       if (impact.instanceCount > 0) {
         // There are instances affected, show confirmation
         setPendingUpdate({ agentId, agentData });
@@ -205,10 +144,8 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         proceedWithUpdate(agentId, agentData);
       }
     } else {
-      // Create new with governance
-      const result = addAgent(agentData);
-      
-      if (result.success) {
+      // Create new with governance (includes templates with id: 'temp')
+      const result = addAgent(agentData); if (result.success) {
         addNotification({
           type: 'success',
           title: 'Agent créé',
@@ -231,7 +168,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
 
   const proceedWithUpdate = (agentId: string, agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>) => {
     const result = updateAgent(agentId, agentData);
-    
+
     if (result.success) {
       addNotification({
         type: 'success',
@@ -258,12 +195,12 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
       setEditingAgent(null);
     }
   };
-  
+
   const handleCancelImpactUpdate = () => {
     setPendingUpdate(null);
     setImpactConfirmOpen(false);
   };
-  
+
   // PHASE 2A: Enhanced deletion with confirmation
   const handleDeleteAgent = (agentId: string) => {
     const agent = agents.find(a => a.id === agentId);
@@ -272,19 +209,19 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
       setDeletionConfirmOpen(true);
     }
   };
-  
+
   const confirmDeletion = () => {
     if (agentToDelete) {
       const affectedInstances = useDesignStore.getState().getInstancesOfPrototype(agentToDelete.id);
-      
+
       const result = deleteAgent(agentToDelete.id);
-      
+
       if (result.success) {
         // PHASE 2A: Success notification with impact details
         addNotification({
           type: 'success',
           title: 'Agent supprimé',
-          message: affectedInstances.length > 0 
+          message: affectedInstances.length > 0
             ? `"${agentToDelete.name}" et ses ${affectedInstances.length} instance(s) ont été supprimés.`
             : `"${agentToDelete.name}" a été supprimé avec succès.`,
           duration: 4000
@@ -297,26 +234,26 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           duration: 5000
         });
       }
-      
+
       setDeletionConfirmOpen(false);
       setAgentToDelete(null);
     }
   };
-  
+
   const cancelDeletion = () => {
     setDeletionConfirmOpen(false);
     setAgentToDelete(null);
   };
-  
+
   const cancelWorkflowValidation = () => {
     setWorkflowValidationOpen(false);
     setAgentToAdd(null);
   };
-  
+
   const cancelTemplateSelection = () => {
     setTemplateSelectionOpen(false);
   };
-  
+
   return (
     <div className="h-full bg-gray-900 text-gray-100">
       {/* Header */}
@@ -329,7 +266,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               <p className="text-gray-400 text-sm">Créez et configurez les agents IA pour votre workflow</p>
             </div>
           </div>
-          
+
           {/* Governance Indicator */}
           <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-lg px-4 py-2">
             <div className="text-xs text-indigo-300 font-medium">Robot Actuel</div>
@@ -338,7 +275,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           </div>
         </div>
       </div>
-      
+
       {/* Actions Bar */}
       <div className="p-6 border-b border-gray-700/50">
         <div className="flex items-center justify-between">
@@ -346,7 +283,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
             {agents.length} prototype(s) créé(s)
           </div>
           <div className="flex space-x-3">
-            <Button 
+            <Button
               onClick={() => setTodoModalOpen(true)}
               className="flex items-center space-x-2"
               variant="secondary"
@@ -354,7 +291,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               <span>📝</span>
               <span>Tâches</span>
             </Button>
-            <Button 
+            <Button
               onClick={() => setGovernanceTestOpen(true)}
               className="flex items-center space-x-2"
               variant="secondary"
@@ -362,7 +299,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               <span>🔒</span>
               <span>Test Gouvernance</span>
             </Button>
-            <Button 
+            <Button
               onClick={handleCreateFromTemplate}
               className="flex items-center space-x-2"
               variant="secondary"
@@ -370,7 +307,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               <span>📋</span>
               <span>Template</span>
             </Button>
-            <Button 
+            <Button
               onClick={handleCreateAgent}
               className="flex items-center space-x-2"
               variant="primary"
@@ -381,7 +318,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           </div>
         </div>
       </div>
-      
+
       {/* Prototypes Grid */}
       <div className="flex-1 p-6 overflow-y-auto">
         {agents.length === 0 ? (
@@ -389,7 +326,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
             <WrenchIcon className="w-16 h-16 text-gray-600 mb-4" />
             <h3 className="text-xl font-semibold text-gray-400 mb-2">Aucun prototype d'agent</h3>
             <p className="text-gray-500 mb-6 max-w-md">
-              Commencez par créer votre premier agent. Définissez son rôle, ses capacités 
+              Commencez par créer votre premier agent. Définissez son rôle, ses capacités
               et les outils qu'il peut utiliser.
             </p>
             <div className="flex space-x-3">
@@ -406,11 +343,10 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {agents.map((agent) => (
-              <Card 
-                key={agent.id} 
-                className={`p-4 hover:border-indigo-500/50 transition-colors cursor-pointer relative ${
-                  selectedAgentId === agent.id ? 'border-indigo-500 bg-indigo-900/20' : ''
-                }`}
+              <Card
+                key={agent.id}
+                className={`p-4 hover:border-indigo-500/50 transition-colors cursor-pointer relative ${selectedAgentId === agent.id ? 'border-indigo-500 bg-indigo-900/20' : ''
+                  }`}
                 onClick={() => selectAgent(agent.id)}
               >
                 {/* Actions */}
@@ -436,7 +372,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                     <CloseIcon width={14} height={14} />
                   </Button>
                 </div>
-                
+
                 {/* Content */}
                 <div className="pr-12">
                   <h3 className="font-semibold text-lg text-indigo-400 mb-1 truncate">
@@ -448,7 +384,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                   <p className="text-sm text-gray-300 line-clamp-3 mb-4">
                     {agent.systemPrompt}
                   </p>
-                  
+
                   {/* Metadata */}
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center justify-between text-xs">
@@ -464,7 +400,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                       <span className="text-gray-300">{agent.capabilities.length}</span>
                     </div>
                   </div>
-                  
+
                   {/* Action Button */}
                   <Button
                     variant="secondary"
@@ -482,7 +418,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           </div>
         )}
       </div>
-      
+
       {/* Agent Form Modal */}
       {agentModalOpen && (
         <AgentFormModal
@@ -495,7 +431,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           existingAgent={editingAgent}
         />
       )}
-      
+
       {/* Popup de confirmation d'ajout au workflow */}
       {addedAgentPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -504,7 +440,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               ✅ Agent ajouté au workflow
             </h3>
             <p className="text-gray-300 mb-4">
-              L'agent <span className="font-semibold text-indigo-400">"{addedAgentPopup.agent.name}"</span> a été 
+              L'agent <span className="font-semibold text-indigo-400">"{addedAgentPopup.agent.name}"</span> a été
               ajouté au workflow avec succès !
             </p>
             <div className="flex gap-3">
@@ -553,6 +489,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
       <TemplateSelectionModal
         isOpen={templateSelectionOpen}
         robotId={RobotId.Archi}
+        llmConfigs={llmConfigs}
         onSelectTemplate={handleTemplateSelected}
         onCancel={cancelTemplateSelection}
       />

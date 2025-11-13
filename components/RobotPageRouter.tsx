@@ -1,7 +1,7 @@
 import React from 'react';
-import { RobotId, LLMConfig } from '../types';
+import { RobotId, LLMConfig, Agent, WorkflowNode } from '../types';
 import { ArchiPrototypingPage } from './ArchiPrototypingPage';
-import { V2WorkflowCanvas } from './V2WorkflowCanvas';
+import WorkflowCanvas from './WorkflowCanvas';
 import { ComConnectionsPage } from './ComConnectionsPage';
 import { PhilDataPage } from './PhilDataPage';
 import { TimEventsPage } from './TimEventsPage';
@@ -11,10 +11,50 @@ interface RobotPageRouterProps {
   currentPath: string;
   llmConfigs: LLMConfig[];
   onNavigate?: (robotId: RobotId, path: string) => void;
+  // Props pour WorkflowCanvas
+  agents?: Agent[];
+  workflowNodes?: WorkflowNode[];
+  onDeleteNode?: (nodeId: string) => void;
+  onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
+  onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
+  onToggleNodeMinimize?: (nodeId: string) => void;
+  onOpenImagePanel?: (nodeId: string) => void;
+  onOpenImageModificationPanel?: (nodeId: string) => void;
+  onOpenFullscreen?: (nodeId: string) => void;
+  onAddToWorkflow?: (agent: Agent) => void;
 }
 
 // Page with workflow canvas for operational robots
-const WorkflowPage: React.FC<{ robotName: string; description: string }> = ({ robotName, description }) => {
+const WorkflowPage: React.FC<{ 
+  robotName: string; 
+  description: string;
+  // Props WorkflowCanvas
+  agents?: Agent[];
+  workflowNodes?: WorkflowNode[];
+  llmConfigs: LLMConfig[];
+  onDeleteNode?: (nodeId: string) => void;
+  onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
+  onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
+  onToggleNodeMinimize?: (nodeId: string) => void;
+  onOpenImagePanel?: (nodeId: string) => void;
+  onOpenImageModificationPanel?: (nodeId: string) => void;
+  onOpenFullscreen?: (nodeId: string) => void;
+  onAddToWorkflow?: (agent: Agent) => void;
+}> = ({ 
+  robotName, 
+  description, 
+  agents,
+  workflowNodes,
+  llmConfigs,
+  onDeleteNode,
+  onUpdateNodeMessages,
+  onUpdateNodePosition,
+  onToggleNodeMinimize,
+  onOpenImagePanel,
+  onOpenImageModificationPanel,
+  onOpenFullscreen,
+  onAddToWorkflow
+}) => {
   return (
     <div className="h-full flex flex-col bg-gray-900 text-gray-100">
       {/* Header */}
@@ -23,9 +63,21 @@ const WorkflowPage: React.FC<{ robotName: string; description: string }> = ({ ro
         <p className="text-gray-400 text-sm">{description}</p>
       </div>
       
-      {/* Workflow Canvas */}
+      {/* Workflow Canvas avec toutes les props nécessaires */}
       <div className="flex-1">
-        <V2WorkflowCanvas />
+        <WorkflowCanvas 
+          nodes={workflowNodes}
+          agents={agents}
+          llmConfigs={llmConfigs}
+          onDeleteNode={onDeleteNode}
+          onUpdateNodeMessages={onUpdateNodeMessages}
+          onUpdateNodePosition={onUpdateNodePosition}
+          onToggleNodeMinimize={onToggleNodeMinimize}
+          onOpenImagePanel={onOpenImagePanel}
+          onOpenImageModificationPanel={onOpenImageModificationPanel}
+          onOpenFullscreen={onOpenFullscreen}
+          onAddToWorkflow={onAddToWorkflow}
+        />
       </div>
     </div>
   );
@@ -44,7 +96,21 @@ const PlaceholderPage: React.FC<{ robotName: string; description: string }> = ({
   );
 };
 
-export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({ currentPath, llmConfigs, onNavigate }) => {
+export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({ 
+  currentPath, 
+  llmConfigs, 
+  onNavigate,
+  agents,
+  workflowNodes,
+  onDeleteNode,
+  onUpdateNodeMessages,
+  onUpdateNodePosition,
+  onToggleNodeMinimize,
+  onOpenImagePanel,
+  onOpenImageModificationPanel,
+  onOpenFullscreen,
+  onAddToWorkflow
+}) => {
   const { t } = useLocalization();
   
   // Navigation helper to go to workflow map (Bos Dashboard)
@@ -54,13 +120,28 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({ currentPath, l
     }
   };
   
+  // Props communes pour les WorkflowPage
+  const workflowProps = {
+    agents,
+    workflowNodes,
+    llmConfigs,
+    onDeleteNode,
+    onUpdateNodeMessages,
+    onUpdateNodePosition,
+    onToggleNodeMinimize,
+    onOpenImagePanel,
+    onOpenImageModificationPanel,
+    onOpenFullscreen,
+    onAddToWorkflow
+  };
+  
   // Route matching logic
   if (currentPath.startsWith('/archi/prototype')) {
-    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} />;
+    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} />;
   }
   
   if (currentPath.startsWith('/archi')) {
-    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} />;
+    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} />;
   }
   
   if (currentPath.startsWith('/bos/dashboard')) {
@@ -68,6 +149,7 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({ currentPath, l
       <WorkflowPage 
         robotName="Dashboard - Carte des Workflows" 
         description="Vue d'ensemble cartographique de tous les workflows et leur statut"
+        {...workflowProps}
       />
     );
   }
@@ -77,6 +159,7 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({ currentPath, l
       <WorkflowPage 
         robotName="Bos Supervision" 
         description="Outils de supervision, debugging et monitoring des coûts"
+        {...workflowProps}
       />
     );
   }

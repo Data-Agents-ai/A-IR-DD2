@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { AgentTemplate, AGENT_TEMPLATES, getTemplatesByRobot, createAgentFromTemplate } from '../../data/agentTemplates';
-import { RobotId } from '../../types';
+import { AgentTemplate, AGENT_TEMPLATES, getTemplatesByRobot, getCompatibleTemplates, getCompatibleTemplatesByCategory, createAgentFromTemplate } from '../../data/agentTemplates';
+import { RobotId, LLMConfig } from '../../types';
 import { Button } from '../UI';
 import { CloseIcon } from '../Icons';
 
 interface TemplateSelectionModalProps {
   isOpen: boolean;
   robotId?: RobotId;
+  llmConfigs: LLMConfig[]; // Ajout des configs LLM
   onSelectTemplate: (template: AgentTemplate) => void;
   onCancel: () => void;
 }
@@ -14,6 +15,7 @@ interface TemplateSelectionModalProps {
 export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   isOpen,
   robotId,
+  llmConfigs,
   onSelectTemplate,
   onCancel
 }) => {
@@ -22,10 +24,37 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filtrer les templates selon le robot sélectionné
-  let availableTemplates = robotId 
-    ? getTemplatesByRobot(robotId)
-    : AGENT_TEMPLATES;
+  // Local helper functions using props instead of localStorage
+  const getLocalCompatibleTemplates = (): AgentTemplate[] => {
+    const enabledProviders = llmConfigs
+      .filter(c => c.enabled && c.apiKey)
+      .map(c => c.provider);
+
+    return AGENT_TEMPLATES.filter(template => {
+      // Check if any enabled provider can support the template's capabilities  
+      return enabledProviders.some(provider => {
+        const config = llmConfigs.find(c => c.provider === provider);
+        if (!config) return false;
+
+        const providerCapabilities = Object.keys(config.capabilities)
+          .filter(cap => config.capabilities[cap as any])
+          .map(cap => cap as any);
+
+        return template.template.capabilities.every(cap =>
+          providerCapabilities.includes(cap)
+        );
+      });
+    });
+  };
+
+  // Filtrer les templates selon le robot sélectionné ET la compatibilité LLM
+  let availableTemplates = robotId
+    ? getTemplatesByRobot(robotId).filter(template => {
+      // Check if template is compatible with available LLM providers
+      const compatibleTemplates = getLocalCompatibleTemplates();
+      return compatibleTemplates.some(compat => compat.id === template.id);
+    })
+    : getLocalCompatibleTemplates(); // Only show compatible templates
 
   // Filtrer par catégorie
   if (selectedCategory !== 'all') {
@@ -41,12 +70,19 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
     );
   }
 
+  const baseTemplates = robotId
+    ? getTemplatesByRobot(robotId).filter(template => {
+      const compatibleTemplates = getLocalCompatibleTemplates();
+      return compatibleTemplates.some(compat => compat.id === template.id);
+    })
+    : getLocalCompatibleTemplates();
+
   const categories = [
-    { key: 'all', label: 'Tous', count: robotId ? getTemplatesByRobot(robotId).length : AGENT_TEMPLATES.length },
-    { key: 'assistant', label: 'Assistants', count: (robotId ? getTemplatesByRobot(robotId) : AGENT_TEMPLATES).filter(t => t.category === 'assistant').length },
-    { key: 'specialist', label: 'Spécialistes', count: (robotId ? getTemplatesByRobot(robotId) : AGENT_TEMPLATES).filter(t => t.category === 'specialist').length },
-    { key: 'automation', label: 'Automatisation', count: (robotId ? getTemplatesByRobot(robotId) : AGENT_TEMPLATES).filter(t => t.category === 'automation').length },
-    { key: 'analysis', label: 'Analyse', count: (robotId ? getTemplatesByRobot(robotId) : AGENT_TEMPLATES).filter(t => t.category === 'analysis').length }
+    { key: 'all', label: 'Tous', count: baseTemplates.length },
+    { key: 'assistant', label: 'Assistants', count: baseTemplates.filter(t => t.category === 'assistant').length },
+    { key: 'specialist', label: 'Spécialistes', count: baseTemplates.filter(t => t.category === 'specialist').length },
+    { key: 'automation', label: 'Automatisation', count: baseTemplates.filter(t => t.category === 'automation').length },
+    { key: 'analysis', label: 'Analyse', count: baseTemplates.filter(t => t.category === 'analysis').length }
   ].filter(cat => cat.count > 0);
 
   const getRobotColor = (robotId: RobotId) => {
@@ -80,7 +116,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
         </div>
 
         {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
           <div className="flex-1">
             <input
               type="text"
@@ -95,17 +131,37 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
               <button
                 key={category.key}
                 onClick={() => setSelectedCategory(category.key)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  selectedCategory === category.key
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedCategory === category.key
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
               >
                 {category.label} ({category.count})
               </button>
             ))}
           </div>
         </div>
+
+        {/* Compatibility Info */}
+        {(() => {
+          const totalTemplates = robotId ? getTemplatesByRobot(robotId).length : AGENT_TEMPLATES.length;
+          const compatibleCount = baseTemplates.length;
+          const filteredCount = totalTemplates - compatibleCount;
+
+          if (filteredCount > 0) {
+            return (
+              <div className="mb-4 p-3 bg-amber-900/30 border border-amber-500/50 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 text-amber-400">⚠️</div>
+                  <span className="text-amber-300 text-sm">
+                    {filteredCount} template(s) masqué(s) car incompatible(s) avec vos fournisseurs LLM configurés
+                  </span>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Templates Grid */}
         <div className="flex-1 overflow-y-auto">
@@ -135,24 +191,23 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
                       </div>
                     </div>
                   </div>
-                  
+
                   <p className="text-gray-300 text-sm mb-3 line-clamp-2">
                     {template.description}
                   </p>
-                  
+
                   <div className="flex items-center justify-between">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
                       template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
-                      template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
-                      'bg-green-900/30 text-green-400'
-                    }`}>
+                        template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
+                          'bg-green-900/30 text-green-400'
+                      }`}>
                       {template.category === 'assistant' ? 'Assistant' :
-                       template.category === 'specialist' ? 'Spécialiste' :
-                       template.category === 'automation' ? 'Automatisation' :
-                       'Analyse'}
+                        template.category === 'specialist' ? 'Spécialiste' :
+                          template.category === 'automation' ? 'Automatisation' :
+                            'Analyse'}
                     </span>
-                    
+
                     <div className="flex items-center space-x-2">
                       <span className="text-xs text-gray-400">
                         {template.template.llmProvider}

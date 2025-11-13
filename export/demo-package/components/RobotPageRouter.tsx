@@ -1,7 +1,7 @@
 import React from 'react';
 import { RobotId, LLMConfig } from '../types';
 import { ArchiPrototypingPage } from './ArchiPrototypingPage';
-import { V2WorkflowCanvas } from './V2WorkflowCanvas';
+import WorkflowCanvas from './WorkflowCanvas';
 import { useLocalization } from '../hooks/useLocalization';
 
 interface RobotPageRouterProps {
@@ -22,7 +22,7 @@ const WorkflowPage: React.FC<{ robotName: string; description: string }> = ({ ro
       
       {/* Workflow Canvas */}
       <div className="flex-1">
-        <V2WorkflowCanvas />
+        <WorkflowCanvas />
       </div>
     </div>
   );

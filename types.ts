@@ -10,6 +10,8 @@ export enum LLMProvider {
   Perplexity = 'Perplexity',
   Qwen = 'Qwen',
   Kimi = 'Kimi K2',
+  DeepSeek = 'DeepSeek',
+  LMStudio = 'LMStudio',
 }
 
 export enum LLMCapability {
@@ -23,6 +25,10 @@ export enum LLMCapability {
   OutputFormatting = 'Output Formatting',
   Embedding = 'Embedding',
   OCR = 'OCR',
+  Reasoning = 'Reasoning Mode',
+  CacheOptimization = 'Cache Optimization',
+  LocalDeployment = 'Local Deployment',
+  CodeSpecialization = 'Code Specialization',
 }
 
 export interface LLMConfig {

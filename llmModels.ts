@@ -44,4 +44,16 @@ export const LLM_MODELS: Record<LLMProvider, string[]> = {
         'moonshot-v1-32k',
         'moonshot-v1-8k',
     ],
+    [LLMProvider.DeepSeek]: [
+        'deepseek-reasoner', // Recommended: R1 Reasoning model
+        'deepseek-chat', // V3.2-Exp general purpose
+        'deepseek-coder', // Specialized for coding
+    ],
+    [LLMProvider.LMStudio]: [
+        'qwen2.5-coder-7b', // Recommended: Alibaba coding specialist
+        'gemma3-8b-instruct', // Google general purpose
+        'gemma3-2b-instruct', // Efficient edge model
+        'llama-3.2-1b', // Meta efficient model
+        'llama-3.2-3b', // Meta balanced model
+    ],
 };

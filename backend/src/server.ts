@@ -1,37 +1,88 @@
-// backend/src/server.ts
-// FIX: Explicitly import Request and Response from 'express' to resolve conflicts with global types and fix type errors in route handlers.
-import express, { Request, Response } from 'express';
+import express from 'express';
 import cors from 'cors';
-import { executePythonTool } from './pythonExecutor';
+import { createServer } from 'http';
+import { WebSocketManager } from './websocket/WebSocketManager';
+import { spawn } from 'child_process';
+import path from 'path';
 
 const app = express();
-const port = 3001;
+const PORT = process.env.PORT || 3001;
 
-// Enable CORS for requests from the frontend's default development port
-app.use(cors({ origin: 'http://localhost:5173' }));
+// Configuration CORS
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
+
 app.use(express.json());
 
-app.get('/', (req: Request, res: Response) => {
-    res.send('LLM Agent Workflow Backend is running.');
+// Route de test
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Backend is running' });
 });
 
-app.post('/api/execute-python-tool', async (req: Request, res: Response) => {
+// Route pour exécuter les outils Python
+app.post('/api/execute-python-tool', async (req, res) => {
+  try {
     const { toolName, args } = req.body;
-
-    if (typeof toolName !== 'string' || typeof args !== 'object' || args === null) {
-        return res.status(400).json({ success: false, error: 'Invalid request body. "toolName" (string) and "args" (object) are required.' });
+    
+    if (!toolName || !args) {
+      return res.status(400).json({ error: 'toolName et args requis' });
     }
 
-    try {
-        const result = await executePythonTool(toolName, args);
-        res.json({ success: true, result });
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during tool execution.';
-        console.error(`Error executing tool '${toolName}':`, errorMessage);
-        res.status(500).json({ success: false, error: errorMessage });
-    }
+    const pythonPath = path.join(__dirname, '../../utils/pythonTools', `${toolName}.py`);
+    const argsString = JSON.stringify(args);
+
+    const pythonProcess = spawn('python3', [pythonPath, argsString]);
+
+    let stdout = '';
+    let stderr = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        return res.status(500).json({ 
+          error: 'Erreur d\'exécution Python',
+          stderr: stderr
+        });
+      }
+
+      try {
+        const result = JSON.parse(stdout);
+        res.json(result);
+      } catch (parseError) {
+        res.status(500).json({ 
+          error: 'Erreur de parsing JSON',
+          output: stdout
+        });
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      message: error instanceof Error ? error.message : 'Erreur inconnue'
+    });
+  }
 });
 
-app.listen(port, () => {
-    console.log(`Backend server for Python tool execution is running at http://localhost:${port}`);
+// Créer le serveur HTTP
+const httpServer = createServer(app);
+
+// Initialiser WebSocket
+const wsManager = new WebSocketManager(httpServer);
+
+// Démarrer le serveur
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Backend démarré sur le port ${PORT}`);
+  console.log(`📡 WebSocket prêt pour les connexions`);
 });
+
+export {};

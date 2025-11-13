@@ -78,16 +78,21 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                          <div className="pl-4 mt-4 space-y-4 border-l-2 border-gray-700">
                             <div>
                                 <label htmlFor={`${provider}-apikey`} className="block text-sm font-medium text-gray-400 mb-1">
-                                    {t('settings_apiKey')}
+                                    {provider === LLMProvider.LMStudio ? t('settings_endpoint') : t('settings_apiKey')}
                                 </label>
                                 <input
                                     id={`${provider}-apikey`}
-                                    type="password"
+                                    type={provider === LLMProvider.LMStudio ? "url" : "password"}
                                     value={apiKey}
                                     onChange={(e) => handleApiKeyChange(provider, e.target.value)}
-                                    placeholder={t('settings_apiKey_placeholder')}
+                                    placeholder={provider === LLMProvider.LMStudio ? "http://localhost:3928" : t('settings_apiKey_placeholder')}
                                     className="w-full p-2 text-sm bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
+                                {provider === LLMProvider.LMStudio && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Auto-detects Jan (3928), LM Studio (1234), Ollama (11434)
+                                    </p>
+                                )}
                             </div>
                          <div className="space-y-2 pt-2">
                              {Object.keys(capabilities).sort().map(capStr => {
@@ -98,6 +103,18 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                                             <span className="text-sm text-gray-400">{cap}</span>
                                             {cap === LLMCapability.WebSearch && provider === LLMProvider.Gemini && (
                                                 <span className="ml-2 text-xs text-gray-500">{t('settings_gemini_optimized')}</span>
+                                            )}
+                                            {cap === LLMCapability.Reasoning && provider === LLMProvider.DeepSeek && (
+                                                <span className="ml-2 text-xs text-green-500">R1 Reasoning</span>
+                                            )}
+                                            {cap === LLMCapability.CacheOptimization && provider === LLMProvider.DeepSeek && (
+                                                <span className="ml-2 text-xs text-blue-500">0.014¢/1K tokens</span>
+                                            )}
+                                            {cap === LLMCapability.LocalDeployment && provider === LLMProvider.LMStudio && (
+                                                <span className="ml-2 text-xs text-purple-500">Sovereignty</span>
+                                            )}
+                                            {cap === LLMCapability.CodeSpecialization && provider === LLMProvider.LMStudio && (
+                                                <span className="ml-2 text-xs text-orange-500">Qwen2.5 Coder</span>
                                             )}
                                         </div>
                                         <ToggleSwitch 

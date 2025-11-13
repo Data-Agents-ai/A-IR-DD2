@@ -1,4 +1,5 @@
-import { Agent, LLMProvider, Tool, RobotId, LLMCapability } from '../types';
+import { Agent, LLMProvider, Tool, RobotId, LLMCapability, LLMConfig } from '../types';
+import { LLM_MODELS } from '../llmModels';
 
 export interface AgentTemplate {
   id: string;
@@ -9,6 +10,144 @@ export interface AgentTemplate {
   icon: string; // Emoji ou nom d'icône
   template: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>;
 }
+
+/**
+ * Get available LLM providers that user has configured
+ */
+/**
+ * Get available LLM providers from provided configs
+ */
+const getAvailableLLMProvidersFromConfigs = (llmConfigs: LLMConfig[]): LLMProvider[] => {
+  const availableProviders = llmConfigs
+    .filter(config => config.enabled && config.apiKey && config.apiKey.trim() !== '')
+    .map(config => config.provider);
+
+  return availableProviders;
+};
+
+// Keep the old function for backward compatibility but mark it as deprecated
+const getAvailableLLMProviders = (): LLMProvider[] => {
+  const stored = localStorage.getItem('llmConfigs');
+
+  if (stored) {
+    try {
+      const configs = JSON.parse(stored) as LLMConfig[];
+      const availableProviders = configs
+        .filter(config => config.enabled && config.apiKey && config.apiKey.trim() !== '')
+        .map(config => config.provider);
+
+      return availableProviders;
+    } catch (e) {
+      // Return empty array if parsing fails
+      return [];
+    }
+  }
+  // Return empty array if no config found
+  return [];
+};
+
+/**
+ * Get default capabilities for a provider
+ */
+const getDefaultCapabilities = (provider: LLMProvider): LLMCapability[] => {
+  // Return basic capabilities that most providers support
+  return [LLMCapability.Chat, LLMCapability.FunctionCalling];
+};
+
+/**
+ * Get available capabilities for a given LLM provider from provided configs
+ */
+const getProviderCapabilitiesFromConfigs = (provider: LLMProvider, llmConfigs: LLMConfig[]): LLMCapability[] => {
+  const providerConfig = llmConfigs.find(c => c.provider === provider);
+
+  if (providerConfig && providerConfig.capabilities) {
+    const capabilities = Object.keys(providerConfig.capabilities)
+      .filter(cap => providerConfig.capabilities[cap as keyof typeof providerConfig.capabilities])
+      .map(cap => cap as LLMCapability);
+
+    return capabilities;
+  }
+
+  // Fallback to default capabilities for the provider
+  return getDefaultCapabilities(provider);
+};
+
+/**
+ * Get available capabilities for a given LLM provider from user config (legacy)
+ */
+const getProviderCapabilities = (provider: LLMProvider): LLMCapability[] => {
+  const stored = localStorage.getItem('llmConfigs');
+
+  if (stored) {
+    try {
+      const configs = JSON.parse(stored) as LLMConfig[];
+      const providerConfig = configs.find(c => c.provider === provider);
+
+      if (providerConfig && providerConfig.capabilities) {
+        const capabilities = Object.keys(providerConfig.capabilities)
+          .filter(cap => providerConfig.capabilities[cap as keyof typeof providerConfig.capabilities])
+          .map(cap => cap as LLMCapability);
+
+        return capabilities;
+      }
+    } catch (e) {
+      // Fallback to default capabilities
+    }
+  }
+
+  // Default capabilities by provider
+  const defaultCapabilities: Record<LLMProvider, LLMCapability[]> = {
+    [LLMProvider.OpenAI]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.ImageGeneration, LLMCapability.FunctionCalling],
+    [LLMProvider.Anthropic]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
+    [LLMProvider.Mistral]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.Embedding],
+    [LLMProvider.DeepSeek]: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Reasoning],
+    [LLMProvider.Gemini]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.ImageGeneration, LLMCapability.FunctionCalling, LLMCapability.WebSearch],
+    [LLMProvider.Grok]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
+    [LLMProvider.Perplexity]: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.WebSearch],
+    [LLMProvider.Qwen]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
+    [LLMProvider.Kimi]: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+    [LLMProvider.LMStudio]: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment]
+  };
+
+  return defaultCapabilities[provider] || [LLMCapability.Chat];
+};
+
+/**
+ * Get recommended model for a given LLM provider
+ */
+const getRecommendedModel = (provider: LLMProvider): string => {
+  const models = LLM_MODELS[provider];
+
+  if (!models || models.length === 0) {
+    return 'default-model';
+  }
+
+  // Return first model which is usually the recommended one
+  return models[0];
+};
+
+/**
+ * Check if a template is compatible with available LLM providers
+ * Returns the best compatible provider or null if none available
+ */
+export const getCompatibleProvider = (templateCapabilities: LLMCapability[]): LLMProvider | null => {
+  const availableProviders = getAvailableLLMProviders();
+
+  for (const provider of availableProviders) {
+    const providerCapabilities = getProviderCapabilities(provider);
+
+    // Check if provider supports all required template capabilities
+    const hasAllCapabilities = templateCapabilities.every(cap =>
+      providerCapabilities.includes(cap)
+    );
+
+    if (hasAllCapabilities) {
+      return provider;
+    }
+  }
+
+  return null; // No compatible provider found
+};
 
 // Helper pour créer un outil de recherche web simple
 const createWebSearchTool = (): Tool => ({
@@ -229,16 +368,106 @@ export const getTemplatesByCategory = (category: AgentTemplate['category']): Age
   return AGENT_TEMPLATES.filter(template => template.category === category);
 };
 
+/**
+ * Filter templates to show only those compatible with user's configured LLM providers
+ */
+export const getCompatibleTemplates = (): AgentTemplate[] => {
+  const availableProviders = getAvailableLLMProviders();
+
+  return AGENT_TEMPLATES.filter(template => {
+    // Check if any available provider can support the template's capabilities
+    return availableProviders.some(provider => {
+      const providerCapabilities = getProviderCapabilities(provider);
+      return template.template.capabilities.every(cap =>
+        providerCapabilities.includes(cap)
+      );
+    });
+  });
+};
+
+/**
+ * Get templates filtered by both category and compatibility
+ */
+export const getCompatibleTemplatesByCategory = (category: AgentTemplate['category']): AgentTemplate[] => {
+  return getCompatibleTemplates().filter(template => template.category === category);
+};
+
+/**
+ * Map template LLM to available provider with smart fallback
+ */
+const adaptLLMProvider = (templateProvider: LLMProvider, availableProviders: LLMProvider[]): LLMProvider => {
+  // If template provider is available, use it
+  if (availableProviders.includes(templateProvider)) {
+    return templateProvider;
+  }
+
+  // Smart fallback mapping based on capabilities
+  const fallbackMap: Record<LLMProvider, LLMProvider[]> = {
+    [LLMProvider.Gemini]: [LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.DeepSeek, LLMProvider.Mistral],
+    [LLMProvider.OpenAI]: [LLMProvider.Anthropic, LLMProvider.DeepSeek, LLMProvider.Mistral, LLMProvider.Gemini],
+    [LLMProvider.Anthropic]: [LLMProvider.OpenAI, LLMProvider.DeepSeek, LLMProvider.Mistral, LLMProvider.Gemini],
+    [LLMProvider.Mistral]: [LLMProvider.DeepSeek, LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.Gemini],
+    [LLMProvider.DeepSeek]: [LLMProvider.Mistral, LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.Gemini],
+    [LLMProvider.Grok]: [LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.DeepSeek, LLMProvider.Mistral],
+    [LLMProvider.Perplexity]: [LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.DeepSeek, LLMProvider.Mistral],
+    [LLMProvider.Qwen]: [LLMProvider.DeepSeek, LLMProvider.Mistral, LLMProvider.OpenAI, LLMProvider.Anthropic],
+    [LLMProvider.Kimi]: [LLMProvider.DeepSeek, LLMProvider.Mistral, LLMProvider.OpenAI, LLMProvider.Anthropic],
+    [LLMProvider.LMStudio]: [LLMProvider.OpenAI, LLMProvider.Anthropic, LLMProvider.DeepSeek, LLMProvider.Mistral]
+  };
+
+  const fallbacks = fallbackMap[templateProvider] || availableProviders;
+
+  for (const fallback of fallbacks) {
+    if (availableProviders.includes(fallback)) {
+      return fallback;
+    }
+  }
+
+  // Last resort: return first available
+  return availableProviders[0] || LLMProvider.OpenAI;
+};
+
 // Fonction pour créer un agent à partir d'un template
-export const createAgentFromTemplate = (templateId: string, customName?: string): Omit<Agent, 'id'> | null => {
+export const createAgentFromTemplate = (templateId: string, customName?: string, llmConfigs?: LLMConfig[]): Agent | null => {
   const template = AGENT_TEMPLATES.find(t => t.id === templateId);
   if (!template) return null;
 
-  return {
+  // Use provided configs or fallback to localStorage
+  let availableProviders: LLMProvider[];
+  if (llmConfigs) {
+    availableProviders = getAvailableLLMProvidersFromConfigs(llmConfigs);
+  } else {
+    availableProviders = getAvailableLLMProviders();
+  }
+
+  const adaptedProvider = adaptLLMProvider(template.template.llmProvider, availableProviders);
+
+  // Get recommended model for the adapted provider
+  const adaptedModel = getRecommendedModel(adaptedProvider);
+
+  // Adapt capabilities based on what the new provider supports
+  let providerCapabilities: LLMCapability[];
+  if (llmConfigs) {
+    providerCapabilities = getProviderCapabilitiesFromConfigs(adaptedProvider, llmConfigs);
+  } else {
+    providerCapabilities = getProviderCapabilities(adaptedProvider);
+  }
+
+  const adaptedCapabilities = template.template.capabilities.filter(cap =>
+    providerCapabilities.includes(cap)
+  );
+
+  const finalAgent = {
     ...template.template,
+    id: `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Generate unique ID
     name: customName || template.template.name,
+    llmProvider: adaptedProvider, // Use adapted provider
+    model: adaptedModel, // Use recommended model for the provider
+    capabilities: adaptedCapabilities, // Use compatible capabilities only
     creator_id: template.robotId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
+
+  return finalAgent;
 };

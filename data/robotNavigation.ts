@@ -1,9 +1,9 @@
 import { RobotMenuItem, RobotId } from '../types';
-import { 
-  HardHatIcon, 
-  AntennaIcon, 
-  MonitoringIcon, 
-  FileAnalysisIcon, 
+import {
+  HardHatIcon,
+  AntennaIcon,
+  MonitoringIcon,
+  FileAnalysisIcon,
   ClockIcon,
   WrenchIcon,
   PlusIcon,
@@ -18,129 +18,127 @@ import {
 export const ROBOT_MENU_DATA: RobotMenuItem[] = [
   {
     id: RobotId.Archi,
-    name: 'Archi',
+    name: 'robot_archi_name',
     iconComponent: HardHatIcon,
     path: '/archi/prototype',
-    description: 'Architecte - Créateur de prototypes d\'agents et orchestrateur du système',
+    description: 'robot_archi_description',
     nestedItems: [
       {
         id: RobotId.Archi,
-        name: 'Prototypage',
+        name: 'nav_prototyping',
         iconComponent: PlusIcon,
         path: '/archi/prototype',
-        description: 'Création et édition des prototypes d\'agents'
+        description: 'nav_prototyping_desc'
       }
     ]
   },
   {
     id: RobotId.Bos,
-    name: 'Bos',
+    name: 'robot_bos_name',
     iconComponent: MonitoringIcon,
     path: '/bos/dashboard',
-    description: 'Superviseur - Surveillance des workflows, debugging et monitoring des coûts',
+    description: 'robot_bos_description',
     nestedItems: [
       {
         id: RobotId.Bos,
-        name: 'Dashboard',
+        name: 'nav_dashboard',
         iconComponent: DashboardIcon,
         path: '/bos/dashboard',
-        description: 'Carte globale des workflows et vue d\'ensemble des projets'
+        description: 'nav_dashboard_desc'
       },
       {
         id: RobotId.Bos,
-        name: 'Monitoring',
+        name: 'nav_monitoring',
         iconComponent: MonitoringIcon,
         path: '/bos/monitoring',
-        description: 'Surveillance en temps réel des workflows actifs'
+        description: 'nav_monitoring_desc'
       },
       {
         id: RobotId.Bos,
-        name: 'Debugging',
+        name: 'nav_debugging',
         iconComponent: WrenchIcon,
         path: '/bos/debugging',
-        description: 'Diagnostic et résolution des problèmes de workflows'
+        description: 'nav_debugging_desc'
       },
       {
         id: RobotId.Bos,
-        name: 'Coûts',
+        name: 'nav_costs',
         iconComponent: SettingsIcon,
         path: '/bos/costs',
-        description: 'Analyse des coûts et optimisation des ressources'
+        description: 'nav_costs_desc'
       }
     ]
   },
   {
     id: RobotId.Com,
-    name: 'Com',
+    name: 'robot_com_name',
     iconComponent: AntennaIcon,
     path: '/com/connections',
-    description: 'Communicateur - Gestion des API, authentification et intégrations externes',
+    description: 'robot_com_description',
     nestedItems: [
       {
         id: RobotId.Com,
-        name: 'Connexions',
+        name: 'nav_connections',
         iconComponent: AntennaIcon,
         path: '/com/connections',
-        description: 'Configuration des connexions API et services externes'
+        description: 'nav_connections_desc'
       },
       {
         id: RobotId.Com,
-        name: 'Authentification',
+        name: 'nav_authentication',
         iconComponent: SettingsIcon,
         path: '/com/auth',
-        description: 'Gestion des clés API et authentifications'
+        description: 'nav_authentication_desc'
       }
     ]
   },
   {
     id: RobotId.Phil,
-    name: 'Phil',
+    name: 'robot_phil_name',
     iconComponent: FileAnalysisIcon,
     path: '/phil/files',
-    description: 'Philatéliste - Spécialiste de transformation de données et gestion de fichiers',
+    description: 'robot_phil_description',
     nestedItems: [
       {
         id: RobotId.Phil,
-        name: 'Fichiers',
+        name: 'nav_files',
         iconComponent: FileAnalysisIcon,
         path: '/phil/files',
-        description: 'Gestion et analyse des fichiers de données'
+        description: 'nav_files_desc'
       },
       {
         id: RobotId.Phil,
-        name: 'Validation',
+        name: 'nav_validation',
         iconComponent: SettingsIcon,
         path: '/phil/validation',
-        description: 'Validation et transformation des données'
+        description: 'nav_validation_desc'
       }
     ]
   },
   {
     id: RobotId.Tim,
-    name: 'Tim',
+    name: 'robot_tim_name',
     iconComponent: ClockIcon,
     path: '/tim/events',
-    description: 'Temporel - Gestionnaire des événements, planification et contrôle des flux asynchrones',
+    description: 'robot_tim_description',
     nestedItems: [
       {
         id: RobotId.Tim,
-        name: 'Événements',
+        name: 'nav_events',
         iconComponent: ClockIcon,
         path: '/tim/events',
-        description: 'Configuration des triggers et événements temporels'
+        description: 'nav_events_desc'
       },
       {
         id: RobotId.Tim,
-        name: 'Planification',
+        name: 'nav_scheduling',
         iconComponent: SettingsIcon,
         path: '/tim/scheduling',
-        description: 'Planification des tâches et gestion des calendriers'
+        description: 'nav_scheduling_desc'
       }
     ]
   }
-];
-
-/**
+];/**
  * Mapping des capacités par robot selon leur spécialisation
  */
 export const ROBOT_CAPABILITIES = {

@@ -45,7 +45,7 @@ A-IR-DD2 is a next-generation AI orchestration platform that implements a specia
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/A-IR-DD2.git
+git clone https://github.com/sylvainbonnecarrere/A-IR-DD2.git
 cd A-IR-DD2
 ```
 
