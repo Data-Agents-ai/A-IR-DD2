@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Agent, ChatMessage, LLMConfig, LLMCapability, LLMProvider, ToolCall, AgentInstance } from '../types';
 import { Button } from './UI';
-import { CloseIcon, EditIcon, SendIcon, UploadIcon, ImageIcon, ErrorIcon, ExpandIcon } from './Icons';
+import { CloseIcon, EditIcon, SendIcon, UploadIcon, ImageIcon, ErrorIcon, ExpandIcon, MaximizeIcon } from './Icons';
 import { ConfirmationModal } from './modals/ConfirmationModal';
 
 import { WebSearchGroundingPanel } from './panels/WebSearchGroundingPanel';
@@ -148,8 +148,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   };
 
   const handleDelete = () => {
-    // Libérer le focus avant d'ouvrir le modal
-    (document.activeElement as HTMLElement)?.blur();
+    // Ouvrir directement la modale de confirmation sans manipulation de focus
     setShowDeleteConfirm(true);
   };
 
@@ -872,8 +871,9 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                        transition-all duration-200 rounded-md
                        hover:scale-110 active:scale-95"
             onClick={handleToggleMinimize}
+            title={isMinimized ? t('restore_size') : t('minimize')}
           >
-            <MinimizeIcon width={12} height={12} />
+            {isMinimized ? <MaximizeIcon width={12} height={12} /> : <MinimizeIcon width={12} height={12} />}
           </Button>
           <Button
             variant="ghost"
@@ -902,7 +902,10 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                        hover:bg-red-500/20 hover:shadow-lg hover:shadow-red-500/40
                        transition-all duration-200 rounded-md
                        hover:scale-110 active:scale-95"
-            onClick={handleDelete}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete();
+            }}
           >
             <CloseIcon width={12} height={12} />
           </Button>

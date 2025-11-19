@@ -8,6 +8,8 @@ export default {
     ok: 'OK',
     fullscreen: 'Tela cheia',
     edit_image: 'Editar imagem',
+    minimize: 'Minimizar',
+    restore_size: 'Tamanho normal',
 
     // Header
     header_settings: 'Configurações',

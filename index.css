@@ -144,11 +144,30 @@ body {
   box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
 }
 
+/* React Flow pane - Curseur correct */
+.react-flow__pane {
+  cursor: grab !important;
+}
+
+.react-flow__pane:active {
+  cursor: grabbing !important;
+}
+
 /* MiniMap position fixe - Force absolute positioning pour éviter déplacement vertical */
 .workflow-minimap-fixed {
   position: fixed !important;
   bottom: 20px !important;
   right: 20px !important;
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+
+/* Controls position fixe - Collés à gauche de la minimap */
+.workflow-controls-fixed {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 240px !important;
+  /* 200px (minimap width) + 40px (gap) */
   z-index: 4 !important;
   pointer-events: auto !important;
 }

@@ -7,7 +7,9 @@ export default {
     add: 'Add',
     ok: 'OK',
     fullscreen: 'Fullscreen',
-    edit_image: 'Edit image',
+    edit_image: 'Edit Image',
+    minimize: 'Minimize',
+    restore_size: 'Restore size',
 
     // Header
     header_settings: 'Settings',

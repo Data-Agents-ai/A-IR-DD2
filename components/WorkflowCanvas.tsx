@@ -8,6 +8,8 @@ import ReactFlow, {
   addEdge,
   Connection,
   Node,
+  useReactFlow,
+  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { V2AgentNode } from './V2AgentNode';
@@ -44,8 +46,8 @@ const NODE_TYPES = {
   customAgent: V2AgentNode,
 };
 
-// Composant principal avec isolation complète
-const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) {
+// Composant interne avec accès à useReactFlow
+const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCanvasProps) {
   const {
     nodes = [],
     llmConfigs = [],
@@ -69,6 +71,9 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
   // Hook de thème jour/nuit
   const theme = useDayNightTheme();
 
+  // Hook React Flow pour fitView
+  const reactFlowInstance = useReactFlow();
+
   // ISOLATION COMPLÈTE: un seul useState pour éviter les conflits React Flow
   const [internalState, setInternalState] = useState({
     showAgentForm: false,
@@ -76,6 +81,9 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
     selectedAgentForEdit: null as string | null,
     minimapReady: false, // Ajout pour contrôler le rendu de la MiniMap
   });
+
+  // Ref pour tracker si on a déjà centré la vue au chargement initial
+  const hasInitialCentered = useRef(false);
 
   // useRef pour TOUT stocker sans déclencher de re-render
   const stableRefs = useRef({
@@ -136,6 +144,28 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
       setReactFlowNodes(currentNodes => {
         // Vérifier si les nodes ont réellement changé
         if (currentNodes.length !== newReactFlowNodes.length) {
+          // Si un nouveau node a été ajouté, centrer la vue sur lui après un court délai
+          if (newReactFlowNodes.length > currentNodes.length && reactFlowInstance) {
+            const newNode = newReactFlowNodes[newReactFlowNodes.length - 1];
+            setTimeout(() => {
+              // Obtenir le node React Flow pour accéder à ses dimensions réelles
+              const rfNode = reactFlowInstance.getNode(newNode.id);
+              if (rfNode) {
+                // Calculer le centre VISUEL du node (position.y est en haut du node)
+                // Le node a une hauteur d'environ 500-600px (header + chat + controls)
+                const nodeWidth = rfNode.width || 400;
+                const nodeHeight = rfNode.height || 550; // Hauteur approximative d'un agent
+
+                const centerX = rfNode.position.x + (nodeWidth / 2);
+                const centerY = rfNode.position.y + (nodeHeight / 2);
+
+                reactFlowInstance.setCenter(centerX, centerY, {
+                  zoom: 0.7,      // Zoom plus large pour voir l'agent entier avec marge
+                  duration: 800,  // Animation fluide
+                });
+              }
+            }, 250); // Délai pour que le DOM soit complètement rendu avec dimensions
+          }
           return newReactFlowNodes;
         }
 
@@ -157,6 +187,28 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
     }
   }, [actualNodes]); // Suppression de la dépendance agents pour éviter les conflits
 
+  // useEffect pour centrer la vue sur les nodes existants au chargement initial UNIQUEMENT
+  useEffect(() => {
+    if (reactFlowNodes.length > 0 && reactFlowInstance && !hasInitialCentered.current) {
+      hasInitialCentered.current = true; // Marquer comme fait
+      setTimeout(() => {
+        // Prendre le premier node pour centrer la vue
+        const firstNode = reactFlowInstance.getNode(reactFlowNodes[0].id);
+        if (firstNode) {
+          const nodeWidth = firstNode.width || 400;
+          const nodeHeight = firstNode.height || 550;
+          const centerX = firstNode.position.x + (nodeWidth / 2);
+          const centerY = firstNode.position.y + (nodeHeight / 2);
+
+          reactFlowInstance.setCenter(centerX, centerY, {
+            zoom: 0.7,
+            duration: 0, // Pas d'animation au chargement initial
+          });
+        }
+      }, 300); // Délai pour que React Flow calcule les dimensions
+    }
+  }, [reactFlowNodes.length, reactFlowInstance]); // Se déclenche au chargement initial uniquement
+
   // useEffect pour initialiser la MiniMap après que le composant soit monté
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -172,10 +224,15 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
   }, [setEdges]);
 
   // Handler pour libérer le focus quand on clique sur le canvas
-  const handlePaneClick = useCallback(() => {
+  const handlePaneClick = useCallback((event: any) => {
     // Retirer le focus de tout élément actif (textarea, input, etc.)
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
+    }
+    // Forcer le focus sur le pane React Flow pour restaurer le curseur
+    const pane = event.target.closest('.react-flow__pane');
+    if (pane) {
+      pane.focus();
     }
     // Désélectionner tous les nodes en cliquant sur le canvas vide
     setReactFlowNodes(nodes => nodes.map(node => ({ ...node, selected: false })));
@@ -245,17 +302,41 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
           onConnect={onConnect}
           onPaneClick={handlePaneClick}
           nodeTypes={NODE_TYPES}
-          fitView
           style={{ background: 'transparent' }}
-          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
           proOptions={{ hideAttribution: true }}
+          nodesDraggable={true}
+          nodesConnectable={true}
+          elementsSelectable={false}
         >
+          {/* Controls - Collés à la minimap sans conflit de position */}
+          <Controls
+            position="bottom-right"
+            showZoom={true}
+            showFitView={true}
+            showInteractive={true}
+            className="workflow-controls-fixed"
+            style={{
+              background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(26, 26, 26, 0.8) 100%)',
+              border: '2px solid rgba(255, 0, 255, 0.6)',
+              borderRadius: '10px',
+              boxShadow: `
+                0 0 20px rgba(255, 0, 255, 0.4),
+                0 0 40px rgba(255, 0, 255, 0.2),
+                0 8px 25px rgba(0, 0, 0, 0.7),
+                inset 0 1px 0 rgba(255, 0, 255, 0.2)
+              `,
+              backdropFilter: 'blur(12px)'
+            }}
+          />
+
           {/* MiniMap protégée contre les erreurs NaN - Thème adaptatif */}
           {internalState.minimapReady && (
             <MiniMap
               key="minimap-unique"
               width={200}
               height={140}
+              position="bottom-right"
               nodeStrokeColor={(node) => {
                 // Couleur adaptée au thème jour/nuit
                 const isMinimized = node.data?.isMinimized;
@@ -301,25 +382,10 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
                 border: `2px solid ${theme.particleColors[0]}`,
                 borderRadius: '12px',
                 opacity: 0.95,
-                boxShadow: `0 0 20px ${theme.primaryColor}, 0 8px 25px rgba(0, 0, 0, 0.7)`,
+                boxShadow: `0 0 20px ${theme.primaryColor}, 0 8px 25px rgba(0, 0, 0, 0.7)`
               }}
             />
           )}
-          <Controls
-            position="top-right"
-            style={{
-              background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(26, 26, 26, 0.8) 100%)',
-              border: '2px solid rgba(255, 0, 255, 0.6)',
-              borderRadius: '10px',
-              boxShadow: `
-                0 0 20px rgba(255, 0, 255, 0.4),
-                0 0 40px rgba(255, 0, 255, 0.2),
-                0 8px 25px rgba(0, 0, 0, 0.7),
-                inset 0 1px 0 rgba(255, 0, 255, 0.2)
-              `,
-              backdropFilter: 'blur(12px)'
-            }}
-          />
         </ReactFlow>
 
         {/* Bouton flottant redirection vers prototypage Archi - Style Blur futuriste */}
@@ -406,5 +472,14 @@ const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) 
   );
 });
 
-// Export direct du composant mémoïsé (pas de double wrapping)
+// Wrapper avec ReactFlowProvider pour accès à useReactFlow
+const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <WorkflowCanvasInner {...props} />
+    </ReactFlowProvider>
+  );
+});
+
+// Export direct du composant avec provider
 export default WorkflowCanvas;
