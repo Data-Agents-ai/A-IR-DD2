@@ -530,7 +530,6 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   const handleImageClick = (imageBase64: string, mimeType: string) => {
     // Cette fonction est maintenant utilisée pour le bouton fullscreen dans l'overlay
     // On ne fait rien ici car le fullscreen est géré par App.tsx via setFullscreenImage
-    console.log('Image clicked - fullscreen handled by overlay button');
   };
 
   const handleOpenFullscreenImage = (imageBase64: string, mimeType: string) => {

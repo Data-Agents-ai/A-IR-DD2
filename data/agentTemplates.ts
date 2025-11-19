@@ -500,8 +500,11 @@ const adaptLLMProvider = (templateProvider: LLMProvider, availableProviders: LLM
 };
 
 // Fonction pour créer un agent à partir d'un template
-export const createAgentFromTemplate = (templateId: string, customName?: string, llmConfigs?: LLMConfig[]): Agent | null => {
-  const template = AGENT_TEMPLATES.find(t => t.id === templateId);
+/**
+ * Créer un agent depuis un objet template (prédéfini ou personnalisé)
+ * Version SOLID qui accepte le template directement
+ */
+export const createAgentFromTemplateObject = (template: AgentTemplate, customName?: string, llmConfigs?: LLMConfig[]): Agent | null => {
   if (!template) return null;
 
   // Use provided configs or fallback to localStorage
@@ -542,4 +545,17 @@ export const createAgentFromTemplate = (templateId: string, customName?: string,
   };
 
   return finalAgent;
+};
+
+/**
+ * Créer un agent depuis un ID de template prédéfini
+ * Version legacy pour compatibilité
+ */
+export const createAgentFromTemplate = (templateId: string, customName?: string, llmConfigs?: LLMConfig[]): Agent | null => {
+  const template = AGENT_TEMPLATES.find(t => t.id === templateId);
+  if (!template) return null;
+
+  return createAgentFromTemplateObject(template, customName, llmConfigs);
+
+  return createAgentFromTemplateObject(template, customName, llmConfigs);
 };

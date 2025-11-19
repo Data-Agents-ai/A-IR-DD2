@@ -169,6 +169,35 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
           return newReactFlowNodes;
         }
 
+        // Détecter si un node a changé son état isMinimized pour le centrer
+        const minimizeChangedNode = newReactFlowNodes.find((newNode, index) => {
+          const currentNode = currentNodes[index];
+          return currentNode &&
+            currentNode.id === newNode.id &&
+            currentNode.data.isMinimized !== newNode.data.isMinimized;
+        });
+
+        // Si un node a changé son état minimize, centrer la vue sur lui
+        if (minimizeChangedNode && reactFlowInstance) {
+          setTimeout(() => {
+            const rfNode = reactFlowInstance.getNode(minimizeChangedNode.id);
+            if (rfNode) {
+              // Calculer les dimensions selon l'état minimisé ou non
+              const nodeWidth = rfNode.width || 400;
+              // Hauteur réduite : ~60px, hauteur normale : ~550px
+              const nodeHeight = minimizeChangedNode.data.isMinimized ? 60 : (rfNode.height || 550);
+
+              const centerX = rfNode.position.x + (nodeWidth / 2);
+              const centerY = rfNode.position.y + (nodeHeight / 2);
+
+              reactFlowInstance.setCenter(centerX, centerY, {
+                zoom: 0.7,
+                duration: 600, // Animation fluide pour le toggle
+              });
+            }
+          }, 150); // Petit délai pour que le DOM se mette à jour
+        }
+
         const hasChanged = newReactFlowNodes.some((newNode, index) => {
           const currentNode = currentNodes[index];
           return !currentNode ||

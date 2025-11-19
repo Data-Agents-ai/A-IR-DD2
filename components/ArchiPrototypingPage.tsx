@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Agent, LLMConfig, RobotId } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
 import { AgentFormModal } from './modals/AgentFormModal';
@@ -10,9 +10,10 @@ import { Button, Card } from './UI';
 import { PlusIcon, EditIcon, CloseIcon, WrenchIcon } from './Icons';
 import { useLocalization } from '../hooks/useLocalization';
 import { useNotifications } from '../contexts/NotificationContext';
-import { AgentTemplate, createAgentFromTemplate } from '../data/agentTemplates';
+import { AgentTemplate, createAgentFromTemplate, createAgentFromTemplateObject } from '../data/agentTemplates';
 import { GovernanceTestModal } from './modals/GovernanceTestModal';
 import { TodoModal } from './modals/TodoModal';
+import { addPrototypeToTemplates, loadCustomTemplates } from '../services/templateService';
 
 interface ArchiPrototypingPageProps {
   llmConfigs: LLMConfig[];
@@ -66,6 +67,37 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
   // Todo Modal
   const [todoModalOpen, setTodoModalOpen] = useState(false);
 
+  // Add to Templates Modal
+  const [addToTemplatesOpen, setAddToTemplatesOpen] = useState(false);
+  const [agentToAddAsTemplate, setAgentToAddAsTemplate] = useState<Agent | null>(null);
+
+  // Scroll indicator
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  // Check if content is scrollable
+  useEffect(() => {
+    const checkScroll = () => {
+      if (scrollContainerRef.current) {
+        const { scrollHeight, clientHeight, scrollTop } = scrollContainerRef.current;
+        const isScrollable = scrollHeight > clientHeight;
+        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 10; // 10px tolerance
+        setShowScrollIndicator(isScrollable && !isAtBottom);
+      }
+    };
+
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+
+    const container = scrollContainerRef.current;
+    container?.addEventListener('scroll', checkScroll);
+
+    return () => {
+      window.removeEventListener('resize', checkScroll);
+      container?.removeEventListener('scroll', checkScroll);
+    };
+  }, [agents.length]);
+
   const handleCreateAgent = () => {
     setEditingAgent(null);
     setAgentModalOpen(true);
@@ -77,7 +109,8 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
   };
 
   const handleTemplateSelected = (template: AgentTemplate) => {
-    const agentData = createAgentFromTemplate(template.id, undefined, llmConfigs);
+    // Utiliser createAgentFromTemplateObject pour supporter templates prédéfinis ET personnalisés
+    const agentData = createAgentFromTemplateObject(template, undefined, llmConfigs);
 
     if (agentData) {
       setEditingAgent({ ...agentData, id: 'temp' } as Agent);
@@ -88,6 +121,13 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         type: 'info',
         title: 'Template chargé',
         message: `Template "${template.name}" prêt à personnaliser.`,
+        duration: 3000
+      });
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Erreur',
+        message: `Impossible de créer un agent depuis ce template.`,
         duration: 3000
       });
     }
@@ -172,9 +212,9 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     if (result.success) {
       addNotification({
         type: 'success',
-        title: 'Agent modifié',
-        message: `Les modifications ont été appliquées avec succès.`,
-        duration: 3000
+        title: 'Prototype modifié',
+        message: `Les modifications ont été appliquées avec succès. Seules les nouvelles instances de ce prototype seront concernées.`,
+        duration: 4000
       });
     } else {
       addNotification({
@@ -231,10 +271,56 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     setTemplateSelectionOpen(false);
   };
 
+  // Handler pour ajouter un prototype aux templates
+  const handleAddToTemplates = (agent: Agent) => {
+    setAgentToAddAsTemplate(agent);
+    setAddToTemplatesOpen(true);
+  };
+
+  const confirmAddToTemplates = () => {
+    if (!agentToAddAsTemplate) return;
+
+    const result = addPrototypeToTemplates(
+      agentToAddAsTemplate,
+      undefined, // Utiliser le nom par défaut
+      undefined  // Utiliser la description par défaut
+    );
+
+    if (result) {
+      addNotification({
+        type: 'success',
+        title: 'Template créé',
+        message: `Le prototype "${agentToAddAsTemplate.name}" a été ajouté aux templates avec succès.`,
+        duration: 3000
+      });
+    } else {
+      // Vérifier si c'est un doublon
+      const existingTemplates = loadCustomTemplates();
+      const isDuplicate = existingTemplates.some(t => t.sourcePrototypeId === agentToAddAsTemplate.id);
+
+      addNotification({
+        type: isDuplicate ? 'warning' : 'error',
+        title: isDuplicate ? 'Template existant' : 'Échec de la création',
+        message: isDuplicate
+          ? `Un template existe déjà pour ce prototype.`
+          : `Impossible de créer le template.`,
+        duration: 4000
+      });
+    }
+
+    setAddToTemplatesOpen(false);
+    setAgentToAddAsTemplate(null);
+  };
+
+  const cancelAddToTemplates = () => {
+    setAddToTemplatesOpen(false);
+    setAgentToAddAsTemplate(null);
+  };
+
   return (
-    <div className="h-full bg-gray-900 text-gray-100">
+    <div className="h-full bg-gray-900 text-gray-100 flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
+      <div className="flex-shrink-0 p-4 border-b border-gray-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <WrenchIcon className="w-6 h-6 text-indigo-400" />
@@ -254,7 +340,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
       </div>
 
       {/* Actions Bar */}
-      <div className="p-6 border-b border-gray-700/50">
+      <div className="flex-shrink-0 p-6 border-b border-gray-700/50">
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-400">
             {agents.length} prototype(s) créé(s)
@@ -290,108 +376,136 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               variant="primary"
             >
               <PlusIcon className="w-4 h-4" />
-              <span>Nouvel Agent</span>
+              <span>Nouveau Prototype</span>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Prototypes Grid */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        {agents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <WrenchIcon className="w-16 h-16 text-gray-600 mb-4" />
-            <h3 className="text-xl font-semibold text-gray-400 mb-2">Aucun prototype d'agent</h3>
-            <p className="text-gray-500 mb-6 max-w-md">
-              Commencez par créer votre premier agent. Définissez son rôle, ses capacités
-              et les outils qu'il peut utiliser.
-            </p>
-            <div className="flex space-x-3">
-              <Button onClick={handleCreateFromTemplate} className="flex items-center space-x-2" variant="secondary">
-                <span>📋</span>
-                <span>Partir d'un Template</span>
-              </Button>
-              <Button onClick={handleCreateAgent} className="flex items-center space-x-2">
-                <PlusIcon className="w-4 h-4" />
-                <span>Créer le Premier Agent</span>
-              </Button>
-            </div>
+      {/* Prototypes Grid - Scrollable Container */}
+      <div className="relative flex-1">
+        <div
+          ref={scrollContainerRef}
+          className="absolute inset-0 overflow-y-auto"
+        >
+          <div className="p-6 min-h-full">
+            {agents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <WrenchIcon className="w-16 h-16 text-gray-600 mb-4" />
+                <h3 className="text-xl font-semibold text-gray-400 mb-2">Aucun prototype d'agent</h3>
+                <p className="text-gray-500 mb-6 max-w-md">
+                  Commencez par créer votre premier agent. Définissez son rôle, ses capacités
+                  et les outils qu'il peut utiliser.
+                </p>
+                <div className="flex space-x-3">
+                  <Button onClick={handleCreateFromTemplate} className="flex items-center space-x-2" variant="secondary">
+                    <span>📋</span>
+                    <span>Partir d'un Template</span>
+                  </Button>
+                  <Button onClick={handleCreateAgent} className="flex items-center space-x-2">
+                    <PlusIcon className="w-4 h-4" />
+                    <span>Créer un Prototype</span>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {agents.map((agent) => (
+                  <Card
+                    key={agent.id}
+                    className={`p-4 hover:border-indigo-500/50 transition-colors cursor-pointer relative ${selectedAgentId === agent.id ? 'border-indigo-500 bg-indigo-900/20' : ''
+                      }`}
+                    onClick={() => selectAgent(agent.id)}
+                  >
+                    {/* Actions */}
+                    <div className="absolute top-2 right-2 flex space-x-1">
+                      <Button
+                        variant="ghost"
+                        className="p-1 h-6 w-6 text-gray-400 hover:text-indigo-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditAgent(agent);
+                        }}
+                      >
+                        <EditIcon width={14} height={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="p-1 h-6 w-6 text-gray-400 hover:text-red-400"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAgent(agent.id);
+                        }}
+                      >
+                        <CloseIcon width={14} height={14} />
+                      </Button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="pr-12">
+                      <h3 className="font-semibold text-lg text-indigo-400 mb-1 truncate">
+                        {agent.name}
+                      </h3>
+                      <p className="text-xs text-gray-400 mb-3 truncate">
+                        {agent.role}
+                      </p>
+                      <p className="text-sm text-gray-300 line-clamp-3 mb-4">
+                        {agent.systemPrompt}
+                      </p>
+
+                      {/* Metadata */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">Fournisseur</span>
+                          <span className="text-gray-300">{agent.llmProvider}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">Modèle</span>
+                          <span className="text-gray-300">{agent.model}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-500">Capacités</span>
+                          <span className="text-gray-300">{agent.capabilities.length}</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        <Button
+                          variant="secondary"
+                          className="w-full text-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToWorkflow(agent);
+                          }}
+                        >
+                          Ajouter au Workflow
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="w-full text-sm border-purple-600 text-purple-400 hover:bg-purple-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToTemplates(agent);
+                          }}
+                        >
+                          💾 Ajouter aux Templates
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agents.map((agent) => (
-              <Card
-                key={agent.id}
-                className={`p-4 hover:border-indigo-500/50 transition-colors cursor-pointer relative ${selectedAgentId === agent.id ? 'border-indigo-500 bg-indigo-900/20' : ''
-                  }`}
-                onClick={() => selectAgent(agent.id)}
-              >
-                {/* Actions */}
-                <div className="absolute top-2 right-2 flex space-x-1">
-                  <Button
-                    variant="ghost"
-                    className="p-1 h-6 w-6 text-gray-400 hover:text-indigo-400"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditAgent(agent);
-                    }}
-                  >
-                    <EditIcon width={14} height={14} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="p-1 h-6 w-6 text-gray-400 hover:text-red-400"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteAgent(agent.id);
-                    }}
-                  >
-                    <CloseIcon width={14} height={14} />
-                  </Button>
-                </div>
+        </div>
 
-                {/* Content */}
-                <div className="pr-12">
-                  <h3 className="font-semibold text-lg text-indigo-400 mb-1 truncate">
-                    {agent.name}
-                  </h3>
-                  <p className="text-xs text-gray-400 mb-3 truncate">
-                    {agent.role}
-                  </p>
-                  <p className="text-sm text-gray-300 line-clamp-3 mb-4">
-                    {agent.systemPrompt}
-                  </p>
-
-                  {/* Metadata */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Fournisseur</span>
-                      <span className="text-gray-300">{agent.llmProvider}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Modèle</span>
-                      <span className="text-gray-300">{agent.model}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">Capacités</span>
-                      <span className="text-gray-300">{agent.capabilities.length}</span>
-                    </div>
-                  </div>
-
-                  {/* Action Button */}
-                  <Button
-                    variant="secondary"
-                    className="w-full text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAddToWorkflow(agent);
-                    }}
-                  >
-                    Ajouter au Workflow
-                  </Button>
-                </div>
-              </Card>
-            ))}
+        {/* Scroll Indicator - Gradient fade at bottom */}
+        {showScrollIndicator && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent pointer-events-none flex items-end justify-center pb-2">
+            <div className="text-indigo-400 text-xs animate-bounce">
+              ⬇ Défilez pour voir plus
+            </div>
           </div>
         )}
       </div>
@@ -491,6 +605,74 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         isOpen={todoModalOpen}
         onClose={() => setTodoModalOpen(false)}
       />
+
+      {/* Add to Templates Confirmation Modal */}
+      {addToTemplatesOpen && agentToAddAsTemplate && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-purple-600/30">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <span className="text-3xl">💾</span>
+                <h2 className="text-xl font-semibold text-white">
+                  Ajouter aux Templates
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={cancelAddToTemplates}
+                className="p-2 h-8 w-8 text-gray-400 hover:text-white"
+              >
+                <CloseIcon width={16} height={16} />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-4 mb-6">
+              <div className="bg-purple-900/20 border border-purple-600/30 rounded-lg p-4">
+                <p className="text-purple-200 mb-3">
+                  <strong>Prototype :</strong> {agentToAddAsTemplate.name}
+                </p>
+                <p className="text-gray-300 text-sm">
+                  Ce prototype sera converti en template réutilisable.
+                </p>
+              </div>
+
+              <div className="bg-blue-900/20 border border-blue-600/30 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-200 mb-2">Avantages :</h3>
+                <ul className="text-blue-200 text-sm space-y-1">
+                  <li>• Réutilisation rapide pour de nouveaux projets</li>
+                  <li>• Copie indépendante du prototype original</li>
+                  <li>• Disponible dans le menu Templates (📋)</li>
+                  <li>• Partage possible via export JSON</li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-700/50 rounded-lg p-3 text-xs text-gray-400">
+                💡 <strong>Note :</strong> Le template sera une copie complète de ce prototype.
+                Les modifications futures du prototype n'affecteront pas le template.
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={cancelAddToTemplates}
+                className="px-4 py-2 text-gray-300 border-gray-600 hover:bg-gray-700"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmAddToTemplates}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                Créer le Template
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

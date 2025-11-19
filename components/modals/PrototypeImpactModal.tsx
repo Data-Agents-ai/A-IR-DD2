@@ -51,14 +51,28 @@ export const PrototypeImpactModal: React.FC<PrototypeImpactModalProps> = ({
             <p className="text-orange-200 mb-3">
               <strong>Attention :</strong> Vous vous apprêtez à modifier le prototype <strong>"{prototype.name}"</strong>.
             </p>
-            
+
             <div className="text-gray-300 space-y-2">
               <p>
-                <strong>Instances affectées :</strong> {impact.instanceCount} instance(s)
+                <strong>Instances déployées actuellement :</strong> {impact.instanceCount} instance(s) active(s)
               </p>
               <p>
                 <strong>Nœuds de workflow :</strong> {impact.nodeCount} nœud(s) dans le canvas
               </p>
+            </div>
+          </div>
+
+          {/* Avertissement de non-affectation */}
+          <div className="bg-red-900/20 border border-red-600/30 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <WarningIcon className="text-red-400 flex-shrink-0 mt-0.5" width={20} height={20} />
+              <div>
+                <h3 className="font-semibold text-red-200 mb-2">⚠️ Avertissement Important</h3>
+                <p className="text-red-200 text-sm">
+                  <strong>Les {impact.instanceCount} instance(s) existante(s) ne seront PAS affectées par ces changements.</strong>
+                  {' '}Seules les <strong>futures instances</strong> de ce prototype bénéficieront des modifications.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -81,9 +95,10 @@ export const PrototypeImpactModal: React.FC<PrototypeImpactModalProps> = ({
           <div className="bg-blue-900/20 border border-blue-600/30 rounded-lg p-4">
             <h3 className="font-semibold text-blue-200 mb-2">Que va-t-il se passer ?</h3>
             <ul className="text-blue-200 text-sm space-y-1">
-              <li>• Les instances garderont leurs configurations personnalisées</li>
-              <li>• Seuls les noms seront mis à jour si ils correspondent au prototype</li>
-              <li>• Les conversations et historiques seront préservés</li>
+              <li>• <strong>Seule la définition du prototype sera modifiée</strong></li>
+              <li>• Les instances existantes <strong>conserveront leurs configurations actuelles</strong></li>
+              <li>• Les nouvelles instances créées après cette modification utiliseront la nouvelle définition</li>
+              <li>• Les conversations et historiques des instances existantes restent intacts</li>
               <li>• Les positions sur le canvas ne changeront pas</li>
             </ul>
           </div>

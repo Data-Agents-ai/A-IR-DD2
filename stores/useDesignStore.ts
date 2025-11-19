@@ -148,50 +148,22 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
         updated_at: new Date().toISOString()
       };
 
-      // Update the prototype
+      // PRINCIPE DE NON-AFFECTATION STRICT:
+      // Seule la définition du prototype est modifiée.
+      // Les instances existantes conservent TOUTES leurs configurations actuelles.
+      // Seules les FUTURES instances créées après cette modification utiliseront la nouvelle définition.
+
       const updatedAgents = state.agents.map(agent =>
         agent.id === id ? { ...agent, ...updatesWithTimestamp } : agent
       );
 
-      // Find all instances that reference this prototype
-      const updatedInstances = state.agentInstances.map(instance => {
-        if (instance.prototypeId === id) {
-          // For now, only update the name if it matches the prototype name
-          // Keep instance-specific customizations
-          const prototype = state.agents.find(a => a.id === id);
-          const shouldUpdateName = prototype && instance.name === prototype.name;
-
-          return {
-            ...instance,
-            // Only update name if the instance name matches the original prototype name
-            ...(updatesWithTimestamp.name && shouldUpdateName && { name: updatesWithTimestamp.name })
-          };
-        }
-        return instance;
-      });
-
-      // Update workflow nodes that contain these instances
-      const updatedNodes = state.nodes.map(node => {
-        if (node.data.agentInstance && node.data.agentInstance.prototypeId === id) {
-          // Find the updated instance
-          const updatedInstance = updatedInstances.find(inst => inst.id === node.data.agentInstance?.id);
-          if (updatedInstance) {
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                agentInstance: updatedInstance
-              }
-            };
-          }
-        }
-        return node;
-      });
+      // NE PAS MODIFIER les instances existantes - elles restent inchangées
+      // Ceci garantit que les agents déployés conservent leurs configurations personnalisées
 
       return {
         agents: updatedAgents,
-        agentInstances: updatedInstances,
-        nodes: updatedNodes
+        // agentInstances: INCHANGÉS - principe de non-affectation
+        // nodes: INCHANGÉS - principe de non-affectation
       };
     });
 
@@ -365,15 +337,24 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
   getPrototypeImpact: (prototypeId) => {
     const state = get();
-    const affectedInstances = state.agentInstances.filter(instance =>
-      instance.prototypeId === prototypeId
-    );
+
+    // 1. Trouver les nodes actuellement déployés pour ce prototype
     const affectedNodes = state.nodes.filter(node =>
       node.data.agentInstance?.prototypeId === prototypeId
     );
 
+    // 2. Extraire les IDs des instances actuellement déployées
+    const deployedInstanceIds = new Set(
+      affectedNodes.map(node => node.data.agentInstance?.id).filter(Boolean) as string[]
+    );
+
+    // 3. Ne compter que les instances qui sont effectivement déployées sur le workflow
+    const affectedInstances = state.agentInstances.filter(instance =>
+      instance.prototypeId === prototypeId && deployedInstanceIds.has(instance.id)
+    );
+
     return {
-      instanceCount: affectedInstances.length,
+      instanceCount: affectedInstances.length, // Nombre réel d'instances déployées
       nodeCount: affectedNodes.length,
       instances: affectedInstances,
       nodes: affectedNodes

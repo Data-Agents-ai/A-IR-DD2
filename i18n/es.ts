@@ -34,8 +34,8 @@ export default {
     sidebar_deleteAgent_aria: 'Eliminar agente {agentName}',
 
     // Agent Form Modal
-    agentForm_createTitle: 'Crear Nuevo Agente',
-    agentForm_editTitle: 'Editar Agente',
+    agentForm_createTitle: 'Crear un Nuevo Prototipo',
+    agentForm_editTitle: 'Editar Prototipo',
     agentForm_nameLabel: 'Nombre del agente',
     agentForm_namePlaceholder: 'Ej: Experto en Marketing',
     agentForm_tab_description: 'Descripción',

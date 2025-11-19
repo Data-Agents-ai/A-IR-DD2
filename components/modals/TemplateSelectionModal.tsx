@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AgentTemplate, AGENT_TEMPLATES, getTemplatesByRobot, getCompatibleTemplates, getCompatibleTemplatesByCategory, createAgentFromTemplate } from '../../data/agentTemplates';
 import { RobotId, LLMConfig } from '../../types';
 import { Button } from '../UI';
 import { CloseIcon } from '../Icons';
+import { getAllTemplates, CustomTemplate, deleteCustomTemplate } from '../../services/templateService';
 
 interface TemplateSelectionModalProps {
   isOpen: boolean;
@@ -21,6 +22,23 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
+  const [templatesRefreshKey, setTemplatesRefreshKey] = useState(0);
+
+  // Charger tous les templates (prédéfinis + personnalisés)
+  // IMPORTANT: useMemo doit être appelé AVANT le return conditionnel
+  const allTemplates = useMemo(() => getAllTemplates(AGENT_TEMPLATES), [templatesRefreshKey]);
+
+  // Réinitialiser l'état quand le modal s'ouvre
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedTemplate(null);
+      setSelectedCategory('all');
+      setSearchQuery('');
+      // Recharger les templates à chaque ouverture pour être sûr d'avoir les dernières données
+      setTemplatesRefreshKey(prev => prev + 1);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -30,7 +48,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
       .filter(c => c.enabled && c.apiKey)
       .map(c => c.provider);
 
-    return AGENT_TEMPLATES.filter(template => {
+    return allTemplates.filter(template => {
       // Check if any enabled provider can support the template's capabilities  
       return enabledProviders.some(provider => {
         const config = llmConfigs.find(c => c.provider === provider);
@@ -49,11 +67,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
   // Filtrer les templates selon le robot sélectionné ET la compatibilité LLM
   let availableTemplates = robotId
-    ? getTemplatesByRobot(robotId).filter(template => {
-      // Check if template is compatible with available LLM providers
-      const compatibleTemplates = getLocalCompatibleTemplates();
-      return compatibleTemplates.some(compat => compat.id === template.id);
-    })
+    ? getLocalCompatibleTemplates().filter(template => template.robotId === robotId)
     : getLocalCompatibleTemplates(); // Only show compatible templates
 
   // Filtrer par catégorie
@@ -71,10 +85,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   }
 
   const baseTemplates = robotId
-    ? getTemplatesByRobot(robotId).filter(template => {
-      const compatibleTemplates = getLocalCompatibleTemplates();
-      return compatibleTemplates.some(compat => compat.id === template.id);
-    })
+    ? getLocalCompatibleTemplates().filter(template => template.robotId === robotId)
     : getLocalCompatibleTemplates();
 
   const categories = [
@@ -94,6 +105,46 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
       case RobotId.Tim: return 'text-red-400 bg-red-900/30 border-red-500';
       default: return 'text-gray-400 bg-gray-900/30 border-gray-500';
     }
+  };
+
+  const handleDeleteTemplate = (e: React.MouseEvent, templateId: string) => {
+    e.stopPropagation();
+
+    const templateToDelete = allTemplates.find(t => t.id === templateId);
+    const templateName = templateToDelete?.name || 'ce template';
+
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer "${templateName}" ?\n\nCette action est irréversible.`)) {
+      const success = deleteCustomTemplate(templateId);
+
+      if (success) {
+        // Désélectionner si c'était le template sélectionné
+        if (selectedTemplate?.id === templateId) {
+          setSelectedTemplate(null);
+        }
+
+        // Forcer le rechargement immédiat
+        setTemplatesRefreshKey(prev => prev + 1);
+      } else {
+        console.error(`Échec de la suppression du template ${templateId}`);
+        alert(`Erreur lors de la suppression du template "${templateName}".`);
+      }
+    }
+  };
+
+  const handleTemplateClick = (template: AgentTemplate) => {
+    setSelectedTemplate(template);
+  };
+
+  const handleConfirmSelection = () => {
+    if (selectedTemplate) {
+      onSelectTemplate(selectedTemplate);
+      setSelectedTemplate(null);
+    }
+  };
+
+  const handleCancel = () => {
+    setSelectedTemplate(null);
+    onCancel();
   };
 
   return (
@@ -144,7 +195,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
         {/* Compatibility Info */}
         {(() => {
-          const totalTemplates = robotId ? getTemplatesByRobot(robotId).length : AGENT_TEMPLATES.length;
+          const totalTemplates = robotId ? allTemplates.filter(t => t.robotId === robotId).length : allTemplates.length;
           const compatibleCount = baseTemplates.length;
           const filteredCount = totalTemplates - compatibleCount;
 
@@ -172,67 +223,125 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableTemplates.map((template) => (
-                <div
-                  key={template.id}
-                  className="bg-gray-700 rounded-lg p-4 border border-gray-600 hover:border-indigo-500 transition-colors cursor-pointer group"
-                  onClick={() => onSelectTemplate(template)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{template.icon}</span>
-                      <div>
-                        <h3 className="font-semibold text-white group-hover:text-indigo-400 transition-colors">
-                          {template.name}
-                        </h3>
-                        <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getRobotColor(template.robotId)}`}>
-                          {template.robotId}
+              {availableTemplates.map((template) => {
+                const isSelected = selectedTemplate?.id === template.id;
+                const isCustom = (template as CustomTemplate).isCustom;
+
+                return (
+                  <div
+                    key={template.id}
+                    className={`relative bg-gray-700 rounded-lg p-4 border-2 transition-all cursor-pointer group ${isSelected
+                        ? 'border-indigo-500 shadow-lg shadow-indigo-500/50 ring-2 ring-indigo-400/30'
+                        : 'border-gray-600 hover:border-indigo-400/50'
+                      }`}
+                    onClick={() => handleTemplateClick(template)}
+                  >
+                    {/* Delete Button - Only for custom templates */}
+                    {isCustom && (
+                      <button
+                        onClick={(e) => handleDeleteTemplate(e, template.id)}
+                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center bg-red-600/80 hover:bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        title="Supprimer ce template"
+                      >
+                        <CloseIcon width={12} height={12} className="text-white" />
+                      </button>
+                    )}
+
+                    {/* Selection indicator */}
+                    {isSelected && (
+                      <div className="absolute top-2 left-2 w-6 h-6 flex items-center justify-center bg-indigo-600 rounded-full">
+                        <span className="text-white text-xs font-bold">✓</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">{template.icon}</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className={`font-semibold transition-colors ${isSelected ? 'text-indigo-300' : 'text-white group-hover:text-indigo-400'
+                              }`}>
+                              {template.name}
+                            </h3>
+                            {isCustom && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-white border border-purple-400">
+                                💾 Personnalisé
+                              </span>
+                            )}
+                          </div>
+                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getRobotColor(template.robotId)}`}>
+                            {template.robotId}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                    {template.description}
-                  </p>
+                    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
+                      {template.description}
+                    </p>
 
-                  <div className="flex items-center justify-between">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
-                      template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
-                        template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
-                          'bg-green-900/30 text-green-400'
-                      }`}>
-                      {template.category === 'assistant' ? 'Assistant' :
-                        template.category === 'specialist' ? 'Spécialiste' :
-                          template.category === 'automation' ? 'Automatisation' :
-                            'Analyse'}
-                    </span>
-
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-400">
-                        {template.template.llmProvider}
+                    <div className="flex items-center justify-between">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
+                          template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
+                            template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
+                              'bg-green-900/30 text-green-400'
+                        }`}>
+                        {template.category === 'assistant' ? 'Assistant' :
+                          template.category === 'specialist' ? 'Spécialiste' :
+                            template.category === 'automation' ? 'Automatisation' :
+                              'Analyse'}
                       </span>
-                      {template.template.tools && template.template.tools.length > 0 && (
-                        <span className="text-xs text-indigo-400">
-                          🛠️ {template.template.tools.length}
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-400">
+                          {template.template.llmProvider}
                         </span>
-                      )}
+                        {template.template.tools && template.template.tools.length > 0 && (
+                          <span className="text-xs text-indigo-400">
+                            🛠️ {template.template.tools.length}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end mt-6 pt-4 border-t border-gray-600">
-          <Button
-            onClick={onCancel}
-            variant="secondary"
-          >
-            Annuler
-          </Button>
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-600">
+          {/* Selection info */}
+          <div className="text-sm text-gray-400">
+            {selectedTemplate ? (
+              <span className="text-indigo-400 font-medium">
+                ✓ Template sélectionné : <span className="text-white">{selectedTemplate.name}</span>
+              </span>
+            ) : (
+              <span>Cliquez sur un template pour le sélectionner</span>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <Button
+              onClick={handleCancel}
+              variant="secondary"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleConfirmSelection}
+              disabled={!selectedTemplate}
+              className={`${selectedTemplate
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+            >
+              Créer le Prototype
+            </Button>
+          </div>
         </div>
       </div>
     </div>

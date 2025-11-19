@@ -311,6 +311,7 @@ function App() {
     setWorkflowNodes(prev => prev.map(node =>
       node.id === nodeId ? { ...node, isMinimized: !node.isMinimized } : node
     ));
+    // Note: Le centrage sera géré par WorkflowCanvas via centerNodeRef
   };
 
   const handleUpdateNodeMessages = (nodeId: string, messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
