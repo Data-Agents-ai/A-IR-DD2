@@ -82,6 +82,11 @@ export const generateContentStream = async function* (
         config.tools = [formattedTools];
     }
 
+    // Gemini 3 specific: thinking_level for reasoning models
+    if (model.includes('gemini-3')) {
+        config.thinkingLevel = 'high'; // Default to high for best reasoning
+    }
+
     try {
         const responseStream = await ai.models.generateContentStream({
             model,
@@ -136,6 +141,11 @@ export const generateContent = async (
         config.tools = [formattedTools];
     }
 
+    // Gemini 3 specific: thinking_level for reasoning models
+    if (model.includes('gemini-3')) {
+        config.thinkingLevel = 'high'; // Default to high for best reasoning
+    }
+
     try {
         const response = await ai.models.generateContent({
             model,
@@ -158,13 +168,20 @@ export const generateContentWithSearch = async (
 ): Promise<{ text: string; citations: { title: string; uri: string }[] }> => {
     // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
     try {
+        const config: any = {
+            tools: [{ googleSearch: {} }],
+            ...(systemInstruction && { systemInstruction }),
+        };
+
+        // Gemini 3 specific: thinking_level for reasoning models
+        if (model.includes('gemini-3')) {
+            config.thinkingLevel = 'high';
+        }
+
         const response = await ai.models.generateContent({
             model,
             contents: prompt,
-            config: {
-                tools: [{ googleSearch: {} }],
-                ...(systemInstruction && { systemInstruction }),
-            },
+            config,
         });
 
         const text = response.text;
@@ -182,12 +199,14 @@ export const generateContentWithSearch = async (
 
 export const generateImage = async (
     apiKey: string, // This parameter is ignored to comply with security guidelines.
-    prompt: string
+    prompt: string,
+    model?: string // Optional model parameter (defaults to imagen-3.0)
 ): Promise<{ image: string; error?: undefined } | { error: string; image?: undefined }> => {
     // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
     try {
+        const imageModel = model || 'imagen-3.0-generate-001';
         const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001', prompt,
+            model: imageModel, prompt,
             config: { numberOfImages: 1, outputMimeType: 'image/png' },
         });
         const base64ImageBytes = response.generatedImages[0].image.imageBytes;
@@ -246,7 +265,8 @@ export const editImage = async (
  */
 export const generateVideo = async (
     apiKey: string, // Ignored, uses global ai instance
-    options: import("../types").VideoGenerationOptions
+    options: import("../types").VideoGenerationOptions,
+    model?: string // Optional model parameter (defaults to veo-001)
 ): Promise<import("../types").VideoGenerationStatus> => {
     try {
         // Build config
@@ -279,8 +299,9 @@ export const generateVideo = async (
         }
 
         // Build request
+        const videoModel = model || 'veo-001';
         const request: any = {
-            model: 'veo-3.1-generate-preview',
+            model: videoModel,
             prompt: options.prompt,
             config,
         };

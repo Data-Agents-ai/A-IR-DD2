@@ -659,11 +659,23 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
             {/* Maps Grounding Results */}
             {message.mapsGrounding && message.mapsGrounding.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-600">
-                <div className="text-xs font-semibold text-cyan-400 mb-2">
-                  🗺️ Lieux trouvés ({message.mapsGrounding.length})
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-cyan-400">
+                    🗺️ Lieux trouvés ({message.mapsGrounding.length})
+                  </div>
+                  <button
+                    onClick={() => onOpenMapsPanel && onOpenMapsPanel(id, {
+                      text: message.text,
+                      mapSources: message.mapsGrounding,
+                      query: message.text.substring(0, 100)
+                    })}
+                    className="text-xs px-2 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded transition-colors"
+                  >
+                    🗺️ Voir la carte
+                  </button>
                 </div>
                 <div className="space-y-2">
-                  {message.mapsGrounding.map((place, index) => (
+                  {message.mapsGrounding.slice(0, 3).map((place, index) => (
                     <div key={index} className="bg-gray-800/50 rounded p-2 text-xs">
                       <div className="font-semibold text-white mb-1">{place.placeTitle}</div>
                       {place.coordinates && (
@@ -681,6 +693,11 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                       </a>
                     </div>
                   ))}
+                  {message.mapsGrounding.length > 3 && (
+                    <div className="text-xs text-gray-400 text-center py-1">
+                      +{message.mapsGrounding.length - 3} autres lieux (cliquez sur "Voir la carte")
+                    </div>
+                  )}
                 </div>
               </div>
             )}

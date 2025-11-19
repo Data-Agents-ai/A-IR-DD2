@@ -14,6 +14,23 @@ export interface LLMModelDefinition {
 export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
     [LLMProvider.Gemini]: [
         {
+            id: 'gemini-3-pro-preview',
+            name: 'Gemini 3 Pro Preview',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.ImageGeneration,
+                LLMCapability.ImageModification,
+                LLMCapability.FunctionCalling,
+                LLMCapability.WebSearch,
+                LLMCapability.VideoGeneration,
+                LLMCapability.WebSearchGrounding,
+                LLMCapability.Reasoning
+            ],
+            recommended: true,
+            description: '🧠 Advanced reasoning model with thinking levels (1M context)'
+        },
+        {
             id: 'gemini-2.5-flash',
             name: 'Gemini 2.5 Flash',
             capabilities: [
@@ -27,8 +44,51 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
                 LLMCapability.MapsGrounding,
                 LLMCapability.WebSearchGrounding
             ],
-            recommended: true,
-            description: 'Multimodal: chat, images, video generation, maps & web grounding'
+            description: 'Multimodal: chat, images, video, maps & web grounding'
+        },
+        {
+            id: 'gemini-2.5-flash-lite',
+            name: 'Gemini 2.5 Flash Lite',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.FunctionCalling,
+                LLMCapability.MapsGrounding,
+                LLMCapability.WebSearchGrounding
+            ],
+            description: 'Lightweight multimodal model with grounding'
+        },
+        {
+            id: 'gemini-2.5-pro',
+            name: 'Gemini 2.5 Pro',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.ImageGeneration,
+                LLMCapability.ImageModification,
+                LLMCapability.FunctionCalling,
+                LLMCapability.WebSearch,
+                LLMCapability.VideoGeneration,
+                LLMCapability.MapsGrounding,
+                LLMCapability.WebSearchGrounding
+            ],
+            description: 'Advanced multimodal model with extended context'
+        },
+        {
+            id: 'imagen-3.0-generate-001',
+            name: 'Imagen 3.0',
+            capabilities: [
+                LLMCapability.ImageGeneration
+            ],
+            description: '🎨 Specialized image generation model'
+        },
+        {
+            id: 'veo-001',
+            name: 'Veo',
+            capabilities: [
+                LLMCapability.VideoGeneration
+            ],
+            description: '🎬 Specialized video generation model'
         },
     ],
     [LLMProvider.OpenAI]: [

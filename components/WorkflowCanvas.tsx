@@ -28,7 +28,7 @@ interface WorkflowCanvasProps {
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
-  onOpenMapsPanel?: (nodeId: string) => void;
+  onOpenMapsPanel?: (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => void;
   onOpenFullscreen?: (nodeId: string) => void;
   agents?: Agent[];
   workflowNodes?: WorkflowNode[];
@@ -44,8 +44,8 @@ const NODE_TYPES = {
   customAgent: V2AgentNode,
 };
 
-// Composant interne avec isolation complète
-const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCanvasProps) {
+// Composant principal avec isolation complète
+const WorkflowCanvas = memo(function WorkflowCanvas(props: WorkflowCanvasProps) {
   const {
     nodes = [],
     llmConfigs = [],
@@ -407,4 +407,4 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
 });
 
 // Export direct du composant mémoïsé (pas de double wrapping)
-export default WorkflowCanvasInner;
+export default WorkflowCanvas;

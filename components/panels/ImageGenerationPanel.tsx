@@ -24,7 +24,8 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const node = workflowNodes.find(n => n.id === nodeId);
-    const agentConfig = llmConfigs.find(c => c.provider === node?.agent.llmProvider);
+    const agent = node?.agent;
+    const agentConfig = llmConfigs.find(c => c.provider === agent?.llmProvider);
 
     // Reset state when panel is closed or node changes
     React.useEffect(() => {
@@ -40,7 +41,7 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
 
 
     const handleGenerate = async () => {
-        if (!prompt.trim() || !agentConfig || !node) {
+        if (!prompt.trim() || !agentConfig || !agent) {
             setError(t('imageGen_error_missingPrompt'));
             return;
         }
@@ -49,7 +50,7 @@ export const ImageGenerationPanel = ({ isOpen, nodeId, workflowNodes, llmConfigs
         setError(null);
         setGeneratedImage(null);
 
-        const result = await llmService.generateImage(agentConfig.provider, agentConfig.apiKey, prompt);
+        const result = await llmService.generateImage(agentConfig.provider, agentConfig.apiKey, prompt, agent.model);
 
         if (result.image) {
             setGeneratedImage(result.image);

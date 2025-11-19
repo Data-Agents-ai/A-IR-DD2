@@ -115,6 +115,11 @@ function App() {
   const [currentVideoNodeId, setCurrentVideoNodeId] = useState<string | null>(null);
   const [currentMapsNodeId, setCurrentMapsNodeId] = useState<string | null>(null);
   const [editingImageInfo, setEditingImageInfo] = useState<EditingImageInfo | null>(null);
+  const [mapsPreloadedResults, setMapsPreloadedResults] = useState<{
+    text: string;
+    mapSources: any[];
+    query?: string;
+  } | null>(null);
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; mimeType: string } | null>(null);
   const { t } = useLocalization();
@@ -284,8 +289,9 @@ function App() {
     setVideoPanelOpen(true);
   };
 
-  const handleOpenMapsPanel = (nodeId: string) => {
+  const handleOpenMapsPanel = (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => {
     setCurrentMapsNodeId(nodeId);
+    setMapsPreloadedResults(preloadedResults || null);
     setMapsPanelOpen(true);
   };
 
@@ -435,7 +441,11 @@ function App() {
           nodeId={currentMapsNodeId}
           llmConfigs={llmConfigs}
           workflowNodes={workflowNodes}
-          onClose={() => setMapsPanelOpen(false)}
+          onClose={() => {
+            setMapsPanelOpen(false);
+            setMapsPreloadedResults(null);
+          }}
+          preloadedResults={mapsPreloadedResults || undefined}
         />
 
         {fullscreenImage && (

@@ -41,7 +41,7 @@ const WorkflowPage: React.FC<{
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
-  onOpenMapsPanel?: (nodeId: string) => void;
+  onOpenMapsPanel?: (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => void;
   onOpenFullscreen?: (nodeId: string) => void;
   onAddToWorkflow?: (agent: Agent) => void;
   onAddToWorkflow?: (agent: Agent) => void;

@@ -9,7 +9,7 @@ interface WorkflowCanvasContextType {
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string, sourceImage: string, mimeType?: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
-  onOpenMapsPanel?: (nodeId: string) => void;
+  onOpenMapsPanel?: (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => void;
   onOpenFullscreen?: (imageBase64: string, mimeType: string) => void;
 }
 

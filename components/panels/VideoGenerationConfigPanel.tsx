@@ -173,7 +173,8 @@ export const VideoGenerationConfigPanel: React.FC<VideoGenerationConfigPanelProp
             const result = await llmService.generateVideo(
                 agent.llmProvider,
                 agentConfig.apiKey,
-                config
+                config,
+                agent.model
             );
 
             if (result.status === 'FAILED') {

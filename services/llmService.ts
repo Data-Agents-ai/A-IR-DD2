@@ -74,13 +74,13 @@ export const generateContentWithSearch = (
 };
 
 export const generateImage = (
-    provider: LLMProvider, apiKey: string, prompt: string
+    provider: LLMProvider, apiKey: string, prompt: string, model?: string
 ): Promise<{ image: string; error?: undefined } | { error: string; image?: undefined }> => {
     const service = getServiceProvider(provider);
     if (!(service as any).generateImage) {
         return Promise.resolve({ error: `Image generation is not supported by ${provider}.` });
     }
-    return (service as any).generateImage(apiKey, prompt);
+    return (service as any).generateImage(apiKey, prompt, model);
 };
 
 // ===========================
@@ -97,7 +97,8 @@ export const generateImage = (
 export const generateVideo = (
     provider: LLMProvider,
     apiKey: string,
-    options: VideoGenerationOptions
+    options: VideoGenerationOptions,
+    model?: string
 ): Promise<VideoGenerationStatus> => {
     const service = getServiceProvider(provider);
     if (!(service as any).generateVideo) {
@@ -107,7 +108,7 @@ export const generateVideo = (
             error: `Video generation is not supported by ${provider}.`
         });
     }
-    return (service as any).generateVideo(apiKey, options);
+    return (service as any).generateVideo(apiKey, options, model);
 };
 
 /**
