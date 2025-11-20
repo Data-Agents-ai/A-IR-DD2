@@ -4,8 +4,9 @@ import { CloseIcon, PlusIcon } from '../Icons';
 import { useDesignStore } from '../../stores/useDesignStore';
 import { useRuntimeStore } from '../../stores/useRuntimeStore';
 import { useLocalization } from '../../hooks/useLocalization';
-import { AgentInstance, LLMProvider, Tool, LLMCapability, LLMConfig, OutputFormat, HistoryConfig } from '../../types';
-import { LLM_MODELS, LLM_MODELS_DETAILED, getModelCapabilities } from '../../llmModels';
+import { AgentInstance, LLMProvider, Tool, LLMCapability, LLMConfig, OutputFormat, HistoryConfig, LMStudioModelDetection } from '../../types';
+import { LLM_MODELS, LLM_MODELS_DETAILED, getModelCapabilities, getLMStudioMergedModels } from '../../llmModels';
+import { useLMStudioDetection } from '../../hooks/useLMStudioDetection';
 
 type TabId = 'config' | 'historique' | 'fonctions' | 'formatage' | 'links' | 'tasks' | 'logs' | 'errors';
 
@@ -391,11 +392,86 @@ const ConfigurationTab: React.FC<{
         [llmConfigs]
     );
 
+    // Jalon 4: Détection LMStudio avec comparaison Before/After
+    const lmStudioEndpoint = llmConfigs.find(c => c.provider === LLMProvider.LMStudio)?.apiKey;
+    const [originalCapabilities] = useState<LLMCapability[]>(config.capabilities || []);
+    const [endpointChanged, setEndpointChanged] = useState(false);
+
+    // Jalon 5: Modèles dynamiques LMStudio
+    const [lmStudioDynamicModels, setLmStudioDynamicModels] = useState<any[]>([]);
+    const [isLoadingLMStudioModels, setIsLoadingLMStudioModels] = useState(false);
+
+    const { detection: lmStudioDetection, isDetecting: isDetectingLMStudio, redetect: redetectLMStudio } = useLMStudioDetection({
+        endpoint: config.llmProvider === LLMProvider.LMStudio ? lmStudioEndpoint : undefined,
+        autoDetect: false, // Ne pas auto-détecter au mount (agent déjà configuré)
+        onSuccess: (detection) => {
+            // Auto-update capabilities
+            onChange('capabilities', detection.capabilities);
+            setEndpointChanged(false);
+        }
+    });
+
+    // Jalon 5: Fetch modèles dynamiques LMStudio
+    useEffect(() => {
+        if (config.llmProvider === LLMProvider.LMStudio && lmStudioEndpoint) {
+            setIsLoadingLMStudioModels(true);
+            getLMStudioMergedModels(lmStudioEndpoint)
+                .then(models => {
+                    setLmStudioDynamicModels(models);
+                    console.log(`[ConfigurationTab] Loaded ${models.length} LMStudio models (${models.filter(m => m.isDynamic).length} dynamic)`);
+                })
+                .catch(error => {
+                    console.warn('[ConfigurationTab] Failed to load LMStudio models:', error);
+                    setLmStudioDynamicModels([]);
+                })
+                .finally(() => setIsLoadingLMStudioModels(false));
+        } else {
+            setLmStudioDynamicModels([]);
+        }
+    }, [config.llmProvider, lmStudioEndpoint]);
+
+    // Détecter changement d'endpoint
+    useEffect(() => {
+        if (config.llmProvider === LLMProvider.LMStudio) {
+            // Comparer endpoint actuel vs celui stocké dans config (si disponible)
+            // Pour simplifier, on détecte si l'utilisateur change le provider vers LMStudio
+            const hasDetection = !!lmStudioDetection;
+            if (lmStudioEndpoint && !hasDetection) {
+                setEndpointChanged(true);
+            }
+        } else {
+            setEndpointChanged(false);
+        }
+    }, [config.llmProvider, lmStudioEndpoint, lmStudioDetection]);
+
+    // Comparer capabilities before/after
+    const capabilityChanges = useMemo(() => {
+        if (!lmStudioDetection) return { added: [], removed: [] };
+
+        const newCaps = lmStudioDetection.capabilities;
+        const oldCaps = originalCapabilities;
+
+        return {
+            added: newCaps.filter(cap => !oldCaps.includes(cap)),
+            removed: oldCaps.filter(cap => !newCaps.includes(cap))
+        };
+    }, [lmStudioDetection, originalCapabilities]);
+
+    const hasCapabilityChanges = capabilityChanges.added.length > 0 || capabilityChanges.removed.length > 0;
+
     // Obtenir les modèles disponibles pour le provider sélectionné
     const availableModels = useMemo(() => {
         if (!config.llmProvider) return [];
-        return LLM_MODELS[config.llmProvider as LLMProvider] || [];
-    }, [config.llmProvider]);
+
+        // Jalon 5: Utiliser modèles dynamiques pour LMStudio
+        if (config.llmProvider === LLMProvider.LMStudio && lmStudioDynamicModels.length > 0) {
+            return lmStudioDynamicModels;
+        }
+
+        // Fallback: Modèles statiques
+        const staticModels = LLM_MODELS[config.llmProvider as LLMProvider] || [];
+        return staticModels.map(id => ({ id, name: id }));
+    }, [config.llmProvider, lmStudioDynamicModels]);
 
     // Obtenir les capacités disponibles pour le modèle sélectionné
     const modelCapabilities = useMemo(() => {
@@ -404,10 +480,19 @@ const ConfigurationTab: React.FC<{
     }, [config.llmProvider, config.model]);
 
     const handleProviderChange = (provider: LLMProvider) => {
-        const models = LLM_MODELS[provider] || [];
+        let models: any[] = [];
+
+        // Jalon 5: Support modèles dynamiques LMStudio
+        if (provider === LLMProvider.LMStudio && lmStudioDynamicModels.length > 0) {
+            models = lmStudioDynamicModels;
+        } else {
+            models = (LLM_MODELS[provider] || []).map(id => ({ id }));
+        }
+
         onChange('llmProvider', provider);
-        if (models.length > 0 && !models.includes(config.model)) {
-            onChange('model', models[0]); // Auto-select first model
+        const modelIds = models.map(m => typeof m === 'string' ? m : m.id);
+        if (models.length > 0 && !modelIds.includes(config.model)) {
+            onChange('model', modelIds[0]); // Auto-select first model
         }
     };
 
@@ -476,17 +561,27 @@ const ConfigurationTab: React.FC<{
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             {t('agentConfig_llm_modelLabel')}
+                            {config.llmProvider === LLMProvider.LMStudio && isLoadingLMStudioModels && (
+                                <span className="ml-2 text-xs text-cyan-400">⌛ Chargement modèles...</span>
+                            )}
                         </label>
                         <select
                             value={config.model || ''}
                             onChange={(e) => onChange('model', e.target.value)}
                             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:border-cyan-500 focus:outline-none"
-                            disabled={!config.llmProvider || availableModels.length === 0}
+                            disabled={!config.llmProvider || availableModels.length === 0 || isLoadingLMStudioModels}
                         >
                             {!config.model && <option value="">{t('agentConfig_llm_modelPlaceholder')}</option>}
-                            {availableModels.map(model => (
-                                <option key={model} value={model}>{model}</option>
-                            ))}
+                            {availableModels.map(model => {
+                                const modelId = typeof model === 'string' ? model : model.id;
+                                const modelName = typeof model === 'string' ? model : model.name;
+                                const isDynamic = typeof model === 'object' && model.isDynamic;
+                                return (
+                                    <option key={modelId} value={modelId}>
+                                        {modelName} {!isDynamic && config.llmProvider === LLMProvider.LMStudio ? '(Statique)' : ''}
+                                    </option>
+                                );
+                            })}
                         </select>
                     </div>
                 </div>
@@ -505,26 +600,202 @@ const ConfigurationTab: React.FC<{
                 </div>
             </div>
 
-            {/* Capacités */}
-            <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
-                <h3 className="text-lg font-semibold text-white mb-4">{t('agentConfig_capabilities_title')}</h3>
-                <div className="grid grid-cols-2 gap-3">
-                    {modelCapabilities.map((cap) => (
-                        <label key={cap} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-800 p-2 rounded">
-                            <input
-                                type="checkbox"
-                                checked={config.capabilities?.includes(cap) || false}
-                                onChange={() => toggleCapability(cap)}
-                                className="w-4 h-4 text-cyan-600 border-gray-600 rounded focus:ring-cyan-500"
-                            />
-                            <span className="text-sm text-gray-300">{cap}</span>
-                        </label>
-                    ))}
+            {/* Jalon 4: LMStudio Detection Panel pour Config Modal */}
+            {config.llmProvider === LLMProvider.LMStudio && lmStudioEndpoint && (
+                <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                    <h3 className="text-lg font-semibold text-white mb-4">🤖 Détection LMStudio</h3>
+
+                    {/* Alert: Endpoint Modifié ou Re-détection recommandée */}
+                    {endpointChanged && !lmStudioDetection && (
+                        <div className="mb-4 p-3 rounded-md" style={{
+                            background: 'rgba(251, 191, 36, 0.15)',
+                            border: '1px solid rgba(251, 191, 36, 0.5)',
+                            animation: 'pulse-warning 2s ease-in-out infinite'
+                        }}>
+                            <div className="flex items-center gap-2">
+                                <span className="text-yellow-400 text-xl">⚠️</span>
+                                <span className="text-yellow-300 font-semibold">Endpoint modifié ou modèle changé</span>
+                            </div>
+                            <p className="text-yellow-200 text-sm mt-1">
+                                Les capacités doivent être re-détectées pour garantir la compatibilité
+                            </p>
+                            <button
+                                onClick={redetectLMStudio}
+                                disabled={isDetectingLMStudio}
+                                className="mt-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                                style={{
+                                    background: 'linear-gradient(90deg, #fbbf24, #f59e0b)',
+                                    border: '1px solid #fbbf24',
+                                    color: '#1f2937',
+                                    fontWeight: 'bold',
+                                    boxShadow: '0 0 15px rgba(251, 191, 36, 0.5)',
+                                    animation: 'laser-pulse 2s ease-in-out infinite',
+                                    cursor: isDetectingLMStudio ? 'not-allowed' : 'pointer',
+                                    opacity: isDetectingLMStudio ? 0.6 : 1
+                                }}
+                            >
+                                🔄 Re-détecter maintenant
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Skeleton UI pendant détection */}
+                    {isDetectingLMStudio && (
+                        <div className="space-y-3 relative">
+                            <div className="h-4 rounded" style={{
+                                background: 'linear-gradient(90deg, rgba(100, 100, 100, 0.3) 25%, rgba(150, 150, 150, 0.5) 50%, rgba(100, 100, 100, 0.3) 75%)',
+                                backgroundSize: '200% 100%',
+                                animation: 'skeleton-wave 1.5s ease-in-out infinite'
+                            }} />
+                            <div className="grid grid-cols-2 gap-3">
+                                {[1, 2, 3, 4].map(i => (
+                                    <div key={i} className="h-10 rounded-lg" style={{
+                                        background: 'linear-gradient(90deg, rgba(100, 100, 100, 0.3) 25%, rgba(150, 150, 150, 0.5) 50%, rgba(100, 100, 100, 0.3) 75%)',
+                                        backgroundSize: '200% 100%',
+                                        animation: `skeleton-wave 1.5s ease-in-out infinite ${i * 0.2}s`
+                                    }} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Comparaison Before/After si changements détectés */}
+                    {lmStudioDetection && hasCapabilityChanges && (
+                        <div className="mb-4 p-4 rounded-lg" style={{
+                            background: 'rgba(147, 51, 234, 0.1)',
+                            border: '1px solid rgba(147, 51, 234, 0.4)'
+                        }}>
+                            <h4 className="text-purple-400 mb-3 font-semibold">🔄 Changements Détectés</h4>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Before (Removed Capabilities) */}
+                                {capabilityChanges.removed.length > 0 && (
+                                    <div>
+                                        <h5 className="text-red-400 text-sm mb-2">❌ Anciennes</h5>
+                                        <div className="space-y-1">
+                                            {capabilityChanges.removed.map(cap => (
+                                                <div key={cap} className="px-2 py-1 rounded text-xs" style={{
+                                                    background: 'rgba(239, 68, 68, 0.1)',
+                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                    color: '#fca5a5',
+                                                    textDecoration: 'line-through'
+                                                }}>
+                                                    {cap}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* After (Added Capabilities) */}
+                                {capabilityChanges.added.length > 0 && (
+                                    <div>
+                                        <h5 className="text-green-400 text-sm mb-2">✅ Nouvelles</h5>
+                                        <div className="space-y-1">
+                                            {capabilityChanges.added.map(cap => (
+                                                <div key={cap} className="px-2 py-1 rounded text-xs" style={{
+                                                    background: 'rgba(34, 197, 94, 0.1)',
+                                                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                                                    color: '#86efac',
+                                                    animation: 'flash-green 1s ease-in-out 3'
+                                                }}>
+                                                    {cap}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Detected capabilities (same as AgentFormModal) */}
+                    {lmStudioDetection && !hasCapabilityChanges && (
+                        <div className="grid grid-cols-2 gap-3">
+                            {lmStudioDetection.capabilities.map((cap, index) => (
+                                <div
+                                    key={cap}
+                                    className="flex items-center gap-2 p-2.5 rounded-lg"
+                                    style={{
+                                        background: 'rgba(6, 182, 212, 0.1)',
+                                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                                        animation: `capability-check 0.6s ease-out ${index * 0.15}s both`,
+                                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                                    }}
+                                >
+                                    <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{
+                                        background: 'rgba(34, 197, 94, 0.3)',
+                                        border: '2px solid #4ade80'
+                                    }}>
+                                        <span className="text-green-400 text-xs font-bold">✓</span>
+                                    </span>
+                                    <span className="text-cyan-300 text-sm font-medium">
+                                        {cap === LLMCapability.Chat && '💬 Chat'}
+                                        {cap === LLMCapability.FunctionCalling && '🛠️ Functions'}
+                                        {cap === LLMCapability.OutputFormatting && '📋 JSON'}
+                                        {cap === LLMCapability.Embedding && '🧮 Embed'}
+                                        {cap === LLMCapability.ImageGeneration && '🎨 Images'}
+                                        {cap === LLMCapability.OCR && '🎵 Audio'}
+                                        {cap === LLMCapability.LocalDeployment && '🔌 Local'}
+                                        {!Object.values(LLMCapability).includes(cap) && cap}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Re-detect button (always visible) */}
+                    {lmStudioDetection && (
+                        <button
+                            onClick={redetectLMStudio}
+                            disabled={isDetectingLMStudio}
+                            className="mt-3 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                            style={{
+                                background: 'linear-gradient(90deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2))',
+                                border: '1px solid rgba(6, 182, 212, 0.5)',
+                                color: '#06b6d4',
+                                cursor: isDetectingLMStudio ? 'not-allowed' : 'pointer',
+                                opacity: isDetectingLMStudio ? 0.6 : 1
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!isDetectingLMStudio) {
+                                    e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.6)';
+                                    e.currentTarget.style.transform = 'translateY(-2px)';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.boxShadow = 'none';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                            }}
+                        >
+                            🔄 Re-détecter les capacités
+                        </button>
+                    )}
                 </div>
-                {modelCapabilities.length === 0 && (
-                    <p className="text-sm text-gray-500">{t('agentConfig_capabilities_empty')}</p>
-                )}
-            </div>
+            )}
+
+            {/* Capacités (pour non-LMStudio providers) */}
+            {config.llmProvider !== LLMProvider.LMStudio && (
+                <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                    <h3 className="text-lg font-semibold text-white mb-4">{t('agentConfig_capabilities_title')}</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                        {modelCapabilities.map((cap) => (
+                            <label key={cap} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-800 p-2 rounded">
+                                <input
+                                    type="checkbox"
+                                    checked={config.capabilities?.includes(cap) || false}
+                                    onChange={() => toggleCapability(cap)}
+                                    className="w-4 h-4 text-cyan-600 border-gray-600 rounded focus:ring-cyan-500"
+                                />
+                                <span className="text-sm text-gray-300">{cap}</span>
+                            </label>
+                        ))}
+                    </div>
+                    {modelCapabilities.length === 0 && (
+                        <p className="text-sm text-gray-500">{t('agentConfig_capabilities_empty')}</p>
+                    )}
+                </div>
+            )}
 
         </div>
     );
@@ -538,14 +809,52 @@ const HistoryTab: React.FC<{
     t: (key: string) => string;
 }> = ({ config, onChange, llmConfigs, t }) => {
     const availableProviders = llmConfigs.filter(c => c.enabled && c.apiKey).map(c => c.provider);
-    const availableModels = config.historyConfig?.llmProvider ? LLM_MODELS[config.historyConfig.llmProvider as LLMProvider] || [] : [];
+
+    // Jalon 5: State pour modèles dynamiques LMStudio dans HistoryTab
+    const [lmStudioDynamicModelsHistory, setLmStudioDynamicModelsHistory] = useState<any[]>([]);
+    const [isLoadingLMStudioModelsHistory, setIsLoadingLMStudioModelsHistory] = useState(false);
+    const lmStudioEndpoint = llmConfigs.find(c => c.provider === LLMProvider.LMStudio)?.apiKey;
+
+    // Fetch modèles LMStudio si history provider est LMStudio
+    useEffect(() => {
+        if (config.historyConfig?.llmProvider === LLMProvider.LMStudio && lmStudioEndpoint) {
+            setIsLoadingLMStudioModelsHistory(true);
+            getLMStudioMergedModels(lmStudioEndpoint)
+                .then(models => setLmStudioDynamicModelsHistory(models))
+                .catch(() => setLmStudioDynamicModelsHistory([]))
+                .finally(() => setIsLoadingLMStudioModelsHistory(false));
+        } else {
+            setLmStudioDynamicModelsHistory([]);
+        }
+    }, [config.historyConfig?.llmProvider, lmStudioEndpoint]);
+
+    const availableModels = useMemo(() => {
+        if (!config.historyConfig?.llmProvider) return [];
+
+        // Jalon 5: Utiliser modèles dynamiques pour LMStudio
+        if (config.historyConfig.llmProvider === LLMProvider.LMStudio && lmStudioDynamicModelsHistory.length > 0) {
+            return lmStudioDynamicModelsHistory;
+        }
+
+        const staticModels = LLM_MODELS[config.historyConfig.llmProvider as LLMProvider] || [];
+        return staticModels.map(id => ({ id, name: id }));
+    }, [config.historyConfig?.llmProvider, lmStudioDynamicModelsHistory]);
 
     const handleProviderChange = (provider: LLMProvider) => {
-        const models = LLM_MODELS[provider] || [];
+        let models: any[] = [];
+
+        // Jalon 5: Support modèles dynamiques LMStudio
+        if (provider === LLMProvider.LMStudio && lmStudioDynamicModelsHistory.length > 0) {
+            models = lmStudioDynamicModelsHistory;
+        } else {
+            models = (LLM_MODELS[provider] || []).map(id => ({ id }));
+        }
+
+        const modelIds = models.map(m => typeof m === 'string' ? m : m.id);
         onChange('historyConfig', {
             ...config.historyConfig,
             llmProvider: provider,
-            model: models[0] || ''
+            model: modelIds[0] || ''
         });
     };
 
@@ -595,15 +904,28 @@ const HistoryTab: React.FC<{
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-gray-400">{t('agentConfig_history_llmModelLabel')}</label>
+                                    <label className="text-xs text-gray-400">
+                                        {t('agentConfig_history_llmModelLabel')}
+                                        {config.historyConfig?.llmProvider === LLMProvider.LMStudio && isLoadingLMStudioModelsHistory && (
+                                            <span className="ml-2 text-cyan-400">⌛</span>
+                                        )}
+                                    </label>
                                     <select
                                         value={config.historyConfig?.model || ''}
                                         onChange={(e) => onChange('historyConfig', { ...config.historyConfig, model: e.target.value })}
                                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm mt-1"
+                                        disabled={isLoadingLMStudioModelsHistory}
                                     >
-                                        {availableModels.map(model => (
-                                            <option key={model} value={model}>{model}</option>
-                                        ))}
+                                        {availableModels.map(model => {
+                                            const modelId = typeof model === 'string' ? model : model.id;
+                                            const modelName = typeof model === 'string' ? model : model.name;
+                                            const isDynamic = typeof model === 'object' && model.isDynamic;
+                                            return (
+                                                <option key={modelId} value={modelId}>
+                                                    {modelName} {!isDynamic && config.historyConfig?.llmProvider === LLMProvider.LMStudio ? '(Statique)' : ''}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                             </div>

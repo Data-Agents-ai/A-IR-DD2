@@ -1,4 +1,5 @@
 import { LLMProvider, LLMCapability } from './types';
+import { detectAvailableModels, type LMStudioModelInfo } from './services/lmStudioService';
 
 // ===========================
 // ENRICHED MODEL STRUCTURE
@@ -9,7 +10,21 @@ export interface LLMModelDefinition {
     capabilities: LLMCapability[];
     recommended?: boolean;
     description?: string;
+    isDynamic?: boolean; // 🔌 Modèle détecté dynamiquement depuis LMStudio
+    contextWindow?: number; // Taille du contexte (tokens)
 }
+
+// ===========================
+// DYNAMIC MODELS CACHE
+// ===========================
+interface DynamicModelsCache {
+    models: LLMModelDefinition[];
+    timestamp: number;
+    endpoint: string;
+}
+
+let lmStudioCache: DynamicModelsCache | null = null;
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
     [LLMProvider.Gemini]: [
@@ -130,8 +145,9 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
         {
             id: 'mistral-large-latest',
             name: 'Mistral Large',
-            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.Embedding],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding],
             recommended: true,
+            description: 'Flagship reasoning model with embeddings support'
         },
         {
             id: 'mistral-small-latest',
@@ -142,6 +158,25 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
             id: 'open-mistral-nemo',
             name: 'Open Mistral Nemo',
             capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+        },
+        {
+            id: 'pixtral-large-latest',
+            name: 'Pixtral Large',
+            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.OCR],
+            recommended: true,
+            description: 'Multimodal vision model for image analysis'
+        },
+        {
+            id: 'pixtral-12b-latest',
+            name: 'Pixtral 12B',
+            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.OCR],
+            description: 'Lightweight multimodal vision model'
+        },
+        {
+            id: 'mistral-small-2506',
+            name: 'Mistral Small Vision',
+            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.OCR],
+            description: 'Small model with vision capabilities'
         },
     ],
     [LLMProvider.Anthropic]: [
@@ -281,6 +316,26 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
             description: 'Alibaba coding specialist'
         },
         {
+            id: 'mistral-7b-instruct-v0.3',
+            name: 'Mistral 7B Instruct v0.3',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+            recommended: true,
+            description: 'Mistral AI open source 7B instruct model'
+        },
+        {
+            id: 'mistral-small-3.1',
+            name: 'Mistral Small 3.1',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.LocalDeployment],
+            description: 'Mistral Small v25.03 for local deployment'
+        },
+        {
+            id: 'mistral-large-3.1',
+            name: 'Mistral Large 3.1',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Reasoning, LLMCapability.LocalDeployment],
+            recommended: true,
+            description: 'Mistral Large flagship model for complex tasks'
+        },
+        {
             id: 'gemma3-8b-instruct',
             name: 'Gemma 3 8B Instruct',
             capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
@@ -340,4 +395,105 @@ export const getModelDetails = (provider: LLMProvider, modelId: string): LLMMode
 export const getModelCapabilities = (provider: LLMProvider, modelId: string): LLMCapability[] => {
     const model = getModelDetails(provider, modelId);
     return model?.capabilities || [];
+};
+
+// ===========================
+// DYNAMIC LMSTUDIO MODELS
+// ===========================
+
+/**
+ * Map LMStudioModelInfo capabilities to LLMCapability[]
+ */
+const mapLMStudioCapabilities = (info: LMStudioModelInfo): LLMCapability[] => {
+    const capabilities: LLMCapability[] = [LLMCapability.Chat, LLMCapability.LocalDeployment];
+
+    if (info.capabilities.functionCalling) capabilities.push(LLMCapability.FunctionCalling);
+    if (info.capabilities.reasoning) capabilities.push(LLMCapability.Reasoning);
+    if (info.capabilities.codeSpecialization) capabilities.push(LLMCapability.CodeSpecialization);
+    if (info.capabilities.multimodal) {
+        capabilities.push(LLMCapability.FileUpload);
+        capabilities.push(LLMCapability.OCR);
+    }
+    if (info.capabilities.jsonMode) capabilities.push(LLMCapability.OutputFormatting);
+
+    return capabilities;
+};
+
+/**
+ * Convert LMStudioModelInfo to LLMModelDefinition
+ */
+const convertLMStudioModel = (info: LMStudioModelInfo): LLMModelDefinition => {
+    return {
+        id: info.id,
+        name: `${info.name} 🔌`,
+        capabilities: mapLMStudioCapabilities(info),
+        description: `${info.description} (Local)`,
+        isDynamic: true,
+        contextWindow: info.contextWindow,
+        recommended: info.available && info.type === 'coding'
+    };
+};
+
+/**
+ * Fetch dynamic models from LMStudio with caching
+ */
+export const fetchLMStudioDynamicModels = async (endpoint?: string): Promise<LLMModelDefinition[]> => {
+    const currentEndpoint = endpoint || 'http://localhost:1234';
+
+    // Check cache validity
+    if (lmStudioCache &&
+        lmStudioCache.endpoint === currentEndpoint &&
+        Date.now() - lmStudioCache.timestamp < CACHE_TTL) {
+        console.log('[LMStudio] Using cached models');
+        return lmStudioCache.models;
+    }
+
+    try {
+        console.log(`[LMStudio] Fetching models from ${currentEndpoint}...`);
+        const detectedModels = await detectAvailableModels({ endpoint: currentEndpoint });
+
+        const dynamicModels = detectedModels
+            .filter(m => m.available)
+            .map(convertLMStudioModel);
+
+        // Update cache
+        lmStudioCache = {
+            models: dynamicModels,
+            timestamp: Date.now(),
+            endpoint: currentEndpoint
+        };
+
+        console.log(`[LMStudio] Fetched ${dynamicModels.length} dynamic models`);
+        return dynamicModels;
+    } catch (error) {
+        console.warn('[LMStudio] Failed to fetch dynamic models:', error);
+        return [];
+    }
+};
+
+/**
+ * Invalidate LMStudio cache (force refresh)
+ */
+export const invalidateLMStudioCache = (): void => {
+    lmStudioCache = null;
+    console.log('[LMStudio] Cache invalidated');
+};
+
+/**
+ * Get merged models: Static + Dynamic (dynamic models take priority)
+ */
+export const getLMStudioMergedModels = async (endpoint?: string): Promise<LLMModelDefinition[]> => {
+    const staticModels = LLM_MODELS_DETAILED[LLMProvider.LMStudio];
+    const dynamicModels = await fetchLMStudioDynamicModels(endpoint);
+
+    if (dynamicModels.length === 0) {
+        // Fallback to static models if dynamic fetch fails
+        return staticModels;
+    }
+
+    // Merge: Dynamic models first (with 🔌), then static models not in dynamic
+    const dynamicIds = new Set(dynamicModels.map(m => m.id));
+    const uniqueStaticModels = staticModels.filter(m => !dynamicIds.has(m.id));
+
+    return [...dynamicModels, ...uniqueStaticModels];
 };

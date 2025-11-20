@@ -180,6 +180,24 @@ export interface ToolCall {
 }
 
 
+// LMStudio Dynamic Route Detection (Jalon 1)
+export interface LMStudioRoutes {
+  models: boolean;              // GET /v1/models
+  chatCompletions: boolean;     // POST /v1/chat/completions
+  completions: boolean;         // POST /v1/completions
+  embeddings: boolean;          // POST /v1/embeddings
+  images: boolean;              // POST /v1/images/generations
+  audio: boolean;               // POST /v1/audio/transcriptions
+}
+
+export interface LMStudioModelDetection {
+  modelId: string;              // Ex: "Mistral-7B-Instruct-v0.2"
+  routes: LMStudioRoutes;       // Routes HTTP disponibles
+  capabilities: LLMCapability[];// Capacités A-IR-DD2 déduites
+  contextWindow?: number;       // Longueur contexte (tokens)
+  detectedAt: string;           // ISO timestamp de la détection
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'agent' | 'tool' | 'tool_result';

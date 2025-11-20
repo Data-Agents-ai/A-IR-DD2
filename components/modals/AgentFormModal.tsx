@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Agent, LLMConfig, LLMProvider, LLMCapability, HistoryConfig, Tool, OutputConfig, OutputFormat, RobotId } from '../../types';
 import { Button, Modal, ToggleSwitch } from '../UI';
-import { LLM_MODELS, LLM_MODELS_DETAILED, getModelCapabilities } from '../../llmModels';
+import { LLM_MODELS, LLM_MODELS_DETAILED, getModelCapabilities, getLMStudioMergedModels, invalidateLMStudioCache } from '../../llmModels';
 import { CloseIcon, PlusIcon } from '../Icons';
 import { useLocalization } from '../../hooks/useLocalization';
 import { validateAgentCapabilities, type CapabilityValidationResult } from '../../utils/lmStudioCapabilityValidator';
+import { useLMStudioDetection } from '../../hooks/useLMStudioDetection';
 
 interface AgentFormModalProps {
   onClose: () => void;
@@ -138,7 +139,47 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
   const [formError, setFormError] = useState<string | null>(null);
   const [lmStudioValidation, setLmStudioValidation] = useState<CapabilityValidationResult | null>(null);
   const [capabilitiesExpanded, setCapabilitiesExpanded] = useState(false);
+  const [lmStudioDynamicModels, setLmStudioDynamicModels] = useState<any[]>([]);
+  const [isLoadingLMStudioModels, setIsLoadingLMStudioModels] = useState(false);
   const isEditing = !!existingAgent;
+
+  // Jalon 3: Hook de détection LMStudio avec auto-refresh
+  const lmStudioEndpoint = llmConfigs.find(c => c.provider === LLMProvider.LMStudio)?.apiKey;
+  const { detection: lmStudioDetection, isDetecting: isDetectingLMStudio, redetect: redetectLMStudio } = useLMStudioDetection({
+    endpoint: llmProvider === LLMProvider.LMStudio ? lmStudioEndpoint : undefined,
+    autoDetect: llmProvider === LLMProvider.LMStudio && !!lmStudioEndpoint,
+    onSuccess: (detection) => {
+      // Auto-update capabilities when detection succeeds
+      setSelectedCapabilities(prev => {
+        const newCaps = [...prev];
+        detection.capabilities.forEach(cap => {
+          if (!newCaps.includes(cap)) {
+            newCaps.push(cap);
+          }
+        });
+        return newCaps;
+      });
+    }
+  });
+
+  // Jalon 5: Fetch dynamic LMStudio models when provider is LMStudio
+  useEffect(() => {
+    if (llmProvider === LLMProvider.LMStudio && lmStudioEndpoint) {
+      setIsLoadingLMStudioModels(true);
+      getLMStudioMergedModels(lmStudioEndpoint)
+        .then(models => {
+          setLmStudioDynamicModels(models);
+          console.log(`[AgentFormModal] Loaded ${models.length} LMStudio models (${models.filter(m => m.isDynamic).length} dynamic)`);
+        })
+        .catch(error => {
+          console.warn('[AgentFormModal] Failed to load LMStudio models:', error);
+          setLmStudioDynamicModels([]);
+        })
+        .finally(() => setIsLoadingLMStudioModels(false));
+    } else {
+      setLmStudioDynamicModels([]);
+    }
+  }, [llmProvider, lmStudioEndpoint]);
 
   useEffect(() => {
     if (isEditing && existingAgent) {
@@ -342,9 +383,22 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="llm-model" className="block text-sm font-medium text-gray-300 mb-1">{t('agentForm_modelLabel')}</label>
-                  <select id="llm-model" value={model} onChange={(e) => setModel(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    {getAvailableModels(llmProvider).map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)}
+                  <label htmlFor="llm-model" className="block text-sm font-medium text-gray-300 mb-1">
+                    {t('agentForm_modelLabel')}
+                    {llmProvider === LLMProvider.LMStudio && isLoadingLMStudioModels && (
+                      <span className="ml-2 text-xs text-cyan-400">⌛ Chargement modèles...</span>
+                    )}
+                  </label>
+                  <select id="llm-model" value={model} onChange={(e) => setModel(e.target.value)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={isLoadingLMStudioModels}>
+                    {llmProvider === LLMProvider.LMStudio && lmStudioDynamicModels.length > 0 ? (
+                      lmStudioDynamicModels.map((modelDef) => (
+                        <option key={modelDef.id} value={modelDef.id}>
+                          {modelDef.name} {modelDef.isDynamic ? '' : '(Statique)'}
+                        </option>
+                      ))
+                    ) : (
+                      getAvailableModels(llmProvider).map((modelName) => <option key={modelName} value={modelName}>{modelName}</option>)
+                    )}
                   </select>
                 </div>
               </div>
@@ -352,10 +406,10 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
               {/* Model Capabilities Info (Universal Collapsible) */}
               {availableCapabilities.length > 0 && (
                 <div className={`border rounded-lg ${llmProvider === LLMProvider.Gemini ? 'bg-gradient-to-r from-blue-900/30 to-indigo-900/30 border-blue-500/30' :
-                    llmProvider === LLMProvider.ArcLLM ? 'bg-gradient-to-r from-purple-900/30 to-cyan-900/30 border-purple-500/30' :
-                      llmProvider === LLMProvider.OpenAI ? 'bg-gradient-to-r from-green-900/30 to-emerald-900/30 border-green-500/30' :
-                        llmProvider === LLMProvider.Anthropic ? 'bg-gradient-to-r from-orange-900/30 to-amber-900/30 border-orange-500/30' :
-                          'bg-gradient-to-r from-gray-900/30 to-slate-900/30 border-gray-500/30'
+                  llmProvider === LLMProvider.ArcLLM ? 'bg-gradient-to-r from-purple-900/30 to-cyan-900/30 border-purple-500/30' :
+                    llmProvider === LLMProvider.OpenAI ? 'bg-gradient-to-r from-green-900/30 to-emerald-900/30 border-green-500/30' :
+                      llmProvider === LLMProvider.Anthropic ? 'bg-gradient-to-r from-orange-900/30 to-amber-900/30 border-orange-500/30' :
+                        'bg-gradient-to-r from-gray-900/30 to-slate-900/30 border-gray-500/30'
                   }`}>
                   <button
                     type="button"
@@ -363,16 +417,16 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                     className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-white/5 transition-colors rounded-lg"
                   >
                     <h4 className={`text-xs font-semibold flex items-center gap-2 ${llmProvider === LLMProvider.Gemini ? 'text-blue-300' :
-                        llmProvider === LLMProvider.ArcLLM ? 'text-purple-300' :
-                          llmProvider === LLMProvider.OpenAI ? 'text-green-300' :
-                            llmProvider === LLMProvider.Anthropic ? 'text-orange-300' :
-                              'text-gray-300'
+                      llmProvider === LLMProvider.ArcLLM ? 'text-purple-300' :
+                        llmProvider === LLMProvider.OpenAI ? 'text-green-300' :
+                          llmProvider === LLMProvider.Anthropic ? 'text-orange-300' :
+                            'text-gray-300'
                       }`}>
                       <span className={`${llmProvider === LLMProvider.Gemini ? 'text-indigo-400' :
-                          llmProvider === LLMProvider.ArcLLM ? 'text-cyan-400' :
-                            llmProvider === LLMProvider.OpenAI ? 'text-emerald-400' :
-                              llmProvider === LLMProvider.Anthropic ? 'text-amber-400' :
-                                'text-gray-400'
+                        llmProvider === LLMProvider.ArcLLM ? 'text-cyan-400' :
+                          llmProvider === LLMProvider.OpenAI ? 'text-emerald-400' :
+                            llmProvider === LLMProvider.Anthropic ? 'text-amber-400' :
+                              'text-gray-400'
                         }`}>✨</span>
                       Capacités multimodales {llmProvider}
                     </h4>
@@ -390,10 +444,10 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                       <div className="flex flex-wrap gap-2">
                         {availableCapabilities.map(cap => (
                           <span key={cap} className={`px-2 py-1 text-xs rounded-md border ${llmProvider === LLMProvider.Gemini ? 'bg-blue-500/20 text-blue-200 border-blue-400/30' :
-                              llmProvider === LLMProvider.ArcLLM ? 'bg-purple-500/20 text-purple-200 border-purple-400/30' :
-                                llmProvider === LLMProvider.OpenAI ? 'bg-green-500/20 text-green-200 border-green-400/30' :
-                                  llmProvider === LLMProvider.Anthropic ? 'bg-orange-500/20 text-orange-200 border-orange-400/30' :
-                                    'bg-gray-500/20 text-gray-200 border-gray-400/30'
+                            llmProvider === LLMProvider.ArcLLM ? 'bg-purple-500/20 text-purple-200 border-purple-400/30' :
+                              llmProvider === LLMProvider.OpenAI ? 'bg-green-500/20 text-green-200 border-green-400/30' :
+                                llmProvider === LLMProvider.Anthropic ? 'bg-orange-500/20 text-orange-200 border-orange-400/30' :
+                                  'bg-gray-500/20 text-gray-200 border-gray-400/30'
                             }`}>
                             {cap}
                           </span>
@@ -416,6 +470,134 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Jalon 3: LMStudio Auto-Detection Panel (HUD Style) */}
+              {llmProvider === LLMProvider.LMStudio && lmStudioEndpoint && (
+                <div className="relative p-4 rounded-lg overflow-hidden" style={{
+                  background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)',
+                  border: '1px solid rgba(6, 182, 212, 0.4)'
+                }}>
+                  {/* Holographic scan overlay */}
+                  {isDetectingLMStudio && (
+                    <div className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{
+                      background: 'linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.2), transparent)',
+                      animation: 'scan-pass 3s ease-in-out infinite'
+                    }} />
+                  )}
+
+                  <h4 className="text-cyan-400 flex items-center gap-2 mb-3">
+                    🤖 Capacités Détectées
+                    <span className="px-2 py-0.5 text-xs font-bold rounded-full" style={{
+                      background: 'rgba(34, 197, 94, 0.2)',
+                      border: '1px solid rgba(34, 197, 94, 0.5)',
+                      color: '#4ade80',
+                      boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)'
+                    }}>
+                      ⚡ AUTO
+                    </span>
+                  </h4>
+
+                  {/* Skeleton UI during detection */}
+                  {isDetectingLMStudio && !lmStudioDetection && (
+                    <div className="space-y-3">
+                      <div className="h-4 rounded" style={{
+                        background: 'linear-gradient(90deg, rgba(100, 100, 100, 0.3) 25%, rgba(150, 150, 150, 0.5) 50%, rgba(100, 100, 100, 0.3) 75%)',
+                        backgroundSize: '200% 100%',
+                        animation: 'skeleton-wave 1.5s ease-in-out infinite'
+                      }} />
+                      <div className="grid grid-cols-2 gap-3">
+                        {[1, 2, 3, 4].map(i => (
+                          <div key={i} className="h-10 rounded-lg" style={{
+                            background: 'linear-gradient(90deg, rgba(100, 100, 100, 0.3) 25%, rgba(150, 150, 150, 0.5) 50%, rgba(100, 100, 100, 0.3) 75%)',
+                            backgroundSize: '200% 100%',
+                            animation: `skeleton-wave 1.5s ease-in-out infinite ${i * 0.2}s`
+                          }} />
+                        ))}
+                      </div>
+                      {/* Laser scan line */}
+                      <div className="absolute top-0 left-0 w-full h-0.5" style={{
+                        background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
+                        animation: 'scan-vertical 2s linear infinite'
+                      }} />
+                    </div>
+                  )}
+
+                  {/* Detected capabilities grid */}
+                  {lmStudioDetection && !isDetectingLMStudio && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {lmStudioDetection.capabilities.map((cap, index) => (
+                        <div
+                          key={cap}
+                          className="flex items-center gap-2 p-2.5 rounded-lg"
+                          style={{
+                            background: 'rgba(6, 182, 212, 0.1)',
+                            border: '1px solid rgba(6, 182, 212, 0.3)',
+                            animation: `capability-check 0.6s ease-out ${index * 0.15}s both`,
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                          }}
+                        >
+                          {/* Animated checkmark */}
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center" style={{
+                            background: 'rgba(34, 197, 94, 0.3)',
+                            border: '2px solid #4ade80'
+                          }}>
+                            <span className="text-green-400 text-xs font-bold">✓</span>
+                          </span>
+
+                          {/* Capability label */}
+                          <span className="text-cyan-300 text-sm font-medium">
+                            {cap === LLMCapability.Chat && '💬 Chat'}
+                            {cap === LLMCapability.FunctionCalling && '🛠️ Functions'}
+                            {cap === LLMCapability.OutputFormatting && '📋 JSON Mode'}
+                            {cap === LLMCapability.Embedding && '🧮 Embeddings'}
+                            {cap === LLMCapability.ImageGeneration && '🎨 Images'}
+                            {cap === LLMCapability.OCR && '🎵 Audio'}
+                            {cap === LLMCapability.LocalDeployment && '🔌 Local'}
+                            {cap === LLMCapability.CodeSpecialization && '💻 Code'}
+                            {!Object.values(LLMCapability).includes(cap) && cap}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Warning if limited capabilities */}
+                  {lmStudioDetection && lmStudioDetection.capabilities.length < 3 && (
+                    <div className="mt-3 px-3 py-2 rounded-md" style={{
+                      background: 'rgba(251, 191, 36, 0.1)',
+                      border: '1px solid rgba(251, 191, 36, 0.4)'
+                    }}>
+                      <span className="text-yellow-400 text-xs">⚠️ Certaines capacités avancées non disponibles</span>
+                    </div>
+                  )}
+
+                  {/* Re-detect button */}
+                  <button
+                    onClick={redetectLMStudio}
+                    disabled={isDetectingLMStudio}
+                    className="mt-3 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300"
+                    style={{
+                      background: 'linear-gradient(90deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2))',
+                      border: '1px solid rgba(6, 182, 212, 0.5)',
+                      color: '#06b6d4',
+                      cursor: isDetectingLMStudio ? 'not-allowed' : 'pointer',
+                      opacity: isDetectingLMStudio ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDetectingLMStudio) {
+                        e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.6)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    🔄 Re-détecter les capacités
+                  </button>
                 </div>
               )}
 
