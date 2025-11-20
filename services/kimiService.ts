@@ -1,10 +1,10 @@
 // services/kimiService.ts
 import { ChatMessage, Tool, ToolCall, OutputConfig } from '../types';
 
-const KIMI_API_URL = 'https://api.moonshot.cn/v1/chat/completions';
+const KIMI_API_URL = 'https://kimi-k2.ai/api/v1/chat/completions';
 
 const getHeaders = (apiKey: string) => {
-    if (!apiKey) throw new Error("API Key for Kimi (Moonshot AI) is missing.");
+    if (!apiKey) throw new Error("API Key for Kimi K2 is missing.");
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
 };
 
@@ -12,18 +12,18 @@ const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => 
     const messages: any[] = [];
     if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
     history?.forEach(msg => {
-       if (msg.sender === 'user') {
+        if (msg.sender === 'user') {
             messages.push({ role: 'user', content: msg.text });
-       }
-       else if (msg.sender === 'agent' && !msg.toolCalls) {
+        }
+        else if (msg.sender === 'agent' && !msg.toolCalls) {
             messages.push({ role: 'assistant', content: msg.text });
-       }
-       else if (msg.sender === 'agent' && msg.toolCalls) {
+        }
+        else if (msg.sender === 'agent' && msg.toolCalls) {
             messages.push({ role: 'assistant', content: null, tool_calls: msg.toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.arguments } })) });
-       }
-       else if (msg.sender === 'tool_result' || msg.sender === 'tool') {
+        }
+        else if (msg.sender === 'tool_result' || msg.sender === 'tool') {
             messages.push({ role: 'tool', tool_call_id: msg.toolCallId, content: msg.text });
-       }
+        }
     });
     return messages;
 };
@@ -34,7 +34,7 @@ export const generateContentStream = async function* (
     systemInstruction?: string, history?: ChatMessage[], tools?: Tool[], outputConfig?: OutputConfig
 ) {
     const headers = getHeaders(apiKey);
-    
+
     let finalSystemInstruction = systemInstruction;
     if (outputConfig?.enabled && outputConfig.format !== 'json') {
         finalSystemInstruction = (systemInstruction || '') + `\n\nIMPORTANT: You MUST format your entire response as valid ${outputConfig.format}. Ensure the output is a single, valid code block without any extraneous text, explanations, or code fences.`;
@@ -48,7 +48,7 @@ export const generateContentStream = async function* (
     if (outputConfig?.enabled && outputConfig.format === 'json') {
         body.response_format = { type: 'json_object' };
     }
-    
+
     try {
         const response = await fetch(KIMI_API_URL, { method: 'POST', headers, body: JSON.stringify(body) });
         if (!response.ok) {
@@ -82,7 +82,7 @@ export const generateContentStream = async function* (
                         const delta = chunk.choices?.[0]?.delta;
                         if (delta?.content) yield { response: { text: delta.content } };
                         if (delta?.tool_calls) {
-                             delta.tool_calls.forEach((tc: any) => {
+                            delta.tool_calls.forEach((tc: any) => {
                                 if (tc.index >= toolCalls.length) toolCalls.push({ id: '', name: '', arguments: '' });
                                 if (tc.id) toolCalls[tc.index].id = tc.id;
                                 if (tc.function?.name) toolCalls[tc.index].name = tc.function.name;

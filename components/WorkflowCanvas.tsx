@@ -19,6 +19,7 @@ import { WorkflowCanvasProvider } from '../contexts/WorkflowCanvasContext';
 import { PrototypeEditConfirmationModal } from './modals/PrototypeEditConfirmationModal';
 import { AgentFormModal } from './modals/AgentFormModal';
 import { Agent, WorkflowNode, LLMConfig } from '../types';
+import { useDesignStore } from '../stores/useDesignStore';
 
 interface WorkflowCanvasProps {
   nodes?: WorkflowNode[];
@@ -27,6 +28,7 @@ interface WorkflowCanvasProps {
   onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
+  onToggleNodeMaximize?: (nodeId: string) => void;
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
@@ -38,6 +40,11 @@ interface WorkflowCanvasProps {
   onUpdateWorkflowNode?: (nodeId: string, updates: Partial<WorkflowNode>) => void;
   onRemoveFromWorkflow?: (nodeId: string) => void;
   onNavigate?: (robotId: any, path: string) => void; // Pour navigation vers prototypage
+  // Détection des panneaux actifs pour calcul largeur maximized
+  isImagePanelOpen?: boolean;
+  isImageModificationPanelOpen?: boolean;
+  isVideoPanelOpen?: boolean;
+  isMapsPanelOpen?: boolean;
 }
 
 // nodeTypes défini GLOBALEMENT pour éviter les re-créations (React Flow best practice)
@@ -55,6 +62,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     onUpdateNodeMessages,
     onUpdateNodePosition,
     onToggleNodeMinimize,
+    onToggleNodeMaximize,
     onOpenImagePanel,
     onOpenImageModificationPanel,
     onOpenVideoPanel,
@@ -65,7 +73,11 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     onAddToWorkflow,
     onUpdateWorkflowNode,
     onRemoveFromWorkflow,
-    onNavigate
+    onNavigate,
+    isImagePanelOpen = false,
+    isImageModificationPanelOpen = false,
+    isVideoPanelOpen = false,
+    isMapsPanelOpen = false
   } = props;
 
   // Hook de thème jour/nuit
@@ -110,35 +122,51 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     return (nodes && nodes.length > 0) ? nodes : workflowNodes;
   }, [nodes, workflowNodes]);
 
+  // Détecter si un panneau média est actif (pour calcul largeur maximized)
+  const isMediaPanelActive = isImagePanelOpen || isImageModificationPanelOpen || isVideoPanelOpen || isMapsPanelOpen;
+
   // Mettre à jour les références SANS déclencher de re-render
   stableRefs.current.callbacks = {
     onDeleteNode: onDeleteNode || (() => { }),
     onUpdateNodeMessages: onUpdateNodeMessages || (() => { }),
     onUpdateNodePosition: onUpdateNodePosition || (() => { }),
     onToggleNodeMinimize: onToggleNodeMinimize || (() => { }),
+    onToggleNodeMaximize: onToggleNodeMaximize || (() => { }),
     onOpenImagePanel: onOpenImagePanel || (() => { }),
     onOpenImageModificationPanel: onOpenImageModificationPanel || (() => { }),
     onOpenFullscreen: onOpenFullscreen || (() => { })
   };
 
-  stableRefs.current.actualNodes = actualNodes;
+  // Ref stable pour agents (évite les dépendances cycliques)
   stableRefs.current.agents = agents;
+
+  // Récupérer les instances depuis le store pour synchronisation
+  const { agentInstances, getResolvedInstance } = useDesignStore();
 
   // SOLUTION ANTI-BOUCLE: useEffect unique et stable pour éviter les conflits
   useEffect(() => {
     if (actualNodes && actualNodes.length > 0) {
-      const newReactFlowNodes: Node[] = actualNodes.map((wfNode, index) => ({
-        id: wfNode.id || `node-${index}`,
-        type: 'customAgent',
-        position: wfNode.position || { x: 100 + index * 200, y: 100 + index * 150 },
-        data: {
-          robotId: wfNode.agent?.id || 'unknown',
-          label: wfNode.agent?.name || 'Agent',
-          agent: wfNode.agent, // Utiliser directement wfNode.agent au lieu de chercher dans la liste
-          agentInstance: wfNode,
-          isMinimized: wfNode.isMinimized || false
-        },
-      }));
+      const newReactFlowNodes: Node[] = actualNodes.map((wfNode, index) => {
+        // Résoudre l'instance depuis le store pour avoir les données à jour
+        const resolved = wfNode.instanceId ? getResolvedInstance(wfNode.instanceId) : null;
+        // Si pas d'instance résolue (node legacy), agentInstance sera null
+        // V2AgentNode devra gérer ce cas
+        const agentInstance = resolved?.instance || null;
+
+        return {
+          id: wfNode.id || `node-${index}`,
+          type: 'customAgent',
+          position: wfNode.position || { x: 100 + index * 200, y: 100 + index * 150 },
+          data: {
+            robotId: wfNode.agent?.id || 'unknown',
+            label: agentInstance?.name || wfNode.agent?.name || 'Agent',
+            agent: wfNode.agent, // Prototype (pour model, systemPrompt par défaut)
+            agentInstance: agentInstance, // Instance mise à jour depuis le store (peut être null)
+            isMinimized: wfNode.isMinimized || false,
+            isMaximized: wfNode.isMaximized || false
+          },
+        };
+      });
 
       // Comparaison intelligente pour éviter les mises à jour inutiles
       setReactFlowNodes(currentNodes => {
@@ -206,7 +234,12 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
             currentNode.position.y !== newNode.position.y ||
             currentNode.data.robotId !== newNode.data.robotId ||
             currentNode.data.label !== newNode.data.label ||
-            currentNode.data.isMinimized !== newNode.data.isMinimized;
+            currentNode.data.isMinimized !== newNode.data.isMinimized ||
+            currentNode.data.isMaximized !== newNode.data.isMaximized ||
+            // Détecter les changements dans l'instance (nom, config)
+            currentNode.data.agentInstance?.name !== newNode.data.agentInstance?.name ||
+            (currentNode.data.agentInstance?.configuration_json && newNode.data.agentInstance?.configuration_json &&
+              JSON.stringify(currentNode.data.agentInstance.configuration_json) !== JSON.stringify(newNode.data.agentInstance.configuration_json));
         });
 
         return hasChanged ? newReactFlowNodes : currentNodes;
@@ -214,7 +247,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     } else {
       setReactFlowNodes(currentNodes => currentNodes.length > 0 ? [] : currentNodes);
     }
-  }, [actualNodes]); // Suppression de la dépendance agents pour éviter les conflits
+  }, [actualNodes, agentInstances, getResolvedInstance]); // Ajouter agentInstances pour reactivity
 
   // useEffect pour centrer la vue sur les nodes existants au chargement initial UNIQUEMENT
   useEffect(() => {
@@ -309,16 +342,37 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     navigationHandler: onNavigate,
     onDeleteNode,
     onToggleNodeMinimize,
+    onToggleNodeMaximize,
     onUpdateNodePosition,
     onOpenImagePanel,
     onOpenImageModificationPanel,
     onOpenVideoPanel,
     onOpenMapsPanel,
     onOpenFullscreen,
-  }), [handleEditPrototype, onNavigate, onDeleteNode, onToggleNodeMinimize, onUpdateNodePosition, onOpenImagePanel, onOpenImageModificationPanel, onOpenVideoPanel, onOpenMapsPanel, onOpenFullscreen]);
+  }), [handleEditPrototype, onNavigate, onDeleteNode, onToggleNodeMinimize, onToggleNodeMaximize, onUpdateNodePosition, onOpenImagePanel, onOpenImageModificationPanel, onOpenVideoPanel, onOpenMapsPanel, onOpenFullscreen]);
+
+  // Calcul dynamique de la largeur maximale pour le mode maximized
+  // Si un panneau média est actif, largeur = viewport - panneau (environ 600px)
+  // Sinon, largeur = 100% du workflow canvas
+  const maximizedWidth = isMediaPanelActive ? 'calc(100vw - 650px)' : 'calc(100vw - 100px)';
+  const maximizedHeight = 'calc(100vh - 150px)';
 
   return (
     <WorkflowCanvasProvider value={contextValue}>
+      {/* Style dynamique pour la classe workflow-maximized */}
+      <style>{`
+        .workflow-maximized {
+          width: ${maximizedWidth} !important;
+          height: ${maximizedHeight} !important;
+          max-width: none !important;
+          z-index: 999 !important;
+          position: relative !important;
+        }
+        
+        .workflow-maximized .flex-1 {
+          max-height: calc(${maximizedHeight} - 100px) !important;
+        }
+      `}</style>
       <div className="h-full w-full relative overflow-hidden">
         {/* Background optimisé avec thème jour/nuit */}
         <OptimizedWorkflowBackground />

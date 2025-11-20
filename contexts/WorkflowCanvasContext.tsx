@@ -5,6 +5,7 @@ interface WorkflowCanvasContextType {
   navigationHandler?: (robotId: string, path: string) => void;
   onDeleteNode?: (nodeId: string) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
+  onToggleNodeMaximize?: (nodeId: string) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string, sourceImage: string, mimeType?: string) => void;

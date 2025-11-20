@@ -87,6 +87,20 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   // Use instance name if available, otherwise use prototype name with null safety
   const displayName = agentInstance?.name || agent?.name || 'Unknown Agent';
 
+  // Résoudre la configuration effective (instance > prototype)
+  // Créer un "agent effectif" qui utilise la config de l'instance si disponible
+  const effectiveAgent = agentInstance?.configuration_json ? {
+    ...agent,
+    role: agentInstance.configuration_json.role,
+    llmProvider: agentInstance.configuration_json.llmProvider,
+    model: agentInstance.configuration_json.model,
+    systemPrompt: agentInstance.configuration_json.systemPrompt,
+    tools: agentInstance.configuration_json.tools,
+    capabilities: agentInstance.configuration_json.capabilities,
+    outputConfig: agentInstance.configuration_json.outputConfig,
+    historyConfig: agentInstance.configuration_json.historyConfig,
+  } : agent;
+
   // Runtime store for messages and execution state
   const {
     getNodeMessages,
@@ -168,18 +182,21 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   };
 
   const handleEdit = () => {
-    // Navigate to ArchiPrototypingPage with the prototype selected
-    if (navigationHandler && agent) {
-      // Set the selected agent in the design store
-      selectAgent(agent.id);
-      // Navigate to Archi prototyping page
-      navigationHandler('archi', '/prototyping');
+    // Ouvrir le modal de configuration de l'instance au niveau global
+    if (agentInstance && typeof agentInstance === 'object' && 'id' in agentInstance && agentInstance.id) {
+      const { setConfigModalInstanceId } = useRuntimeStore.getState();
+      setConfigModalInstanceId(agentInstance.id);
+    } else {
+      console.error('No agentInstance found for node', id, '- agentInstance:', agentInstance);
+      alert('Cet agent n\'a pas encore d\'instance. Veuillez le supprimer et le recréer depuis la sidebar.');
     }
   };
 
   const handleFullscreen = () => {
     // Open fullscreen chat modal for this node
+    const { setFullscreenChatAgent } = useRuntimeStore.getState();
     setFullscreenChatNodeId(id);
+    setFullscreenChatAgent(agent); // Passer l'agent pour que le modal puisse l'utiliser
   };
 
 
@@ -237,7 +254,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
       userMessage.filename = attachedFile.name;
       userMessage.mimeType = attachedFile.type;
 
-      if (agent.llmProvider === LLMProvider.Mistral) {
+      if (effectiveAgent.llmProvider === LLMProvider.Mistral) {
         try {
           userMessage.fileContent = await fileToText(attachedFile);
         } catch (err) {
@@ -254,13 +271,13 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
     // Get LLM config
     // llmConfigs now from hook above
-    const agentConfig = llmConfigs?.find(c => c.provider === agent.llmProvider);
+    const agentConfig = llmConfigs?.find(c => c.provider === effectiveAgent.llmProvider);
 
     if (!agentConfig?.enabled || !agentConfig.apiKey) {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         sender: 'agent',
-        text: `Erreur: ${agent.llmProvider} n'est pas configuré ou activé.`,
+        text: `Erreur: ${effectiveAgent.llmProvider} n'est pas configuré ou activé.`,
         isError: true
       };
       addNodeMessage(id, errorMessage);
@@ -271,7 +288,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
     try {
       // Gestion de l'historique avec messages d'information
       let conversationHistoryForAPI: ChatMessage[];
-      const historyConfig = agent.historyConfig;
+      const historyConfig = effectiveAgent.historyConfig;
       const currentFullHistory = [...messages, userMessage];
 
       if (historyConfig?.enabled && messages.length > 0) {
@@ -328,13 +345,13 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
       }
       // Stream LLM response
       const stream = llmService.generateContentStream(
-        agent.llmProvider,
+        effectiveAgent.llmProvider,
         agentConfig.apiKey,
-        agent.model,
-        agent.systemPrompt,
+        effectiveAgent.model,
+        effectiveAgent.systemPrompt,
         messages.concat(userMessage),
-        agent.tools,
-        agent.outputConfig
+        effectiveAgent.tools,
+        effectiveAgent.outputConfig
       );
 
       let currentResponse = '';
@@ -425,7 +442,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
         ));
 
         // If agent has Chat capability, continue generation with tool results
-        if (agent?.capabilities?.includes(LLMCapability.Chat)) {
+        if (effectiveAgent?.capabilities?.includes(LLMCapability.Chat)) {
           setLoadingMessage(t('analyzing_results'));
 
           // Get updated message history including tool results
@@ -453,13 +470,13 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
           // Generate a follow-up response using the tool results as context
           const followUpStream = llmService.generateContentStream(
-            agent.llmProvider,
+            effectiveAgent.llmProvider,
             agentConfig.apiKey,
-            agent.model,
-            agent.systemPrompt,
+            effectiveAgent.model,
+            effectiveAgent.systemPrompt,
             messagesWithoutToolResults,
-            agent.tools,
-            agent.outputConfig
+            effectiveAgent.tools,
+            effectiveAgent.outputConfig
           );
 
           let followUpResponse = '';
@@ -602,7 +619,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                   </button>
 
                   {/* Edit button - only if agent has ImageModification capability */}
-                  {agent.capabilities?.includes(LLMCapability.ImageModification) && (
+                  {effectiveAgent.capabilities?.includes(LLMCapability.ImageModification) && (
                     <button
                       onClick={() => handleEditImage(message.image!, message.mimeType || 'image/png')}
                       className="p-3 bg-purple-500/20 hover:bg-purple-500/40 border-2 border-purple-400/50 
@@ -811,7 +828,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
           'border-cyan-400 shadow-cyan-400/40 shadow-2xl' :
           'border-gray-600 hover:border-gray-500'
         }
-      ${isMinimized ? 'w-64' : 'w-96'}
+              ${isMinimized ? 'w-64' : 'w-96'}
       group
       hover:shadow-2xl hover:shadow-cyan-500/20
       before:absolute before:inset-0 before:bg-gradient-to-br 
@@ -881,6 +898,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                        transition-all duration-200 rounded-md
                        hover:scale-110 active:scale-95"
             onClick={handleEdit}
+            title="Configurer l'instance"
           >
             <EditIcon width={12} height={12} />
           </Button>
@@ -920,7 +938,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                           backdrop-blur-sm">
             <div className="text-xs text-gray-400 mb-1 select-text 
                             group-hover:text-gray-300 transition-colors duration-200">
-              {agent?.llmProvider || 'Unknown'} • {agent?.model || 'Unknown'}
+              {effectiveAgent.llmProvider || 'Unknown'} • {effectiveAgent.model || 'Unknown'}
             </div>
             <div className="text-sm text-cyan-400 font-medium select-text
                             group-hover:text-cyan-300 transition-colors duration-200
@@ -1008,7 +1026,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                 {/* Action buttons */}
                 <div className="flex flex-col space-y-1">
                   {/* File upload */}
-                  {agent?.capabilities?.includes(LLMCapability.FileUpload) && (
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.FileUpload) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1024,8 +1042,8 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                   )}
 
                   {/* Image generation/modification */}
-                  {(agent?.capabilities?.includes(LLMCapability.ImageGeneration) ||
-                    agent?.capabilities?.includes(LLMCapability.ImageModification)) && (
+                  {(effectiveAgent?.capabilities?.includes(LLMCapability.ImageGeneration) ||
+                    effectiveAgent?.capabilities?.includes(LLMCapability.ImageModification)) && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -1041,7 +1059,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                     )}
 
                   {/* Arc-LLM Video Generation */}
-                  {agent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1058,7 +1076,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                   )}
 
                   {/* Arc-LLM Maps Grounding */}
-                  {agent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1075,7 +1093,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                   )}
 
                   {/* Arc-LLM Web Search Grounding */}
-                  {agent?.capabilities?.includes(LLMCapability.WebSearchGrounding) && (
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.WebSearchGrounding) && (
                     <Button
                       type="button"
                       variant="ghost"

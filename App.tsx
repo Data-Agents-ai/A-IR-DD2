@@ -13,6 +13,7 @@ import { useLocalization } from './hooks/useLocalization';
 import { Button } from './components/UI';
 import { ConfirmationModal } from './components/modals/ConfirmationModal';
 import { FullscreenChatModal } from './components/modals/FullscreenChatModal';
+import { AgentConfigurationModal } from './components/modals/AgentConfigurationModal';
 import { useRuntimeStore } from './stores/useRuntimeStore';
 import { useDesignStore } from './stores/useDesignStore';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -140,7 +141,7 @@ function App() {
     setNavigationHandler(handleRobotNavigation);
   }, [setNavigationHandler]);
 
-  // PHASE 1B: Integrity validation on app startup
+  // PHASE 1B: Integrity validation on app startup + Migration legacy nodes
   useEffect(() => {
     // Clean up any orphaned instances first
     const cleanedCount = cleanupOrphanedInstances();
@@ -148,10 +149,27 @@ function App() {
     // Then validate workflow integrity
     const { fixedCount } = validateWorkflowIntegrity();
 
+    // 🆕 Migration: Créer des instances pour les nodes legacy sans instanceId
+    let migratedCount = 0;
+    const updatedNodes = workflowNodes.map(node => {
+      if (!node.instanceId && node.agent) {
+        // Créer une instance pour ce node legacy
+        const instanceId = addAgentInstance(node.agent.id, node.position, node.agent.name);
+        migratedCount++;
+        return { ...node, instanceId };
+      }
+      return node;
+    });
+
+    if (migratedCount > 0) {
+      setWorkflowNodes(updatedNodes);
+      console.log(`🔄 Migrated ${migratedCount} legacy nodes to instance architecture`);
+    }
+
     if (cleanedCount > 0 || fixedCount > 0) {
       console.log(`🚀 App startup integrity check completed: cleaned ${cleanedCount} instances, fixed ${fixedCount} nodes`);
     }
-  }, [cleanupOrphanedInstances, validateWorkflowIntegrity]);
+  }, []); // Run only once on mount
 
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmationState | null>(null);
   const [updateConfirmation, setUpdateConfirmation] = useState<UpdateConfirmationState | null>(null);
@@ -248,6 +266,8 @@ function App() {
       position,
       messages: [],
       isMinimized: false,
+      isMaximized: false,
+      instanceId // ✅ Stocker instanceId pour accès au modal de configuration
     };
     setWorkflowNodes(prev => [...prev, newNode]);
   }, [workflowNodes, addAgentInstance]);
@@ -259,6 +279,19 @@ function App() {
   const handleUpdateNodePosition = (nodeId: string, position: { x: number; y: number }) => {
     setWorkflowNodes(prev =>
       prev.map(node => (node.id === nodeId ? { ...node, position } : node))
+    );
+  };
+
+  const handleToggleNodeMaximize = (nodeId: string) => {
+    setWorkflowNodes(prev =>
+      prev.map(node => {
+        // Si c'est le node ciblé, inverser son état isMaximized
+        if (node.id === nodeId) {
+          return { ...node, isMaximized: !node.isMaximized };
+        }
+        // Forcer tous les autres nodes à isMaximized: false (un seul à la fois)
+        return { ...node, isMaximized: false };
+      })
     );
   };
 
@@ -326,6 +359,12 @@ function App() {
     setFullscreenImage({ src, mimeType });
   };
 
+  const handleOpenAgentFullscreen = (nodeId: string) => {
+    // Utiliser le store runtime pour ouvrir le FullscreenChatModal existant
+    const { setFullscreenChatNodeId } = useRuntimeStore.getState();
+    setFullscreenChatNodeId(nodeId);
+  };
+
   const handleAddToWorkflow = (agent: Agent) => {
     addAgentToWorkflow(agent);
   };
@@ -359,12 +398,18 @@ function App() {
               onUpdateNodeMessages={handleUpdateNodeMessages}
               onUpdateNodePosition={handleUpdateNodePosition}
               onToggleNodeMinimize={handleToggleNodeMinimize}
+              onToggleNodeMaximize={handleToggleNodeMaximize}
               onOpenImagePanel={handleOpenImagePanel}
               onOpenImageModificationPanel={handleOpenImageModificationPanel}
               onOpenVideoPanel={handleOpenVideoPanel}
               onOpenMapsPanel={handleOpenMapsPanel}
               onOpenFullscreen={handleOpenFullscreen}
+              onOpenAgentFullscreen={handleOpenAgentFullscreen}
               onAddToWorkflow={handleAddToWorkflow}
+              isImagePanelOpen={isImagePanelOpen}
+              isImageModificationPanelOpen={isImageModificationPanelOpen}
+              isVideoPanelOpen={isVideoPanelOpen}
+              isMapsPanelOpen={isMapsPanelOpen}
             />
           </main>
         </div>
@@ -410,44 +455,52 @@ function App() {
           />
         )}
 
-        <ImageGenerationPanel
-          isOpen={isImagePanelOpen}
-          nodeId={currentImageNodeId}
-          llmConfigs={llmConfigs}
-          workflowNodes={workflowNodes}
-          onClose={() => setImagePanelOpen(false)}
-          onImageGenerated={handleImageGenerated}
-          onOpenImageModificationPanel={handleOpenImageModificationPanel}
-        />
+        {isImagePanelOpen && (
+          <ImageGenerationPanel
+            isOpen={isImagePanelOpen}
+            nodeId={currentImageNodeId}
+            llmConfigs={llmConfigs}
+            workflowNodes={workflowNodes}
+            onClose={() => setImagePanelOpen(false)}
+            onImageGenerated={handleImageGenerated}
+            onOpenImageModificationPanel={handleOpenImageModificationPanel}
+          />
+        )}
 
-        <ImageModificationPanel
-          isOpen={isImageModificationPanelOpen}
-          editingImageInfo={editingImageInfo}
-          llmConfigs={llmConfigs}
-          workflowNodes={workflowNodes}
-          onClose={() => setImageModificationPanelOpen(false)}
-          onImageModified={handleImageModified}
-        />
+        {isImageModificationPanelOpen && (
+          <ImageModificationPanel
+            isOpen={isImageModificationPanelOpen}
+            editingImageInfo={editingImageInfo}
+            llmConfigs={llmConfigs}
+            workflowNodes={workflowNodes}
+            onClose={() => setImageModificationPanelOpen(false)}
+            onImageModified={handleImageModified}
+          />
+        )}
 
-        <VideoGenerationConfigPanel
-          isOpen={isVideoPanelOpen}
-          nodeId={currentVideoNodeId}
-          llmConfigs={llmConfigs}
-          workflowNodes={workflowNodes}
-          onClose={() => setVideoPanelOpen(false)}
-        />
+        {isVideoPanelOpen && (
+          <VideoGenerationConfigPanel
+            isOpen={isVideoPanelOpen}
+            nodeId={currentVideoNodeId}
+            llmConfigs={llmConfigs}
+            workflowNodes={workflowNodes}
+            onClose={() => setVideoPanelOpen(false)}
+          />
+        )}
 
-        <MapsGroundingConfigPanel
-          isOpen={isMapsPanelOpen}
-          nodeId={currentMapsNodeId}
-          llmConfigs={llmConfigs}
-          workflowNodes={workflowNodes}
-          onClose={() => {
-            setMapsPanelOpen(false);
-            setMapsPreloadedResults(null);
-          }}
-          preloadedResults={mapsPreloadedResults || undefined}
-        />
+        {isMapsPanelOpen && (
+          <MapsGroundingConfigPanel
+            isOpen={isMapsPanelOpen}
+            nodeId={currentMapsNodeId}
+            llmConfigs={llmConfigs}
+            workflowNodes={workflowNodes}
+            onClose={() => {
+              setMapsPanelOpen(false);
+              setMapsPreloadedResults(null);
+            }}
+            preloadedResults={mapsPreloadedResults || undefined}
+          />
+        )}
 
         {fullscreenImage && (
           <div
@@ -473,6 +526,9 @@ function App() {
 
         {/* Fullscreen Chat Modal */}
         <FullscreenChatModal />
+
+        {/* Configuration Modal */}
+        <AgentConfigurationModal llmConfigs={llmConfigs} />
 
         <NotificationDisplay />
       </div>

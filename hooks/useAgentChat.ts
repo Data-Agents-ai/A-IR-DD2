@@ -1,0 +1,346 @@
+import { useState } from 'react';
+import { Agent, ChatMessage, LLMConfig, LLMCapability, LLMProvider, ToolCall } from '../types';
+import { useRuntimeStore } from '../stores/useRuntimeStore';
+import * as llmService from '../services/llmService';
+import { fileToBase64, fileToText } from '../utils/fileUtils';
+import { executeTool } from '../utils/toolExecutor';
+import { countTokens, countWords, countSentences, countMessages } from '../utils/textUtils';
+
+interface UseAgentChatOptions {
+    nodeId: string;
+    agent: Agent | null;
+    llmConfigs: LLMConfig[];
+    t: (key: string) => string;
+}
+
+interface UseAgentChatReturn {
+    handleSendMessage: (userInput: string, attachedFile: File | null) => Promise<void>;
+    loadingMessage: string;
+}
+
+/**
+ * Hook réutilisable pour gérer l'envoi de messages et l'interaction avec le LLM
+ * Principe SOLID : Single Responsibility - Ce hook gère UNIQUEMENT la logique de chat
+ * Utilisé par V2AgentNode et FullscreenChatModal pour garantir un comportement identique
+ */
+export const useAgentChat = ({
+    nodeId,
+    agent,
+    llmConfigs,
+    t
+}: UseAgentChatOptions): UseAgentChatReturn => {
+    const {
+        getNodeMessages,
+        addNodeMessage,
+        setNodeMessages,
+        setNodeExecuting,
+    } = useRuntimeStore();
+
+    const [loadingMessage, setLoadingMessage] = useState('');
+
+    const handleSendMessage = async (userInput: string, attachedFile: File | null) => {
+        const trimmedInput = userInput.trim();
+        if (!trimmedInput && !attachedFile) return;
+
+        // Protection null safety pour agent
+        if (!agent) {
+            console.error('Agent is null, cannot send message');
+            return;
+        }
+
+        setNodeExecuting(nodeId, true);
+
+        const userMessage: ChatMessage = {
+            id: `msg-${Date.now()}`,
+            sender: 'user',
+            text: trimmedInput,
+        };
+
+        // Handle file attachment
+        if (attachedFile) {
+            userMessage.filename = attachedFile.name;
+            userMessage.mimeType = attachedFile.type;
+
+            if (agent.llmProvider === LLMProvider.Mistral) {
+                try {
+                    userMessage.fileContent = await fileToText(attachedFile);
+                } catch (err) {
+                    userMessage.image = await fileToBase64(attachedFile);
+                }
+            } else {
+                userMessage.image = await fileToBase64(attachedFile);
+            }
+        }
+
+        addNodeMessage(nodeId, userMessage);
+
+        // Get LLM config
+        const agentConfig = llmConfigs?.find(c => c.provider === agent.llmProvider);
+
+        if (!agentConfig?.enabled || !agentConfig.apiKey) {
+            const errorMessage: ChatMessage = {
+                id: `msg-${Date.now()}`,
+                sender: 'agent',
+                text: `Erreur: ${agent.llmProvider} n'est pas configuré ou activé.`,
+                isError: true
+            };
+            addNodeMessage(nodeId, errorMessage);
+            setNodeExecuting(nodeId, false);
+            return;
+        }
+
+        try {
+            const messages = getNodeMessages(nodeId);
+
+            // Gestion de l'historique avec messages d'information
+            let conversationHistoryForAPI: ChatMessage[];
+            const historyConfig = agent.historyConfig;
+            const currentFullHistory = [...messages, userMessage];
+
+            if (historyConfig?.enabled && messages.length > 0) {
+                const { limits } = historyConfig;
+                const stats = {
+                    tokens: countTokens(currentFullHistory),
+                    words: countWords(currentFullHistory),
+                    sentences: countSentences(currentFullHistory),
+                    messages: countMessages(currentFullHistory),
+                };
+
+                const shouldSummarize = stats.tokens >= limits.token ||
+                    stats.words >= limits.word ||
+                    stats.sentences >= limits.sentence ||
+                    stats.messages >= limits.message;
+
+                if (shouldSummarize) {
+                    setLoadingMessage(t('agentNode_history_summarizing'));
+                    const summarizationConfig = llmConfigs.find(c => c.provider === historyConfig.llmProvider);
+
+                    if (!summarizationConfig) {
+                        throw new Error(`Summarization LLM ${historyConfig.llmProvider} not configured.`);
+                    }
+
+                    const summarizationPrompt = `${t('conversation_to_summarize')}:\n\n${currentFullHistory.map(m => `${m.sender}: ${m.text}`).join('\n')}`;
+                    const summarizationHistory: ChatMessage[] = [{
+                        id: `msg-summary-prompt-${Date.now()}`,
+                        sender: 'user',
+                        text: summarizationPrompt
+                    }];
+
+                    const { text: summary } = await llmService.generateContent(
+                        summarizationConfig.provider,
+                        summarizationConfig.apiKey,
+                        historyConfig.model,
+                        historyConfig.systemPrompt,
+                        summarizationHistory
+                    );
+
+                    const summaryMessage: ChatMessage = {
+                        id: `msg-${Date.now()}-summary`,
+                        sender: 'agent',
+                        text: `(Résumé de l'historique): ${summary}`
+                    };
+
+                    conversationHistoryForAPI = [summaryMessage, userMessage];
+                    setNodeMessages(nodeId, [summaryMessage, userMessage]);
+                    setLoadingMessage('');
+                } else {
+                    conversationHistoryForAPI = currentFullHistory;
+                }
+            } else {
+                conversationHistoryForAPI = historyConfig?.enabled ? currentFullHistory : [userMessage];
+            }
+
+            // Stream LLM response
+            const stream = llmService.generateContentStream(
+                agent.llmProvider,
+                agentConfig.apiKey,
+                agent.model,
+                agent.systemPrompt,
+                messages.concat(userMessage),
+                agent.tools,
+                agent.outputConfig
+            );
+
+            let currentResponse = '';
+            let agentMessageId = `msg-${Date.now()}-agent`;
+            let toolCalls: ToolCall[] = [];
+
+            for await (const chunk of stream) {
+                if (chunk.error) {
+                    const errorMessage: ChatMessage = {
+                        id: agentMessageId,
+                        sender: 'agent',
+                        text: chunk.error,
+                        isError: true
+                    };
+                    addNodeMessage(nodeId, errorMessage);
+                    break;
+                }
+
+                // Handle text response
+                if (chunk.response && 'text' in chunk.response && chunk.response.text) {
+                    currentResponse += chunk.response.text;
+                    // Update existing message or create new one
+                    const existingMessages = getNodeMessages(nodeId);
+                    const existingAgentMessage = existingMessages.find(m => m.id === agentMessageId);
+
+                    if (existingAgentMessage) {
+                        setNodeMessages(nodeId, existingMessages.map(m =>
+                            m.id === agentMessageId ? { ...m, text: currentResponse } : m
+                        ));
+                    } else {
+                        const newMessage: ChatMessage = {
+                            id: agentMessageId,
+                            sender: 'agent',
+                            text: currentResponse
+                        };
+                        addNodeMessage(nodeId, newMessage);
+                    }
+                }
+
+                // Handle tool calls
+                if (chunk.response && 'toolCalls' in chunk.response && chunk.response.toolCalls) {
+                    toolCalls = chunk.response.toolCalls;
+                    const toolMessage: ChatMessage = {
+                        id: agentMessageId,
+                        sender: 'agent',
+                        text: currentResponse,
+                        toolCalls,
+                        status: 'executing_tool'
+                    };
+
+                    const existingMessages = getNodeMessages(nodeId);
+                    setNodeMessages(nodeId, existingMessages.map(m =>
+                        m.id === agentMessageId ? toolMessage : m
+                    ));
+                }
+            }
+
+            // Execute tools if any
+            if (toolCalls.length > 0) {
+                for (const toolCall of toolCalls) {
+                    try {
+                        const toolResult = await executeTool(toolCall);
+                        const toolResultMessage: ChatMessage = {
+                            id: `msg-${Date.now()}-tool-result`,
+                            sender: 'tool_result',
+                            text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+                            toolCallId: toolCall.id,
+                            toolName: toolCall.name
+                        };
+                        addNodeMessage(nodeId, toolResultMessage);
+                    } catch (error) {
+                        const errorMessage: ChatMessage = {
+                            id: `msg-${Date.now()}-tool-error`,
+                            sender: 'tool_result',
+                            text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
+                            toolCallId: toolCall.id,
+                            toolName: toolCall.name,
+                            isError: true
+                        };
+                        addNodeMessage(nodeId, errorMessage);
+                    }
+                }
+
+                // Remove executing_tool status after all tools are executed
+                const existingMessages = getNodeMessages(nodeId);
+                setNodeMessages(nodeId, existingMessages.map(m =>
+                    m.status === 'executing_tool' ? { ...m, status: undefined } : m
+                ));
+
+                // If agent has Chat capability, continue generation with tool results
+                if (agent?.capabilities?.includes(LLMCapability.Chat)) {
+                    setLoadingMessage(t('analyzing_results'));
+
+                    // Get updated message history including tool results
+                    const updatedMessages = getNodeMessages(nodeId);
+
+                    // Filter out tool_result messages for the follow-up call and create a synthetic user message
+                    const messagesWithoutToolResults = updatedMessages.filter(m => m.sender !== 'tool_result');
+
+                    // Collect tool results for context
+                    const toolResults = updatedMessages.filter(m => m.sender === 'tool_result');
+
+                    if (toolResults.length > 0) {
+                        // Create a synthetic message that provides tool results as context
+                        const toolResultsSummary = toolResults.map(tr =>
+                            `${t('tool_result_from')} ${tr.toolName}: ${tr.text}`
+                        ).join('\n\n');
+
+                        const contextMessage: ChatMessage = {
+                            id: `msg-${Date.now()}-tool-context`,
+                            sender: 'user',
+                            text: `${t('tool_results_context')}:\n\n${toolResultsSummary}\n\n${t('analyze_results_request')}`
+                        };
+
+                        messagesWithoutToolResults.push(contextMessage);
+                    }
+
+                    // Generate a follow-up response using the tool results as context
+                    const followUpStream = llmService.generateContentStream(
+                        agent.llmProvider,
+                        agentConfig.apiKey,
+                        agent.model,
+                        agent.systemPrompt,
+                        messagesWithoutToolResults,
+                        agent.tools,
+                        agent.outputConfig
+                    );
+
+                    let followUpResponse = '';
+                    let followUpMessageId = `msg-${Date.now()}-followup`;
+
+                    for await (const chunk of followUpStream) {
+                        if (chunk.error) {
+                            const errorMessage: ChatMessage = {
+                                id: followUpMessageId,
+                                sender: 'agent',
+                                text: chunk.error,
+                                isError: true
+                            };
+                            addNodeMessage(nodeId, errorMessage);
+                            break;
+                        }
+
+                        if (chunk.response && 'text' in chunk.response && chunk.response.text) {
+                            followUpResponse += chunk.response.text;
+
+                            const existingFollowUpMessages = getNodeMessages(nodeId);
+                            const existingFollowUpMessage = existingFollowUpMessages.find(m => m.id === followUpMessageId);
+
+                            if (existingFollowUpMessage) {
+                                setNodeMessages(nodeId, existingFollowUpMessages.map(m =>
+                                    m.id === followUpMessageId ? { ...m, text: followUpResponse } : m
+                                ));
+                            } else {
+                                const newFollowUpMessage: ChatMessage = {
+                                    id: followUpMessageId,
+                                    sender: 'agent',
+                                    text: followUpResponse
+                                };
+                                addNodeMessage(nodeId, newFollowUpMessage);
+                            }
+                        }
+                    }
+                }
+            }
+
+        } catch (error) {
+            const errorMessage: ChatMessage = {
+                id: `msg-${Date.now()}`,
+                sender: 'agent',
+                text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
+                isError: true
+            };
+            addNodeMessage(nodeId, errorMessage);
+        } finally {
+            setNodeExecuting(nodeId, false);
+            setLoadingMessage('');
+        }
+    };
+
+    return {
+        handleSendMessage,
+        loadingMessage,
+    };
+};

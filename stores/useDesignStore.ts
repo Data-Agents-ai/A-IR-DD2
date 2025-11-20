@@ -36,6 +36,7 @@ interface DesignStore {
   // Actions - Agent Instances  
   addAgentInstance: (prototypeId: string, position: { x: number; y: number }, name?: string) => string;
   updateAgentInstance: (id: string, updates: Partial<AgentInstance>) => void;
+  updateInstanceConfig: (id: string, configUpdates: Partial<AgentInstance['configuration_json']>) => void;
   deleteAgentInstance: (id: string) => void;
   getResolvedInstance: (instanceId: string) => ResolvedAgentInstance | undefined;
   getInstancesOfPrototype: (prototypeId: string) => AgentInstance[];
@@ -226,12 +227,33 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     if (!prototype) throw new Error(`Prototype ${prototypeId} not found`);
 
     const instanceId = `instance-${Date.now()}`;
+
+    // 🔥 CLONAGE PROFOND : Configuration indépendante du prototype
+    const configuration_json = {
+      role: prototype.role,
+      model: prototype.model,
+      llmProvider: prototype.llmProvider,
+      systemPrompt: prototype.systemPrompt,
+      tools: JSON.parse(JSON.stringify(prototype.tools || [])), // Deep clone
+      outputConfig: prototype.outputConfig ? JSON.parse(JSON.stringify(prototype.outputConfig)) : undefined,
+      capabilities: prototype.capabilities ? [...prototype.capabilities] : undefined,
+      historyConfig: prototype.historyConfig ? JSON.parse(JSON.stringify(prototype.historyConfig)) : undefined,
+      position,
+      // Sections futures
+      links: [],
+      tasks: [],
+      logs: [],
+      errors: []
+    };
+
     const instance: AgentInstance = {
       id: instanceId,
       prototypeId,
       name: name || prototype.name,
       position,
-      isMinimized: false
+      isMinimized: false,
+      isMaximized: false,
+      configuration_json // ✅ Configuration clonée et isolée
     };
 
     set((state) => ({
@@ -245,6 +267,19 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     agentInstances: state.agentInstances.map(instance =>
       instance.id === id ? { ...instance, ...updates } : instance
     )
+  })),
+
+  updateInstanceConfig: (id, configUpdates) => set((state) => ({
+    agentInstances: state.agentInstances.map(instance => {
+      if (instance.id !== id) return instance;
+
+      // Fusionner les mises à jour avec la configuration existante
+      const updatedConfig = instance.configuration_json
+        ? { ...instance.configuration_json, ...configUpdates }
+        : configUpdates;
+
+      return { ...instance, configuration_json: updatedConfig as any };
+    })
   })),
 
   deleteAgentInstance: (id) => set((state) => ({

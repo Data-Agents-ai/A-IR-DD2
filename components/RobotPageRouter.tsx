@@ -18,12 +18,18 @@ interface RobotPageRouterProps {
   onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
+  onToggleNodeMaximize?: (nodeId: string) => void;
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
   onOpenMapsPanel?: (nodeId: string) => void;
   onOpenFullscreen?: (nodeId: string) => void;
   onAddToWorkflow?: (agent: Agent) => void;
+  // Détection panneaux actifs
+  isImagePanelOpen?: boolean;
+  isImageModificationPanelOpen?: boolean;
+  isVideoPanelOpen?: boolean;
+  isMapsPanelOpen?: boolean;
 }
 
 // Page with workflow canvas for operational robots
@@ -38,13 +44,17 @@ const WorkflowPage: React.FC<{
   onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
+  onToggleNodeMaximize?: (nodeId: string) => void;
   onOpenImagePanel?: (nodeId: string) => void;
   onOpenImageModificationPanel?: (nodeId: string) => void;
   onOpenVideoPanel?: (nodeId: string) => void;
   onOpenMapsPanel?: (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => void;
   onOpenFullscreen?: (nodeId: string) => void;
   onAddToWorkflow?: (agent: Agent) => void;
-  onAddToWorkflow?: (agent: Agent) => void;
+  isImagePanelOpen?: boolean;
+  isImageModificationPanelOpen?: boolean;
+  isVideoPanelOpen?: boolean;
+  isMapsPanelOpen?: boolean;
 }> = ({
   robotName,
   description,
@@ -55,12 +65,17 @@ const WorkflowPage: React.FC<{
   onUpdateNodeMessages,
   onUpdateNodePosition,
   onToggleNodeMinimize,
+  onToggleNodeMaximize,
   onOpenImagePanel,
   onOpenImageModificationPanel,
   onOpenVideoPanel,
   onOpenMapsPanel,
   onOpenFullscreen,
-  onAddToWorkflow
+  onAddToWorkflow,
+  isImagePanelOpen,
+  isImageModificationPanelOpen,
+  isVideoPanelOpen,
+  isMapsPanelOpen
 }) => {
     return (
       <div className="h-full flex flex-col bg-gray-900 text-gray-100">
@@ -80,12 +95,17 @@ const WorkflowPage: React.FC<{
             onUpdateNodeMessages={onUpdateNodeMessages}
             onUpdateNodePosition={onUpdateNodePosition}
             onToggleNodeMinimize={onToggleNodeMinimize}
+            onToggleNodeMaximize={onToggleNodeMaximize}
             onOpenImagePanel={onOpenImagePanel}
             onOpenImageModificationPanel={onOpenImageModificationPanel}
             onOpenVideoPanel={onOpenVideoPanel}
             onOpenMapsPanel={onOpenMapsPanel}
             onOpenFullscreen={onOpenFullscreen}
             onAddToWorkflow={onAddToWorkflow}
+            isImagePanelOpen={isImagePanelOpen}
+            isImageModificationPanelOpen={isImageModificationPanelOpen}
+            isVideoPanelOpen={isVideoPanelOpen}
+            isMapsPanelOpen={isMapsPanelOpen}
           />
         </div>
       </div>
@@ -115,12 +135,17 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
   onUpdateNodeMessages,
   onUpdateNodePosition,
   onToggleNodeMinimize,
+  onToggleNodeMaximize,
   onOpenImagePanel,
   onOpenImageModificationPanel,
   onOpenVideoPanel,
   onOpenMapsPanel,
   onOpenFullscreen,
-  onAddToWorkflow
+  onAddToWorkflow,
+  isImagePanelOpen,
+  isImageModificationPanelOpen,
+  isVideoPanelOpen,
+  isMapsPanelOpen
 }) => {
   const { t } = useLocalization();
 
@@ -140,12 +165,17 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
     onUpdateNodeMessages,
     onUpdateNodePosition,
     onToggleNodeMinimize,
+    onToggleNodeMaximize,
     onOpenImagePanel,
     onOpenImageModificationPanel,
     onOpenVideoPanel,
     onOpenMapsPanel,
     onOpenFullscreen,
-    onAddToWorkflow
+    onAddToWorkflow,
+    isImagePanelOpen,
+    isImageModificationPanelOpen,
+    isVideoPanelOpen,
+    isMapsPanelOpen
   };
 
   // Route matching logic

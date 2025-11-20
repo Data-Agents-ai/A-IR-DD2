@@ -231,8 +231,8 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
                   <div
                     key={template.id}
                     className={`relative bg-gray-700 rounded-lg p-4 border-2 transition-all cursor-pointer group ${isSelected
-                        ? 'border-indigo-500 shadow-lg shadow-indigo-500/50 ring-2 ring-indigo-400/30'
-                        : 'border-gray-600 hover:border-indigo-400/50'
+                      ? 'border-indigo-500 shadow-lg shadow-indigo-500/50 ring-2 ring-indigo-400/30'
+                      : 'border-gray-600 hover:border-indigo-400/50'
                       }`}
                     onClick={() => handleTemplateClick(template)}
                   >
@@ -282,9 +282,9 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
                     <div className="flex items-center justify-between">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
-                          template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
-                            template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
-                              'bg-green-900/30 text-green-400'
+                        template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
+                          template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
+                            'bg-green-900/30 text-green-400'
                         }`}>
                         {template.category === 'assistant' ? 'Assistant' :
                           template.category === 'specialist' ? 'Spécialiste' :
@@ -335,8 +335,8 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
               onClick={handleConfirmSelection}
               disabled={!selectedTemplate}
               className={`${selectedTemplate
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 }`}
             >
               Créer le Prototype

@@ -232,20 +232,23 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
     ],
     [LLMProvider.Kimi]: [
         {
-            id: 'moonshot-v1-128k',
-            name: 'Moonshot v1 128k',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+            id: 'kimi-k2-thinking',
+            name: 'Kimi K2 Thinking',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Reasoning],
             recommended: true,
+            description: '🧠 Specialized model for deep reasoning, mathematical proofs, research analysis, and multi-step problem solving (256K context)'
         },
         {
-            id: 'moonshot-v1-32k',
-            name: 'Moonshot v1 32k',
+            id: 'kimi-k2-0905',
+            name: 'Kimi K2 0905',
             capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+            description: 'Enhanced model with extended context window (256K tokens)'
         },
         {
-            id: 'moonshot-v1-8k',
-            name: 'Moonshot v1 8k',
+            id: 'kimi-k2',
+            name: 'Kimi K2',
             capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+            description: 'Primary model for general chat completions (128K tokens)'
         },
     ],
     [LLMProvider.DeepSeek]: [

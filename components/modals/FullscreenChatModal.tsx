@@ -3,82 +3,89 @@ import { Button } from '../UI';
 import { CloseIcon, UploadIcon, SendIcon } from '../Icons';
 import { useRuntimeStore } from '../../stores/useRuntimeStore';
 import { useDesignStore } from '../../stores/useDesignStore';
-import { ChatMessage } from '../../types';
+import { useAgentChat } from '../../hooks/useAgentChat';
+import { useLocalization } from '../../hooks/useLocalization';
+import { ChatMessage, Agent } from '../../types';
 
-interface FullscreenChatModalProps {}
+interface FullscreenChatModalProps { }
 
 export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
-  const { 
-    fullscreenChatNodeId, 
-    setFullscreenChatNodeId, 
-    getNodeMessages, 
+  const {
+    fullscreenChatNodeId,
+    fullscreenChatAgent,
+    setFullscreenChatNodeId,
+    getNodeMessages,
     addNodeMessage,
     setNodeExecuting,
     isNodeExecuting
   } = useRuntimeStore();
-  
-  const { getResolvedInstance } = useDesignStore();
-  
+
+  const { getResolvedInstance, agents } = useDesignStore();
+  const { t } = useLocalization();
+
   const [userInput, setUserInput] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // Si pas de node sélectionné, ne pas afficher la modal
-  if (!fullscreenChatNodeId) return null;
-  
-  const resolvedInstance = getResolvedInstance(fullscreenChatNodeId);
-  if (!resolvedInstance) return null;
-  
-  const { instance, prototype } = resolvedInstance;
-  const messages = getNodeMessages(fullscreenChatNodeId);
-  const isLoading = isNodeExecuting(fullscreenChatNodeId);
-  
+
+  // Appeler getResolvedInstance AVANT tout early return (Rules of Hooks)
+  const resolvedInstance = fullscreenChatNodeId ? getResolvedInstance(fullscreenChatNodeId) : null;
+  const messages = fullscreenChatNodeId ? getNodeMessages(fullscreenChatNodeId) : [];
+  const isLoading = fullscreenChatNodeId ? isNodeExecuting(fullscreenChatNodeId) : false;
+
+  // Récupérer llmConfigs depuis le store
+  const llmConfigs = useRuntimeStore(state => state.llmConfigs);
+
+  // Récupérer l'agent complet (priorité: fullscreenChatAgent du store, sinon V2 resolvedInstance)
+  const agent: Agent | null = fullscreenChatAgent || (resolvedInstance ? resolvedInstance.prototype : null);
+
+  // Hook pour gérer l'envoi de messages (logique partagée avec V2AgentNode)
+  const { handleSendMessage: sendMessageToLLM, loadingMessage } = useAgentChat({
+    nodeId: fullscreenChatNodeId || '',
+    agent,
+    llmConfigs,
+    t
+  });
+
   // Auto-scroll vers le bas quand de nouveaux messages arrivent
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-  
+
+  // Si pas de node sélectionné, ne pas afficher la modal (APRÈS tous les hooks)
+  if (!fullscreenChatNodeId) return null;
+
+  // Déterminer le nom et les infos de l'agent
+  const agentName = resolvedInstance
+    ? (resolvedInstance.instance.name || resolvedInstance.prototype.name)
+    : 'Agent'; // Fallback pour architecture V1
+
+  const agentModel = resolvedInstance
+    ? resolvedInstance.prototype.model
+    : 'Unknown';
+
+  const agentProvider = resolvedInstance
+    ? resolvedInstance.prototype.llmProvider
+    : 'Unknown';
+
   const handleClose = () => {
+    const { setFullscreenChatAgent } = useRuntimeStore.getState();
     setFullscreenChatNodeId(null);
+    setFullscreenChatAgent(null); // Nettoyer l'agent au moment de fermer
   };
-  
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = userInput.trim();
     if (!trimmedInput && !attachedFile) return;
 
-    setNodeExecuting(fullscreenChatNodeId, true);
+    // Déléguer l'envoi au hook partagé (même logique que V2AgentNode)
+    await sendMessageToLLM(trimmedInput, attachedFile);
 
-    const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'user',
-      text: trimmedInput,
-    };
-
-    if (attachedFile) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        const base64Data = base64.split(',')[1];
-        userMessage.image = base64Data;
-        userMessage.mimeType = attachedFile.type;
-        addNodeMessage(fullscreenChatNodeId, userMessage);
-      };
-      reader.readAsDataURL(attachedFile);
-    } else {
-      addNodeMessage(fullscreenChatNodeId, userMessage);
-    }
-
+    // Nettoyer l'input après envoi
     setUserInput('');
     setAttachedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
-
-    // TODO: Trigger LLM response (similar to V2AgentNode)
-    // For now, just remove loading state
-    setTimeout(() => {
-      setNodeExecuting(fullscreenChatNodeId, false);
-    }, 1000);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,22 +98,21 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === 'user';
     const isError = message.isError;
-    
+
     return (
       <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-        <div className={`max-w-3xl px-4 py-2 rounded-lg ${
-          isUser 
-            ? 'bg-indigo-600 text-white ml-12' 
-            : isError 
-              ? 'bg-red-600/20 text-red-200 mr-12' 
-              : 'bg-gray-700 text-gray-100 mr-12'
-        }`}>
+        <div className={`max-w-3xl px-4 py-2 rounded-lg ${isUser
+          ? 'bg-indigo-600 text-white ml-12'
+          : isError
+            ? 'bg-red-600/20 text-red-200 mr-12'
+            : 'bg-gray-700 text-gray-100 mr-12'
+          }`}>
           <div className="whitespace-pre-wrap break-words">
             {message.text}
           </div>
           {message.image && (
             <div className="mt-2">
-              <img 
+              <img
                 src={`data:${message.mimeType};base64,${message.image}`}
                 alt="Uploaded content"
                 className="max-w-sm rounded cursor-pointer hover:opacity-80"
@@ -121,19 +127,19 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="w-full h-full max-w-6xl bg-gray-800 rounded-lg shadow-2xl flex flex-col">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900/50 rounded-t-lg">
           <div className="flex items-center space-x-3">
             <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
             <h2 className="text-xl font-semibold text-white">
-              💬 {prototype.name}
+              💬 {agentName}
             </h2>
             <span className="text-sm text-gray-400">
-              ({prototype.model} • {prototype.llmProvider})
+              ({agentModel} • {agentProvider})
             </span>
           </div>
-          
+
           <Button
             variant="ghost"
             onClick={handleClose}
@@ -149,7 +155,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
             <div className="flex items-center justify-center h-full text-gray-400">
               <div className="text-center">
                 <div className="text-4xl mb-2">💬</div>
-                <p>Commencez une conversation avec {prototype.name}</p>
+                <p>Commencez une conversation avec {agentName}</p>
               </div>
             </div>
           ) : (
@@ -158,13 +164,13 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
               <div ref={messagesEndRef} />
             </>
           )}
-          
+
           {isLoading && (
             <div className="flex justify-start mb-4">
               <div className="bg-gray-700 text-gray-100 mr-12 px-4 py-2 rounded-lg">
                 <div className="flex items-center space-x-2">
                   <div className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
-                  <span>Agent en cours de réflexion...</span>
+                  <span>{loadingMessage || 'Agent en cours de réflexion...'}</span>
                 </div>
               </div>
             </div>
@@ -187,7 +193,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
                 </Button>
               </div>
             )}
-            
+
             <div className="flex space-x-2">
               <input
                 type="file"
@@ -196,7 +202,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
                 accept="image/*"
                 className="hidden"
               />
-              
+
               <Button
                 type="button"
                 variant="ghost"
@@ -205,7 +211,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
               >
                 <UploadIcon width={16} height={16} />
               </Button>
-              
+
               <input
                 type="text"
                 value={userInput}
@@ -214,7 +220,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
                 className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
                 disabled={isLoading}
               />
-              
+
               <Button
                 type="submit"
                 disabled={(!userInput.trim() && !attachedFile) || isLoading}

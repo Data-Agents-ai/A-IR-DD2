@@ -141,8 +141,30 @@ export interface AgentInstance {
   name: string; // Peut être différent du prototype (personnalisation)
   position: { x: number; y: number };
   isMinimized: boolean;
-  // L'instance hérite automatiquement des propriétés du prototype
-  // mais peut avoir des overrides spécifiques si nécessaire
+  isMaximized: boolean; // Mode agrandissement plein écran workflow
+
+  // 🆕 Configuration enrichie (clone du prototype au moment de l'instanciation)
+  // null = fallback vers prototype (rétrocompatibilité)
+  configuration_json: {
+    // Configuration métier (clonée du prototype)
+    role: string;
+    model: string;
+    llmProvider: LLMProvider;
+    systemPrompt: string;
+    tools: Tool[];
+    outputConfig?: OutputConfig;
+    capabilities?: LLMCapability[];
+    historyConfig?: HistoryConfig;
+
+    // Métadonnées d'instance
+    position: { x: number; y: number };
+
+    // 🔮 Sections futures (préparation)
+    links?: any[]; // Connexions entre agents
+    tasks?: any[]; // Tâches assignées
+    logs?: any[]; // Historique d'exécution
+    errors?: any[]; // Erreurs rencontrées
+  } | null;
 }
 
 // Interface pour accéder aux données complètes d'une instance
@@ -192,6 +214,8 @@ export interface WorkflowNode {
   position: { x: number; y: number };
   messages: ChatMessage[];
   isMinimized: boolean;
+  isMaximized?: boolean;
+  instanceId?: string; // 🆕 Lié à AgentInstance dans le DesignStore
 }
 
 // V2 Robot Navigation Interfaces
@@ -229,6 +253,7 @@ export interface V2WorkflowNode {
     label: string;
     agentInstance?: AgentInstance; // Pour les nodes agent (référence à l'instance)
     isMinimized?: boolean;
+    isMaximized?: boolean; // Mode agrandissement plein écran workflow
   };
 }
 
