@@ -4,6 +4,7 @@ import { RobotId, LLMConfig } from '../../types';
 import { Button } from '../UI';
 import { CloseIcon } from '../Icons';
 import { getAllTemplates, CustomTemplate, deleteCustomTemplate } from '../../services/templateService';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface TemplateSelectionModalProps {
   isOpen: boolean;
@@ -24,6 +25,10 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
   const [templatesRefreshKey, setTemplatesRefreshKey] = useState(0);
+
+  // État pour la modale de confirmation de suppression
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Charger tous les templates (prédéfinis + personnalisés)
   // IMPORTANT: useMemo doit être appelé AVANT le return conditionnel
@@ -110,25 +115,42 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   const handleDeleteTemplate = (e: React.MouseEvent, templateId: string) => {
     e.stopPropagation();
 
-    const templateToDelete = allTemplates.find(t => t.id === templateId);
-    const templateName = templateToDelete?.name || 'ce template';
+    const template = allTemplates.find(t => t.id === templateId);
+    const templateName = template?.name || 'ce template';
 
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer "${templateName}" ?\n\nCette action est irréversible.`)) {
-      const success = deleteCustomTemplate(templateId);
+    // Ouvrir la modale de confirmation
+    setTemplateToDelete({ id: templateId, name: templateName });
+    setDeleteConfirmOpen(true);
+  };
 
-      if (success) {
-        // Désélectionner si c'était le template sélectionné
-        if (selectedTemplate?.id === templateId) {
-          setSelectedTemplate(null);
-        }
+  const handleConfirmDelete = () => {
+    if (!templateToDelete) return;
 
-        // Forcer le rechargement immédiat
-        setTemplatesRefreshKey(prev => prev + 1);
-      } else {
-        console.error(`Échec de la suppression du template ${templateId}`);
-        alert(`Erreur lors de la suppression du template "${templateName}".`);
+    const success = deleteCustomTemplate(templateToDelete.id);
+
+    if (success) {
+      // Désélectionner si c'était le template sélectionné
+      if (selectedTemplate?.id === templateToDelete.id) {
+        setSelectedTemplate(null);
       }
+
+      // Forcer le rechargement immédiat
+      setTemplatesRefreshKey(prev => prev + 1);
+
+      // Fermer la modale
+      setDeleteConfirmOpen(false);
+      setTemplateToDelete(null);
+    } else {
+      console.error(`Échec de la suppression du template ${templateToDelete.id}`);
+      // On pourrait afficher une notification d'erreur ici
+      setDeleteConfirmOpen(false);
+      setTemplateToDelete(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setTemplateToDelete(null);
   };
 
   const handleTemplateClick = (template: AgentTemplate) => {
@@ -148,19 +170,34 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] mx-4 shadow-2xl border border-gray-600 flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
+      onClick={(e) => {
+        // Fermer si click sur le backdrop
+        if (e.target === e.currentTarget) {
+          handleCancel();
+        }
+      }}
+    >
+      <div
+        className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 w-full max-w-4xl max-h-[90vh] mx-4 shadow-2xl border border-gray-700/50 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-700/50">
           <div>
-            <h2 className="text-2xl font-bold text-white">Choisir un template d'agent</h2>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <span className="text-indigo-400">📋</span>
+              Choisir un template d'agent
+            </h2>
             {robotId && (
-              <p className="text-gray-400 mt-1">Templates pour le robot {robotId}</p>
+              <p className="text-gray-400 mt-1 text-sm">Catalogue pour le robot <span className="text-indigo-400 font-semibold">{robotId}</span></p>
             )}
           </div>
           <button
-            onClick={onCancel}
-            className="text-gray-400 hover:text-white transition-colors"
+            onClick={handleCancel}
+            className="text-gray-400 hover:text-white transition-all duration-200 hover:scale-110 p-2 rounded-lg hover:bg-gray-700/50"
+            aria-label="Fermer"
           >
             <CloseIcon className="w-6 h-6" />
           </button>
@@ -168,13 +205,17 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
         {/* Search and Filters */}
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
-          <div className="flex-1">
+          <div className="flex-1 relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              🔍
+            </div>
             <input
               type="text"
-              placeholder="Rechercher un template..."
+              placeholder="Rechercher par nom ou description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-700/50 border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              autoComplete="off"
             />
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -182,12 +223,12 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
               <button
                 key={category.key}
                 onClick={() => setSelectedCategory(category.key)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${selectedCategory === category.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${selectedCategory === category.key
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                  : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600 hover:text-white'
                   }`}
               >
-                {category.label} ({category.count})
+                {category.label} <span className="text-xs opacity-75">({category.count})</span>
               </button>
             ))}
           </div>
@@ -240,8 +281,8 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
                     {isCustom && (
                       <button
                         onClick={(e) => handleDeleteTemplate(e, template.id)}
-                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center bg-red-600/80 hover:bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                        title="Supprimer ce template"
+                        className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-red-600/90 hover:bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 hover:scale-110 shadow-lg"
+                        aria-label="Supprimer ce template personnalisé"
                       >
                         <CloseIcon width={12} height={12} className="text-white" />
                       </button>
@@ -249,55 +290,55 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
 
                     {/* Selection indicator */}
                     {isSelected && (
-                      <div className="absolute top-2 left-2 w-6 h-6 flex items-center justify-center bg-indigo-600 rounded-full">
-                        <span className="text-white text-xs font-bold">✓</span>
+                      <div className="absolute top-2 left-2 w-7 h-7 flex items-center justify-center bg-indigo-600 rounded-full shadow-lg shadow-indigo-500/50 animate-pulse">
+                        <span className="text-white text-sm font-bold">✓</span>
                       </div>
                     )}
 
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <span className="text-2xl">{template.icon}</span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className={`font-semibold transition-colors ${isSelected ? 'text-indigo-300' : 'text-white group-hover:text-indigo-400'
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl flex-shrink-0">{template.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className={`font-semibold transition-colors truncate ${isSelected ? 'text-indigo-300' : 'text-white group-hover:text-indigo-400'
                               }`}>
                               {template.name}
                             </h3>
                             {isCustom && (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-white border border-purple-400">
+                              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-purple-600 to-purple-700 text-white border border-purple-400 shadow-sm flex-shrink-0">
                                 💾 Personnalisé
                               </span>
                             )}
                           </div>
-                          <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getRobotColor(template.robotId)}`}>
+                          <div className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium border ${getRobotColor(template.robotId)}`}>
                             {template.robotId}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <p className="text-gray-300 text-sm mb-3 line-clamp-2">
+                    <p className="text-gray-300 text-sm mb-4 line-clamp-2 leading-relaxed">
                       {template.description}
                     </p>
 
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/30 text-blue-400' :
-                        template.category === 'specialist' ? 'bg-purple-900/30 text-purple-400' :
-                          template.category === 'automation' ? 'bg-orange-900/30 text-orange-400' :
-                            'bg-green-900/30 text-green-400'
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-600/50">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${template.category === 'assistant' ? 'bg-blue-900/40 text-blue-300 border border-blue-500/30' :
+                        template.category === 'specialist' ? 'bg-purple-900/40 text-purple-300 border border-purple-500/30' :
+                          template.category === 'automation' ? 'bg-orange-900/40 text-orange-300 border border-orange-500/30' :
+                            'bg-green-900/40 text-green-300 border border-green-500/30'
                         }`}>
-                        {template.category === 'assistant' ? 'Assistant' :
-                          template.category === 'specialist' ? 'Spécialiste' :
-                            template.category === 'automation' ? 'Automatisation' :
-                              'Analyse'}
+                        {template.category === 'assistant' ? '🤝 Assistant' :
+                          template.category === 'specialist' ? '🎯 Spécialiste' :
+                            template.category === 'automation' ? '⚙️ Automatisation' :
+                              '📊 Analyse'}
                       </span>
 
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-400">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 font-medium px-2 py-1 bg-gray-800/50 rounded">
                           {template.template.llmProvider}
                         </span>
                         {template.template.tools && template.template.tools.length > 0 && (
-                          <span className="text-xs text-indigo-400">
+                          <span className="text-xs text-indigo-400 font-medium px-2 py-1 bg-indigo-900/20 border border-indigo-500/30 rounded">
                             🛠️ {template.template.tools.length}
                           </span>
                         )}
@@ -311,15 +352,18 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-600">
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-700/50">
           {/* Selection info */}
-          <div className="text-sm text-gray-400">
+          <div className="text-sm">
             {selectedTemplate ? (
-              <span className="text-indigo-400 font-medium">
-                ✓ Template sélectionné : <span className="text-white">{selectedTemplate.name}</span>
-              </span>
+              <div className="flex items-center gap-2 px-3 py-2 bg-indigo-900/30 border border-indigo-500/30 rounded-lg">
+                <span className="text-indigo-400 text-lg">✓</span>
+                <span className="text-gray-300">
+                  Template : <span className="text-white font-semibold">{selectedTemplate.name}</span>
+                </span>
+              </div>
             ) : (
-              <span>Cliquez sur un template pour le sélectionner</span>
+              <span className="text-gray-400 px-3 py-2">💡 Cliquez sur un template pour le sélectionner</span>
             )}
           </div>
 
@@ -328,22 +372,38 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
             <Button
               onClick={handleCancel}
               variant="secondary"
+              className="hover:scale-105 transition-transform"
             >
               Annuler
             </Button>
             <Button
               onClick={handleConfirmSelection}
               disabled={!selectedTemplate}
-              className={`${selectedTemplate
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              className={`transition-all duration-200 ${selectedTemplate
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white hover:scale-105 hover:shadow-lg hover:shadow-indigo-500/30'
+                : 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-50'
                 }`}
             >
-              Créer le Prototype
+              <span className="flex items-center gap-2">
+                {selectedTemplate && '✨'}
+                Créer le Prototype
+              </span>
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Modale de confirmation de suppression */}
+      <ConfirmationModal
+        isOpen={deleteConfirmOpen}
+        title="Supprimer le template"
+        message={`Êtes-vous sûr de vouloir supprimer le template "${templateToDelete?.name}" ?\n\nCette action est irréversible et le template sera définitivement supprimé de votre collection.`}
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   );
 };
