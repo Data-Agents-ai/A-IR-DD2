@@ -85,7 +85,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
   // Helper function to get available models for a provider (only if configured)
   const getAvailableModels = (provider: LLMProvider): string[] => {
-    const config = llmConfigs.find(c => c.provider === provider && c.enabled && c.apiKey);
+    const config = llmConfigs.find(c => c.provider === provider && c.enabled);
 
     if (!config) {
       return []; // Return empty array if provider not configured
@@ -96,7 +96,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
   // Helper function to get available capabilities for a provider (only if configured)  
   const getAvailableCapabilities = (provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
-    const config = llmConfigs.find(c => c.provider === provider && c.enabled && c.apiKey);
+    const config = llmConfigs.find(c => c.provider === provider && c.enabled);
     if (!config) {
       return []; // Return empty array if provider not configured
     }
@@ -700,7 +700,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                       <div>
                         <label htmlFor="hist-llm-provider" className="text-xs text-gray-400">{t('agentForm_history_synthesisLlmLabel')}</label>
                         <select id="hist-llm-provider" value={historyConfig.llmProvider} onChange={(e) => handleHistoryProviderChange(e.target.value as LLMProvider)} className="w-full p-1.5 mt-1 text-sm bg-gray-700 border border-gray-600 rounded-md">
-                          {llmConfigs.filter(c => c.enabled && c.apiKey).map(({ provider }) => <option key={provider} value={provider}>{provider}</option>)}
+                          {llmConfigs.filter(c => c.enabled).map(({ provider }) => <option key={provider} value={provider}>{provider}</option>)}
                         </select>
                       </div>
                       <div>
