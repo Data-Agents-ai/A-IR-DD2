@@ -1,0 +1,148 @@
+// Routes proxy sécurisé pour LMStudio
+import { Router, Request, Response } from 'express';
+import {
+    checkLMStudioHealth,
+    fetchLMStudioModels,
+    detectAvailableEndpoint,
+    streamChatCompletion,
+    fetchChatCompletion
+} from '../services/lmstudioProxy.service';
+import type { ChatCompletionRequest } from '../types/lmstudio.types';
+import { lmstudioRateLimiter, strictRateLimiter } from '../middleware/rateLimiter';
+import {
+    validateChatRequest,
+    validateEndpoint,
+    validateChatOptions
+} from '../middleware/validateLMStudioRequest';
+import { logLMStudioRequest, errorHandler } from '../middleware/logger';
+
+const router = Router();
+
+// Appliquer les middlewares globaux à toutes les routes LMStudio
+router.use(lmstudioRateLimiter); // Rate limiting global
+router.use(logLMStudioRequest);   // Logging des requêtes
+router.use(validateEndpoint);     // Validation endpoint localhost
+
+/**
+ * GET /api/lmstudio/health
+ * Health check du serveur LMStudio
+ * Query param: endpoint (optionnel, default: http://localhost:1234)
+ */
+router.get('/health', async (req: Request, res: Response) => {
+    try {
+        const endpoint = (req.query.endpoint as string) || 'http://localhost:1234';
+
+        console.log(`[LMStudio Proxy] Health check for endpoint: ${endpoint}`);
+        const health = await checkLMStudioHealth(endpoint);
+
+        res.json(health);
+    } catch (error) {
+        console.error('[LMStudio Proxy] Health check error:', error);
+        res.status(500).json({
+            healthy: false,
+            error: error instanceof Error ? error.message : 'Health check failed'
+        });
+    }
+});
+
+/**
+ * GET /api/lmstudio/models
+ * Récupérer la liste des modèles disponibles
+ * Query param: endpoint (optionnel, default: http://localhost:1234)
+ */
+router.get('/models', async (req: Request, res: Response) => {
+    try {
+        const endpoint = (req.query.endpoint as string) || 'http://localhost:1234';
+
+        console.log(`[LMStudio Proxy] Fetching models from: ${endpoint}`);
+        const models = await fetchLMStudioModels(endpoint);
+
+        console.log(`[LMStudio Proxy] Found ${models.data?.length || 0} models`);
+        res.json(models);
+    } catch (error) {
+        console.error('[LMStudio Proxy] Fetch models error:', error);
+        res.status(500).json({
+            error: error instanceof Error ? error.message : 'Failed to fetch models'
+        });
+    }
+});
+
+/**
+ * GET /api/lmstudio/detect-endpoint
+ * Auto-détecter l'endpoint LMStudio disponible
+ */
+router.get('/detect-endpoint', async (req: Request, res: Response) => {
+    try {
+        console.log('[LMStudio Proxy] Auto-detecting endpoint...');
+        const endpoint = await detectAvailableEndpoint();
+
+        console.log(`[LMStudio Proxy] Detected endpoint: ${endpoint}`);
+        res.json({
+            endpoint,
+            detected: true
+        });
+    } catch (error) {
+        console.error('[LMStudio Proxy] Endpoint detection failed:', error);
+        res.status(404).json({
+            detected: false,
+            error: error instanceof Error ? error.message : 'No server detected'
+        });
+    }
+});
+
+/**
+ * POST /api/lmstudio/chat/completions
+ * Chat completion avec streaming ou synchrone
+ * Body: { endpoint, model, messages, stream, temperature, max_tokens, tools }
+ * Middlewares : strictRateLimiter, validateChatRequest, validateChatOptions
+ */
+router.post(
+    '/chat/completions',
+    strictRateLimiter,      // Rate limiting strict (30 req/min)
+    validateChatRequest,    // Validation model + messages
+    validateChatOptions,    // Validation temperature, max_tokens, stream
+    async (req: Request, res: Response) => {
+        try {
+            const { endpoint = 'http://localhost:1234', ...requestBody } = req.body as ChatCompletionRequest & { endpoint?: string };
+
+            console.log(`[LMStudio Proxy] Chat completion request - Model: ${requestBody.model}, Stream: ${requestBody.stream}`);
+
+            // Mode streaming (SSE)
+            if (requestBody.stream) {
+                // Configuration SSE headers
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
+                res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+                try {
+                    // Stream depuis LMStudio vers frontend
+                    for await (const chunk of streamChatCompletion(endpoint, requestBody)) {
+                        res.write(chunk);
+                    }
+
+                    res.end();
+                } catch (streamError) {
+                    console.error('[LMStudio Proxy] Streaming error:', streamError);
+                    res.write(`data: {"error": "${streamError instanceof Error ? streamError.message : 'Streaming failed'}"}\n\n`);
+                    res.end();
+                }
+            }
+            // Mode synchrone (non-streaming)
+            else {
+                const result = await fetchChatCompletion(endpoint, requestBody);
+                res.json(result);
+            }
+        } catch (error) {
+            console.error('[LMStudio Proxy] Chat completion error:', error);
+            res.status(500).json({
+                error: error instanceof Error ? error.message : 'Chat completion failed'
+            });
+        }
+    }
+);
+
+// Error handler global pour toutes les routes
+router.use(errorHandler);
+
+export default router;

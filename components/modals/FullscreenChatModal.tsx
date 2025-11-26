@@ -1,11 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '../UI';
-import { CloseIcon, UploadIcon, SendIcon } from '../Icons';
+import { CloseIcon, UploadIcon, SendIcon, ImageIcon, EditIcon } from '../Icons';
 import { useRuntimeStore } from '../../stores/useRuntimeStore';
 import { useDesignStore } from '../../stores/useDesignStore';
 import { useAgentChat } from '../../hooks/useAgentChat';
 import { useLocalization } from '../../hooks/useLocalization';
-import { ChatMessage, Agent } from '../../types';
+import { ChatMessage, Agent, LLMCapability } from '../../types';
+import { ConfirmationModal } from './ConfirmationModal';
+
+// Minimize icon
+const MinimizeIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+  </svg>
+);
+
+// Video icon Arc-LLM
+const VideoIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polygon points="23 7 16 12 23 17 23 7"></polygon>
+    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+  </svg>
+);
+
+// Map icon Arc-LLM
+const MapIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+    <line x1="8" y1="2" x2="8" y2="18"></line>
+    <line x1="16" y1="6" x2="16" y2="22"></line>
+  </svg>
+);
+
+// Web Search icon Arc-LLM
+const WebSearchIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="11" cy="11" r="8"></circle>
+    <path d="m21 21-4.35-4.35"></path>
+    <path d="M11 1v2"></path>
+    <path d="M11 19v2"></path>
+    <path d="M1 11h2"></path>
+    <path d="M19 11h2"></path>
+  </svg>
+);
 
 interface FullscreenChatModalProps { }
 
@@ -25,6 +62,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
 
   const [userInput, setUserInput] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +110,55 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
     const { setFullscreenChatAgent } = useRuntimeStore.getState();
     setFullscreenChatNodeId(null);
     setFullscreenChatAgent(null); // Nettoyer l'agent au moment de fermer
+  };
+
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (fullscreenChatNodeId) {
+      // Utiliser le store runtime pour accéder aux fonctions globales
+      const { setImagePanelOpen, setVideoGenerationPanelOpen, setMapsGroundingPanelOpen } = useRuntimeStore.getState();
+      // Fermer tous les panels associés
+      setImagePanelOpen(false);
+      setVideoGenerationPanelOpen(false);
+      setMapsGroundingPanelOpen(false);
+
+      // Note: La suppression du node sera gérée par App.tsx via les workflows
+      // Pour l'instant, on ferme juste le modal
+      console.warn('Node deletion from fullscreen modal not yet implemented - close modal only');
+    }
+    setShowDeleteConfirm(false);
+    handleClose(); // Fermer le modal après suppression
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+  };
+
+  const handleOpenImagePanel = () => {
+    if (fullscreenChatNodeId) {
+      const { setImagePanelNodeId, setImagePanelOpen } = useRuntimeStore.getState();
+      setImagePanelNodeId(fullscreenChatNodeId);
+      setImagePanelOpen(true);
+    }
+  };
+
+  const handleOpenVideoPanel = () => {
+    if (fullscreenChatNodeId) {
+      const { setVideoGenerationNodeId, setVideoGenerationPanelOpen } = useRuntimeStore.getState();
+      setVideoGenerationNodeId(fullscreenChatNodeId);
+      setVideoGenerationPanelOpen(true);
+    }
+  };
+
+  const handleOpenMapsPanel = () => {
+    if (fullscreenChatNodeId) {
+      const { setMapsGroundingNodeId, setMapsGroundingPanelOpen } = useRuntimeStore.getState();
+      setMapsGroundingNodeId(fullscreenChatNodeId);
+      setMapsGroundingPanelOpen(true);
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -129,9 +216,9 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
       <div className="w-full h-full max-w-6xl bg-gray-800 rounded-lg shadow-2xl flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900/50 rounded-t-lg">
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-900/80 via-gray-800/60 to-gray-900/80 rounded-t-lg backdrop-blur-sm">
           <div className="flex items-center space-x-3">
-            <div className={`w-3 h-3 rounded-full ${isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
+            <div className={`w-3 h-3 rounded-full shadow-lg transition-all duration-200 ${isLoading ? 'bg-yellow-400 animate-pulse shadow-yellow-400/60' : 'bg-green-400 shadow-green-400/60'}`}></div>
             <h2 className="text-xl font-semibold text-white">
               💬 {agentName}
             </h2>
@@ -140,13 +227,82 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
             </span>
           </div>
 
-          <Button
-            variant="ghost"
-            onClick={handleClose}
-            className="p-2 h-10 w-10 text-gray-400 hover:text-white hover:bg-gray-700"
-          >
-            <CloseIcon width={20} height={20} />
-          </Button>
+          {/* Header Action Buttons */}
+          <div className="flex items-center space-x-2">
+            {/* Image generation/modification button */}
+            {(agent?.capabilities?.includes(LLMCapability.ImageGeneration) || agent?.capabilities?.includes(LLMCapability.ImageModification)) && (
+              <Button
+                variant="ghost"
+                className="p-2 h-8 w-8 text-gray-400 hover:text-purple-400 
+                           hover:bg-purple-500/20 hover:shadow-lg hover:shadow-purple-500/40
+                           transition-all duration-200 rounded-md
+                           hover:scale-110 active:scale-95"
+                onClick={handleOpenImagePanel}
+                disabled={isLoading}
+                title={t('agentNode_aria_generateImage')}
+              >
+                <ImageIcon width={16} height={16} />
+              </Button>
+            )}
+
+            {/* Video generation button */}
+            {agent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
+              <Button
+                variant="ghost"
+                className="p-2 h-8 w-8 text-gray-400 hover:text-pink-400 
+                           hover:bg-pink-500/20 hover:shadow-lg hover:shadow-pink-500/40
+                           transition-all duration-200 rounded-md
+                           hover:scale-110 active:scale-95"
+                onClick={handleOpenVideoPanel}
+                disabled={isLoading}
+                title="Générer une vidéo"
+              >
+                <VideoIcon />
+              </Button>
+            )}
+
+            {/* Maps grounding button */}
+            {agent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
+              <Button
+                variant="ghost"
+                className="p-2 h-8 w-8 text-gray-400 hover:text-green-400 
+                           hover:bg-green-500/20 hover:shadow-lg hover:shadow-green-500/40
+                           transition-all duration-200 rounded-md
+                           hover:scale-110 active:scale-95"
+                onClick={handleOpenMapsPanel}
+                disabled={isLoading}
+                title="Recherche de lieux"
+              >
+                <MapIcon />
+              </Button>
+            )}
+
+            {/* Minimize/Restore button (ferme le fullscreen) */}
+            <Button
+              variant="ghost"
+              className="p-2 h-8 w-8 text-gray-400 hover:text-blue-400 
+                         hover:bg-blue-500/20 hover:shadow-lg hover:shadow-blue-500/40
+                         transition-all duration-200 rounded-md
+                         hover:scale-110 active:scale-95"
+              onClick={handleClose}
+              title={t('restore_size')}
+            >
+              <MinimizeIcon width={16} height={16} />
+            </Button>
+
+            {/* Delete button */}
+            <Button
+              variant="ghost"
+              className="p-2 h-8 w-8 text-gray-400 hover:text-red-400 
+                         hover:bg-red-500/20 hover:shadow-lg hover:shadow-red-500/40
+                         transition-all duration-200 rounded-md
+                         hover:scale-110 active:scale-95"
+              onClick={handleDelete}
+              title={t('sidebar_deleteAgent_aria', { agentName })}
+            >
+              <CloseIcon width={16} height={16} />
+            </Button>
+          </div>
         </div>
 
         {/* Messages Area */}
@@ -232,6 +388,18 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
           </form>
         </div>
       </div>
+
+      {/* Modal de confirmation de suppression */}
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        title={t('confirm_delete_agent_title')}
+        message={t('confirm_delete_agent_message', { agentName })}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        confirmText={t('confirm_delete')}
+        cancelText={t('cancel')}
+        variant="danger"
+      />
     </div>
   );
 };
