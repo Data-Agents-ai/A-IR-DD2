@@ -117,8 +117,12 @@ const routeConfigs: Record<keyof LMStudioRoutes, RouteTestConfig> = {
  * 
  * IMPORTANT: Ne JAMAIS appeler directement http://localhost:1234 depuis le frontend
  * → Toujours passer par http://localhost:3001/api/lmstudio/...
+ * 
+ * @param baseEndpoint - Endpoint LMStudio (ex: http://localhost:1234)
+ * @param config - Configuration de test de la route
+ * @param modelId - ID du modèle réel détecté (ex: 'mistral-7b-instruct-v0.2')
  */
-async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise<boolean> {
+async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?: string): Promise<boolean> {
     try {
         // TOUS les tests de routes passent maintenant par le backend proxy
         // Le backend fait les appels directs vers LMStudio (localhost autorisé côté serveur)
@@ -145,14 +149,18 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
 
+            // Utiliser le vrai modèle détecté au lieu de 'test'
+            const payload = {
+                ...config.testPayload,
+                model: modelId || config.testPayload.model,
+                stream: false
+            };
+
             const response = await fetch(proxyUrl, {
                 method: 'POST',
                 signal: controller.signal,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...config.testPayload,
-                    stream: false // Pas de streaming pour les tests
-                })
+                body: JSON.stringify(payload)
             });
 
             clearTimeout(timeoutId);
@@ -175,8 +183,10 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise
 
 /**
  * Détecte toutes les routes HTTP disponibles sur l'endpoint LMStudio
+ * @param endpoint - Endpoint LMStudio
+ * @param modelId - ID du modèle réel détecté (optionnel, améliore les tests)
  */
-export async function detectAvailableRoutes(endpoint: string): Promise<LMStudioRoutes> {
+export async function detectAvailableRoutes(endpoint: string, modelId?: string): Promise<LMStudioRoutes> {
     const routes: LMStudioRoutes = {
         models: false,
         chatCompletions: false,
@@ -186,9 +196,11 @@ export async function detectAvailableRoutes(endpoint: string): Promise<LMStudioR
         audio: false
     };
 
+    console.log(`[RouteDetection] Testing routes with model: ${modelId || 'test'}`);
+
     // Test toutes les routes en parallèle pour performance
     const routeTests = Object.entries(routeConfigs).map(async ([routeName, config]) => {
-        const available = await testRoute(endpoint, config);
+        const available = await testRoute(endpoint, config, modelId);
         return { routeName: routeName as keyof LMStudioRoutes, available };
     });
 
@@ -216,6 +228,8 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
         const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        console.log(`[RouteDetection] Testing function calling with model: ${modelName}`);
 
         const response = await fetch(proxyUrl, {
             method: 'POST',
@@ -265,6 +279,8 @@ export async function testJsonMode(endpoint: string, modelName: string): Promise
         const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        console.log(`[RouteDetection] Testing JSON mode with model: ${modelName}`);
 
         const response = await fetch(proxyUrl, {
             method: 'POST',
@@ -369,15 +385,21 @@ export async function detectLMStudioModel(endpoint: string): Promise<LMStudioMod
     try {
         // Appeler le backend proxy pour détecter l'endpoint LMStudio
         const proxyUrl = buildLMStudioProxyUrl('detectEndpoint');
+        console.log(`[RouteDetection] Calling backend proxy: ${proxyUrl}`);
+
         const response = await fetch(proxyUrl, {
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(10000) // Augmenté à 10s pour détection multi-endpoints
         });
 
+        console.log(`[RouteDetection] Backend response status: ${response.status}`);
+
         if (!response.ok) {
-            throw new Error(`Backend proxy returned ${response.status}`);
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`Backend proxy returned ${response.status}: ${errorText}`);
         }
 
         const data = await response.json();
+        console.log('[RouteDetection] Backend response data:', data);
 
         if (!data.healthy) {
             throw new Error(data.error || 'LMStudio not available');
@@ -385,9 +407,10 @@ export async function detectLMStudioModel(endpoint: string): Promise<LMStudioMod
 
         // Récupérer le premier modèle disponible
         const modelId = data.models && data.models.length > 0 ? data.models[0] : 'unknown';
+        console.log(`[RouteDetection] Using detected model for route tests: ${modelId}`);
 
-        // Détecter routes disponibles (via backend proxy)
-        const routes = await detectAvailableRoutes(endpoint);
+        // Détecter routes disponibles (via backend proxy) avec le vrai modèle
+        const routes = await detectAvailableRoutes(endpoint, modelId);
 
         // Détecter capacités
         const capabilities = await routesToCapabilities(routes, modelId, endpoint);

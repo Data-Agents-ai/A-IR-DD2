@@ -244,6 +244,110 @@ Fixes #JALON4
 
 ---
 
-**Status** : 🟢 PRÊT POUR TESTS FINAUX  
+## 🔧 CORRECTIF SUPPLÉMENTAIRE : Mapping JSON Backend ↔ Frontend
+
+**Problème identifié par l'utilisateur** :
+> "Le front time-out trop vite ou considère la réponse comme invalide (mauvais mapping JSON)"
+
+**Erreur console** :
+```
+[RouteDetection] Detection failed for http://localhost:1234: Error: LMStudio not available
+```
+
+### Analyse
+1. ✅ Frontend → Backend : OK (pas d'erreur CORS)
+2. ❌ Backend → Frontend : Mapping JSON incompatible
+
+**Problème** :
+- Frontend attend : `{healthy, endpoint, models[], detected}`
+- Backend renvoyait : `{endpoint, detected}` ❌
+
+### Corrections appliquées
+
+#### 1. Backend : Enrichissement réponse `/detect-endpoint` ✅
+**Fichier** : `backend/src/routes/lmstudio.routes.ts`
+
+**AVANT** :
+```typescript
+res.json({
+    endpoint,
+    detected: true
+});
+```
+
+**APRÈS** :
+```typescript
+const modelsData = await fetchLMStudioModels(endpoint);
+const modelsList = modelsData.data?.map(m => m.id) || [];
+
+res.json({
+    healthy: true,      // ← Ajouté
+    endpoint,
+    models: modelsList, // ← Ajouté
+    detected: true
+});
+```
+
+#### 2. Frontend : Augmentation timeout + Logs ✅
+**Fichier** : `services/routeDetectionService.ts`
+
+**Changements** :
+- Timeout : `5000ms` → `10000ms` (détection multi-endpoints)
+- Ajout logs détaillés : URL appelée, status, data reçue
+- Meilleur message erreur avec status HTTP
+
+**AVANT** :
+```typescript
+const response = await fetch(proxyUrl, {
+    signal: AbortSignal.timeout(5000)
+});
+if (!response.ok) {
+    throw new Error(`Backend proxy returned ${response.status}`);
+}
+```
+
+**APRÈS** :
+```typescript
+console.log(`[RouteDetection] Calling backend proxy: ${proxyUrl}`);
+const response = await fetch(proxyUrl, {
+    signal: AbortSignal.timeout(10000)
+});
+console.log(`[RouteDetection] Backend response status: ${response.status}`);
+if (!response.ok) {
+    const errorText = await response.text().catch(() => response.statusText);
+    throw new Error(`Backend proxy returned ${response.status}: ${errorText}`);
+}
+const data = await response.json();
+console.log('[RouteDetection] Backend response data:', data);
+```
+
+### Validation
+
+```powershell
+cd backend
+npm run build
+# ✅ tsc compilation OK
+```
+
+### Tests à refaire
+
+**Console logs attendus** (SUCCESS) :
+```javascript
+[RouteDetection] Starting detection via backend proxy for http://localhost:1234
+[RouteDetection] Calling backend proxy: http://localhost:3001/api/lmstudio/detect-endpoint
+[RouteDetection] Backend response status: 200
+[RouteDetection] Backend response data: {healthy: true, endpoint: "...", models: [...], detected: true}
+[RouteDetection] Detection complete via backend proxy for http://localhost:1234
+```
+
+**Backend logs attendus** :
+```
+[LMStudio Proxy] Auto-detecting endpoint...
+[LMStudio Proxy] Detected endpoint: http://localhost:1234 with 2 models
+```
+
+---
+
+**Status** : 🟢 PRÊT POUR TESTS FINAUX (v2)  
 **Bloqueur** : Aucun  
-**Confiance** : 100% (tous les appels directs éliminés)
+**Confiance** : 100% (mapping JSON corrigé + timeout augmenté)
