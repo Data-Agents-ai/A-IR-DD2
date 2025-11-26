@@ -378,11 +378,13 @@ export const generateContentStream = async function* (
                 const lines = chunk.split('\n').filter(line => line.trim());
 
                 for (const line of lines) {
+                    console.log('[LMStudio] Received line:', line); // DEBUG
                     if (!line.startsWith('data: ')) continue;
                     if (line === 'data: [DONE]') break;
 
                     try {
                         const data = JSON.parse(line.slice(6));
+                        console.log('[LMStudio] Parsed data:', data); // DEBUG
                         const delta = data.choices?.[0]?.delta;
 
                         if (delta?.content) {

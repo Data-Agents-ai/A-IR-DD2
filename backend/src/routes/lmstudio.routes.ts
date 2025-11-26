@@ -144,8 +144,13 @@ router.post(
             }
         } catch (error) {
             console.error('[LMStudio Proxy] Chat completion error:', error);
+            // Log full error details for debugging
+            if (error instanceof Error) {
+                console.error('[LMStudio Proxy] Error stack:', error.stack);
+            }
             res.status(500).json({
-                error: error instanceof Error ? error.message : 'Chat completion failed'
+                error: error instanceof Error ? error.message : 'Chat completion failed',
+                details: error instanceof Error ? error.stack : String(error)
             });
         }
     }
