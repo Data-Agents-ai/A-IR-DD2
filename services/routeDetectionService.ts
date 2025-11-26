@@ -237,18 +237,16 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: modelName,
-                messages: [{ role: 'user', content: 'test function calling' }],
+                messages: [{ role: 'user', content: 'test' }],
                 tools: [
                     {
                         type: 'function',
                         function: {
                             name: 'test_tool',
-                            description: 'A test tool',
+                            description: 'Test',
                             parameters: {
                                 type: 'object',
-                                properties: {
-                                    param: { type: 'string' }
-                                }
+                                properties: {}
                             }
                         }
                     }
@@ -260,9 +258,14 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
 
         clearTimeout(timeoutId);
 
-        // Si le serveur accepte le paramètre tools sans erreur 400 "unknown parameter"
+        // Si le serveur accepte le paramètre tools sans erreur 400 "tools"
         // on considère que la fonctionnalité est supportée
-        return response.status !== 400 || !(await response.text()).includes('tools');
+        // 400 avec message "tools" = pas supporté, sinon = supporté
+        if (response.status === 400) {
+            const text = await response.text().catch(() => '');
+            return !text.toLowerCase().includes('tool');
+        }
+        return response.ok;
 
     } catch (error) {
         return false;
@@ -282,14 +285,15 @@ export async function testJsonMode(endpoint: string, modelName: string): Promise
 
         console.log(`[RouteDetection] Testing JSON mode with model: ${modelName}`);
 
-        const response = await fetch(proxyUrl, {
+        // Test 1: Essayer avec json_schema (format Mistral/OpenAI récent)
+        let response = await fetch(proxyUrl, {
             method: 'POST',
             signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: modelName,
-                messages: [{ role: 'user', content: 'return json' }],
-                response_format: { type: 'json_object' },
+                messages: [{ role: 'user', content: 'test' }],
+                response_format: { type: 'json_schema', json_schema: { name: 'test', schema: { type: 'object' } } },
                 max_tokens: 1,
                 stream: false
             })
@@ -297,8 +301,20 @@ export async function testJsonMode(endpoint: string, modelName: string): Promise
 
         clearTimeout(timeoutId);
 
-        // Même logique: si pas d'erreur "unknown parameter", le mode est supporté
-        return response.status !== 400 || !(await response.text()).includes('response_format');
+        // Si json_schema accepté → JSON mode supporté
+        if (response.ok || response.status !== 400) {
+            return true;
+        }
+
+        // Test 2: Essayer avec text (fallback)
+        const text = await response.text().catch(() => '');
+        if (text.includes('json_schema') || text.includes('response_format')) {
+            // Format non supporté mais paramètre reconnu → pas de JSON mode
+            return false;
+        }
+
+        // Si aucune erreur spécifique → considérer comme non supporté pour Mistral
+        return false;
 
     } catch (error) {
         return false;

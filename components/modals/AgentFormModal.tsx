@@ -170,6 +170,12 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
         .then(models => {
           setLmStudioDynamicModels(models);
           console.log(`[AgentFormModal] Loaded ${models.length} LMStudio models (${models.filter(m => m.isDynamic).length} dynamic)`);
+
+          // Auto-sélectionner le premier modèle si aucun modèle n'est sélectionné
+          if (!model && models.length > 0) {
+            setModel(models[0].id);
+            console.log(`[AgentFormModal] Auto-selected first model: ${models[0].id}`);
+          }
         })
         .catch(error => {
           console.warn('[AgentFormModal] Failed to load LMStudio models:', error);
