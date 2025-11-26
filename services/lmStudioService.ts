@@ -1,5 +1,7 @@
 // services/lmStudioService.ts
+// MIGRATION JALON 4: Tous les appels doivent passer par le backend proxy
 import { ChatMessage, Tool, ToolCall, OutputConfig } from '../types';
+import { buildLMStudioProxyUrl } from '../config/api.config';
 
 interface LMStudioConfig {
     endpoint: string;
@@ -40,35 +42,35 @@ const ALTERNATIVE_ENDPOINTS = [
 ];
 
 const getHeaders = (config: LMStudioConfig) => {
-    const headers: Record<string, string> = { 
+    const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'User-Agent': 'A-IR-DD2/1.0'
     };
-    
+
     if (config.apiKey) {
         headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
-    
+
     return headers;
 };
 
 const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => {
     const messages: any[] = [];
     if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
-    
+
     history?.forEach(msg => {
         if (msg.sender === 'user') {
             messages.push({ role: 'user', content: msg.text });
         } else if (msg.sender === 'agent') {
             if (msg.toolCalls) {
-                messages.push({ 
-                    role: 'assistant', 
-                    content: null, 
-                    tool_calls: msg.toolCalls.map(tc => ({ 
-                        id: tc.id, 
-                        type: 'function', 
-                        function: { name: tc.name, arguments: tc.arguments } 
-                    })) 
+                messages.push({
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: msg.toolCalls.map(tc => ({
+                        id: tc.id,
+                        type: 'function',
+                        function: { name: tc.name, arguments: tc.arguments }
+                    }))
                 });
             } else {
                 messages.push({ role: 'assistant', content: msg.text });
@@ -82,29 +84,26 @@ const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => 
 };
 
 const detectLocalEndpoint = async (): Promise<string> => {
-    // Try Jan first (most user-friendly)
+    // MIGRATION JALON 4: Utiliser le backend proxy pour détecter l'endpoint disponible
     try {
-        const response = await fetch(`${DEFAULT_CONFIG.endpoint}/v1/models`, {
+        const proxyUrl = buildLMStudioProxyUrl('detectEndpoint');
+        const response = await fetch(proxyUrl, {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(2000)
+            signal: AbortSignal.timeout(5000)
         });
-        if (response.ok) return DEFAULT_CONFIG.endpoint;
-    } catch {}
 
-    // Try alternative endpoints
-    for (const endpoint of ALTERNATIVE_ENDPOINTS) {
-        try {
-            const response = await fetch(`${endpoint}/v1/models`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(2000)
-            });
-            if (response.ok) return endpoint;
-        } catch {}
+        if (response.ok) {
+            const data = await response.json();
+            if (data.healthy && data.endpoint) {
+                return data.endpoint;
+            }
+        }
+    } catch (error) {
+        console.warn('[LMStudio] Failed to detect endpoint via backend proxy:', error);
     }
 
-    throw new Error('No local LLM server detected. Please start Jan, LM Studio, Ollama, or another OpenAI-compatible local server.');
+    // Fallback sur le endpoint par défaut si détection échoue
+    return DEFAULT_CONFIG.endpoint;
 };
 
 const createApiError = async (response: Response, endpoint: string): Promise<Error> => {
@@ -115,11 +114,11 @@ const createApiError = async (response: Response, endpoint: string): Promise<Err
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = 30000) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
+
     try {
-        const response = await fetch(url, { 
-            ...options, 
-            signal: controller.signal 
+        const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
         });
         clearTimeout(timeoutId);
         return response;
@@ -131,18 +130,21 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeout: numb
 
 export const detectAvailableModels = async (config?: Partial<LMStudioConfig>): Promise<LMStudioModelInfo[]> => {
     const fullConfig = { ...DEFAULT_CONFIG, ...config };
-    
+
     try {
         const endpoint = config?.endpoint || await detectLocalEndpoint();
-        const response = await fetchWithTimeout(`${endpoint}/v1/models`, {
+
+        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
+        const proxyUrl = buildLMStudioProxyUrl('models', endpoint);
+        const response = await fetchWithTimeout(proxyUrl, {
             method: 'GET',
-            headers: getHeaders({ ...fullConfig, endpoint })
+            // Ne pas ajouter de headers custom pour le backend proxy
         }, 5000);
-        
+
         if (!response.ok) throw await createApiError(response, endpoint);
-        
+
         const data = await response.json();
-        
+
         return data.data?.map((model: any) => {
             const modelInfo: LMStudioModelInfo = {
                 id: model.id,
@@ -154,7 +156,7 @@ export const detectAvailableModels = async (config?: Partial<LMStudioConfig>): P
                 available: true,
                 capabilities: getModelCapabilities(model.id)
             };
-            
+
             return modelInfo;
         }) || [];
     } catch (error) {
@@ -165,44 +167,44 @@ export const detectAvailableModels = async (config?: Partial<LMStudioConfig>): P
 
 const getModelCapabilities = (modelId: string): LMStudioModelInfo['capabilities'] => {
     const id = modelId.toLowerCase();
-    
+
     // Function calling support - mainly modern models with specific training
-    const functionCalling = id.includes('qwen2.5') || 
-                           id.includes('llama-3.1') || 
-                           id.includes('llama-3.2') ||
-                           (id.includes('mistral') && (id.includes('instruct') || id.includes('v0.3'))) ||
-                           id.includes('hermes') ||
-                           id.includes('functionary');
-    
+    const functionCalling = id.includes('qwen2.5') ||
+        id.includes('llama-3.1') ||
+        id.includes('llama-3.2') ||
+        (id.includes('mistral') && (id.includes('instruct') || id.includes('v0.3'))) ||
+        id.includes('hermes') ||
+        id.includes('functionary');
+
     // Reasoning capabilities - specific models trained for step-by-step reasoning
-    const reasoning = id.includes('qwen2.5-coder') || 
-                     id.includes('deepseek') ||
-                     id.includes('o1') ||
-                     id.includes('reasoning') ||
-                     id.includes('cot'); // Chain of Thought models
-    
+    const reasoning = id.includes('qwen2.5-coder') ||
+        id.includes('deepseek') ||
+        id.includes('o1') ||
+        id.includes('reasoning') ||
+        id.includes('cot'); // Chain of Thought models
+
     // Code specialization - models specifically trained for coding
-    const codeSpecialization = id.includes('coder') || 
-                              id.includes('code') ||
-                              id.includes('starcoder') ||
-                              id.includes('codestral') ||
-                              id.includes('programming');
-    
+    const codeSpecialization = id.includes('coder') ||
+        id.includes('code') ||
+        id.includes('starcoder') ||
+        id.includes('codestral') ||
+        id.includes('programming');
+
     // Multimodal support - vision-enabled models  
-    const multimodal = id.includes('vision') || 
-                      id.includes('llava') ||
-                      id.includes('qwen2-vl') ||
-                      id.includes('llama-3.2') && (id.includes('11b') || id.includes('90b'));
-    
+    const multimodal = id.includes('vision') ||
+        id.includes('llava') ||
+        id.includes('qwen2-vl') ||
+        id.includes('llama-3.2') && (id.includes('11b') || id.includes('90b'));
+
     // JSON mode support - most modern instruction-tuned models
-    const jsonMode = id.includes('instruct') || 
-                    id.includes('chat') ||
-                    id.includes('qwen2.5') ||
-                    id.includes('llama-3') ||
-                    id.includes('mistral') ||
-                    id.includes('gemma') ||
-                    !id.includes('base'); // Exclude base models
-    
+    const jsonMode = id.includes('instruct') ||
+        id.includes('chat') ||
+        id.includes('qwen2.5') ||
+        id.includes('llama-3') ||
+        id.includes('mistral') ||
+        id.includes('gemma') ||
+        !id.includes('base'); // Exclude base models
+
     return {
         functionCalling,
         reasoning,
@@ -303,24 +305,24 @@ export const generateContentStream = async function* (
         apiKey,
         timeout: 30000
     };
-    
+
     // Detect model capabilities
     const availableModels = await detectAvailableModels({ endpoint: config.endpoint });
-    const currentModel = availableModels.find(m => m.id === model) || 
-                        getDefaultModels().find(m => m.id === model);
+    const currentModel = availableModels.find(m => m.id === model) ||
+        getDefaultModels().find(m => m.id === model);
     const modelCapabilities = currentModel?.capabilities || getModelCapabilities(model);
-    
+
     const headers = getHeaders(config);
     let finalSystemInstruction = systemInstruction;
-    
+
     // Only apply output formatting if model supports JSON mode
     if (outputConfig?.enabled && outputConfig.format !== 'json') {
-        finalSystemInstruction = (systemInstruction || '') + 
+        finalSystemInstruction = (systemInstruction || '') +
             `\n\nIMPORTANT: You MUST format your entire response as valid ${outputConfig.format}. Ensure the output is a single, valid code block without any extraneous text, explanations, or code fences.`;
     }
 
     const messages = formatMessages(history, finalSystemInstruction);
-    
+
     const body: any = {
         model,
         messages,
@@ -337,24 +339,26 @@ export const generateContentStream = async function* (
     } else if (tools && tools.length > 0) {
         console.warn(`[LMStudio] Model ${model} does not support function calling, tools ignored`);
     }
-    
+
     // Only set JSON mode if model supports it
     if (outputConfig?.enabled && outputConfig.format === 'json' && modelCapabilities.jsonMode) {
         body.response_format = { type: 'json_object' };
     } else if (outputConfig?.enabled && outputConfig.format === 'json') {
         console.warn(`[LMStudio] Model ${model} does not support JSON mode, falling back to prompt instruction`);
-        finalSystemInstruction = (finalSystemInstruction || '') + 
+        finalSystemInstruction = (finalSystemInstruction || '') +
             '\n\nIMPORTANT: You MUST respond with valid JSON only, no other text.';
         body.messages = formatMessages(history, finalSystemInstruction);
     }
 
     try {
-        const response = await fetchWithTimeout(`${config.endpoint}/v1/chat/completions`, {
+        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
+        const proxyUrl = buildLMStudioProxyUrl('chat', config.endpoint);
+        const response = await fetchWithTimeout(proxyUrl, {
             method: 'POST',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         }, config.timeout);
-        
+
         if (!response.ok) throw await createApiError(response, config.endpoint);
 
         const reader = response.body?.getReader();
@@ -439,24 +443,24 @@ export const generateContent = async (
         apiKey,
         timeout: 30000
     };
-    
+
     // Detect model capabilities
     const availableModels = await detectAvailableModels({ endpoint: config.endpoint });
-    const currentModel = availableModels.find(m => m.id === model) || 
-                        getDefaultModels().find(m => m.id === model);
+    const currentModel = availableModels.find(m => m.id === model) ||
+        getDefaultModels().find(m => m.id === model);
     const modelCapabilities = currentModel?.capabilities || getModelCapabilities(model);
-    
+
     const headers = getHeaders(config);
     let finalSystemInstruction = systemInstruction;
-    
+
     // Only apply output formatting if model supports it
     if (outputConfig?.enabled && outputConfig.format !== 'json') {
-        finalSystemInstruction = (systemInstruction || '') + 
+        finalSystemInstruction = (systemInstruction || '') +
             `\n\nIMPORTANT: You MUST format your entire response as valid ${outputConfig.format}. Ensure the output is a single, valid code block without any extraneous text, explanations, or code fences.`;
     }
 
     const messages = formatMessages(history, finalSystemInstruction);
-    
+
     const body: any = {
         model,
         messages,
@@ -473,29 +477,31 @@ export const generateContent = async (
     } else if (tools && tools.length > 0) {
         console.warn(`[LMStudio] Model ${model} does not support function calling, tools ignored`);
     }
-    
+
     // Only set JSON mode if model supports it
     if (outputConfig?.enabled && outputConfig.format === 'json' && modelCapabilities.jsonMode) {
         body.response_format = { type: 'json_object' };
     } else if (outputConfig?.enabled && outputConfig.format === 'json') {
         console.warn(`[LMStudio] Model ${model} does not support JSON mode, falling back to prompt instruction`);
-        finalSystemInstruction = (finalSystemInstruction || '') + 
+        finalSystemInstruction = (finalSystemInstruction || '') +
             '\n\nIMPORTANT: You MUST respond with valid JSON only, no other text.';
         body.messages = formatMessages(history, finalSystemInstruction);
     }
 
     try {
-        const response = await fetchWithTimeout(`${config.endpoint}/v1/chat/completions`, {
+        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
+        const proxyUrl = buildLMStudioProxyUrl('chat', config.endpoint);
+        const response = await fetchWithTimeout(proxyUrl, {
             method: 'POST',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         }, config.timeout);
-        
+
         if (!response.ok) throw await createApiError(response, config.endpoint);
 
         const data = await response.json();
         const choice = data.choices?.[0];
-        
+
         if (!choice) throw new Error("No response choice from LMStudio API");
 
         const result: { text: string; toolCalls?: ToolCall[] } = {
@@ -522,7 +528,7 @@ export const checkServerHealth = async (endpoint?: string): Promise<{ healthy: b
     try {
         const detectedEndpoint = endpoint || await detectLocalEndpoint();
         const models = await detectAvailableModels({ endpoint: detectedEndpoint });
-        
+
         return {
             healthy: true,
             endpoint: detectedEndpoint,

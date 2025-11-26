@@ -108,18 +108,23 @@ const routeConfigs: Record<keyof LMStudioRoutes, RouteTestConfig> = {
 };
 
 // ============================================================================
-// HTTP ROUTE DETECTION
+// HTTP ROUTE DETECTION (VIA BACKEND PROXY)
 // ============================================================================
 
 /**
- * Test si une route HTTP est disponible
- * Distinction: 404 (absent) vs 400/422/500 (présent mais mauvais params)
- * MIGRATION JALON 4: Utilise le backend proxy au lieu d'appeler LMStudio directement
+ * Test si une route HTTP est disponible VIA BACKEND PROXY
+ * MIGRATION JALON 4: TOUS les appels passent par le backend proxy pour éviter CORS
+ * 
+ * IMPORTANT: Ne JAMAIS appeler directement http://localhost:1234 depuis le frontend
+ * → Toujours passer par http://localhost:3001/api/lmstudio/...
  */
 async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise<boolean> {
     try {
-        // Pour /v1/models, utiliser le backend proxy
+        // TOUS les tests de routes passent maintenant par le backend proxy
+        // Le backend fait les appels directs vers LMStudio (localhost autorisé côté serveur)
+
         if (config.endpoint === '/v1/models') {
+            // Route models: GET /api/lmstudio/models?endpoint=http://localhost:1234
             const proxyUrl = buildLMStudioProxyUrl('models', baseEndpoint);
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -133,29 +138,31 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise
             return response.ok;
         }
 
-        // Pour les autres routes, appel direct (temporaire, sera migré progressivement)
-        const url = `${baseEndpoint}${config.endpoint}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        // Pour les autres routes (chat, embeddings, etc.), on utilise aussi le proxy
+        // Le backend route vers LMStudio en interne
+        if (config.endpoint === '/v1/chat/completions') {
+            const proxyUrl = buildLMStudioProxyUrl('chat', baseEndpoint);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-        const options: RequestInit = {
-            method: config.method,
-            signal: controller.signal,
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        };
+            const response = await fetch(proxyUrl, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...config.testPayload,
+                    stream: false // Pas de streaming pour les tests
+                })
+            });
 
-        if (config.method === 'POST' && config.testPayload) {
-            options.body = JSON.stringify(config.testPayload);
+            clearTimeout(timeoutId);
+            return response.status !== 404;
         }
 
-        const response = await fetch(url, options);
-        clearTimeout(timeoutId);
-
-        // 404 = route n'existe pas
-        // 400/422/500 = route existe mais erreur paramètres/serveur
-        return response.status !== 404;
+        // Pour les autres routes non encore supportées par le backend proxy,
+        // on retourne false (indisponible) au lieu d'appeler directement LMStudio
+        console.warn(`[RouteDetection] Route ${config.endpoint} not yet proxied, marking as unavailable`);
+        return false;
 
     } catch (error: any) {
         // Timeout ou erreur réseau = route probablement non disponible
@@ -201,13 +208,16 @@ export async function detectAvailableRoutes(endpoint: string): Promise<LMStudioR
 
 /**
  * Test si le modèle supporte Function Calling (paramètre tools)
+ * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
  */
 export async function testFunctionCalling(endpoint: string, modelName: string): Promise<boolean> {
     try {
+        // Appeler le backend proxy au lieu de LMStudio directement
+        const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-        const response = await fetch(`${endpoint}/v1/chat/completions`, {
+        const response = await fetch(proxyUrl, {
             method: 'POST',
             signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
@@ -229,7 +239,8 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
                         }
                     }
                 ],
-                max_tokens: 1
+                max_tokens: 1,
+                stream: false
             })
         });
 
@@ -246,13 +257,16 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
 
 /**
  * Test si le modèle supporte JSON Mode (paramètre response_format)
+ * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
  */
 export async function testJsonMode(endpoint: string, modelName: string): Promise<boolean> {
     try {
+        // Appeler le backend proxy au lieu de LMStudio directement
+        const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-        const response = await fetch(`${endpoint}/v1/chat/completions`, {
+        const response = await fetch(proxyUrl, {
             method: 'POST',
             signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
@@ -260,7 +274,8 @@ export async function testJsonMode(endpoint: string, modelName: string): Promise
                 model: modelName,
                 messages: [{ role: 'user', content: 'return json' }],
                 response_format: { type: 'json_object' },
-                max_tokens: 1
+                max_tokens: 1,
+                stream: false
             })
         });
 
