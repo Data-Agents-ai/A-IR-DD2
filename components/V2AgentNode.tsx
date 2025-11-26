@@ -273,6 +273,9 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
     // llmConfigs now from hook above
     const agentConfig = llmConfigs?.find(c => c.provider === effectiveAgent.llmProvider);
 
+    // DEBUG: Log endpoint being used
+    console.log(`[V2AgentNode] Agent "${effectiveAgent.name}" using ${effectiveAgent.llmProvider} with endpoint: ${agentConfig?.apiKey}`);
+
     if (!agentConfig?.enabled || !agentConfig.apiKey) {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,

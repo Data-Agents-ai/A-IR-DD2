@@ -95,6 +95,12 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
   };
 
   const handleSave = () => {
+    console.log('[SettingsModal] handleSave called');
+    const lmStudioConfig = currentLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
+    console.log('[SettingsModal] LMStudio config to save:', {
+      enabled: lmStudioConfig?.enabled,
+      endpoint: lmStudioConfig?.apiKey
+    });
     onSave(currentLLMConfigs);
     onClose();
   };

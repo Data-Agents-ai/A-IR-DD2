@@ -44,10 +44,21 @@ const initialLLMConfigs: LLMConfig[] = [
 const loadLLMConfigs = (): LLMConfig[] => {
   try {
     const storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
-    if (!storedConfigsJSON) return initialLLMConfigs;
+    if (!storedConfigsJSON) {
+      console.log('[App] No stored configs, using defaults');
+      return initialLLMConfigs;
+    }
 
     const storedConfigs = JSON.parse(storedConfigsJSON) as LLMConfig[];
     const storedProviders = new Map(storedConfigs.map(c => [c.provider, c]));
+
+    // DEBUG: Log LMStudio config loaded from localStorage
+    const lmStudioStored = storedConfigs.find(c => c.provider === LLMProvider.LMStudio);
+    console.log('[App] LMStudio config loaded from localStorage:', {
+      enabled: lmStudioStored?.enabled,
+      endpoint: lmStudioStored?.apiKey,
+      capabilities: lmStudioStored?.capabilities
+    });
 
     const syncedConfigs = initialLLMConfigs.map(initialConfig => {
       const storedConfig = storedProviders.get(initialConfig.provider);
@@ -185,10 +196,20 @@ function App() {
 
   const handleSaveSettings = (newLLMConfigs: LLMConfig[]) => {
     try {
+      console.log('[App] handleSaveSettings called with configs:', newLLMConfigs);
+      const lmStudioConfig = newLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
+      console.log('[App] Saving LMStudio config:', {
+        enabled: lmStudioConfig?.enabled,
+        endpoint: lmStudioConfig?.apiKey
+      });
+
       localStorage.setItem(LLM_CONFIGS_KEY, JSON.stringify(newLLMConfigs));
+      console.log('[App] Configs saved to localStorage successfully');
+
       setLlmConfigs(newLLMConfigs);
+      console.log('[App] React state updated with new configs');
     } catch (error) {
-      console.error("Failed to save settings to localStorage", error);
+      console.error("[App] Failed to save settings to localStorage", error);
     }
   };
 
