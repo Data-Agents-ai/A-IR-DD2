@@ -56,7 +56,20 @@ const getHeaders = (config: LMStudioConfig) => {
 
 const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => {
     const messages: any[] = [];
-    if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+
+    // MISTRAL FIX: Convert system instruction to first user message
+    // Mistral models only support 'user' and 'assistant' roles
+    if (systemInstruction) {
+        messages.push({
+            role: 'user',
+            content: `[SYSTEM INSTRUCTION]\n${systemInstruction}\n\nPlease follow these instructions for all subsequent messages.`
+        });
+        // Add assistant acknowledgment
+        messages.push({
+            role: 'assistant',
+            content: 'Understood. I will follow these instructions.'
+        });
+    }
 
     history?.forEach(msg => {
         if (msg.sender === 'user') {
@@ -368,6 +381,7 @@ export const generateContentStream = async function* (
         let text = '';
         let toolCalls: ToolCall[] = [];
         let currentToolCall: Partial<ToolCall> | null = null;
+        let buffer = ''; // Buffer for incomplete lines
 
         try {
             while (true) {
@@ -375,9 +389,14 @@ export const generateContentStream = async function* (
                 if (done) break;
 
                 const chunk = new TextDecoder().decode(value);
-                const lines = chunk.split('\n').filter(line => line.trim());
+                buffer += chunk;
+
+                // Split by newlines but keep the last incomplete line in buffer
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
                 for (const line of lines) {
+                    if (!line.trim()) continue;
                     console.log('[LMStudio] Received line:', line); // DEBUG
                     if (!line.startsWith('data: ')) continue;
                     if (line === 'data: [DONE]') break;
@@ -389,7 +408,8 @@ export const generateContentStream = async function* (
 
                         if (delta?.content) {
                             text += delta.content;
-                            yield { text: delta.content, isComplete: false };
+                            // V2AgentNode expects: { response: { text: string } }
+                            yield { response: { text: delta.content }, isComplete: false };
                         }
 
                         // Handle tool calls if supported
@@ -415,7 +435,11 @@ export const generateContentStream = async function* (
                         }
 
                         if (data.choices?.[0]?.finish_reason) {
-                            yield { text: '', isComplete: true, toolCalls: toolCalls.length > 0 ? toolCalls : undefined };
+                            yield {
+                                response: { text: '' },
+                                isComplete: true,
+                                toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+                            };
                             break;
                         }
                     } catch (parseError) {
