@@ -328,7 +328,10 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
             summarizationConfig.apiKey,
             historyConfig.model,
             historyConfig.systemPrompt,
-            summarizationHistory
+            summarizationHistory,
+            undefined, // tools
+            undefined, // outputConfig
+            summarizationConfig.apiKey // endpoint for LMStudio
           );
 
           const summaryMessage: ChatMessage = {
@@ -354,7 +357,8 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
         effectiveAgent.systemPrompt,
         messages.concat(userMessage),
         effectiveAgent.tools,
-        effectiveAgent.outputConfig
+        effectiveAgent.outputConfig,
+        agentConfig.apiKey // For LMStudio: endpoint is stored in apiKey field
       );
 
       let currentResponse = '';
@@ -479,7 +483,8 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
             effectiveAgent.systemPrompt,
             messagesWithoutToolResults,
             effectiveAgent.tools,
-            effectiveAgent.outputConfig
+            effectiveAgent.outputConfig,
+            agentConfig.apiKey // endpoint for LMStudio
           );
 
           let followUpResponse = '';
