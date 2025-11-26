@@ -385,7 +385,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                 <div>
                   <label htmlFor="llm-provider" className="block text-sm font-medium text-gray-300 mb-1">{t('agentForm_llmLabel')}</label>
                   <select id="llm-provider" value={llmProvider} onChange={(e) => handleProviderChange(e.target.value as LLMProvider)} className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    {llmConfigs.filter(c => c.enabled && c.apiKey).map(({ provider }) => <option key={provider} value={provider}>{provider}</option>)}
+                    {llmConfigs.filter(c => c.enabled).map(({ provider }) => <option key={provider} value={provider}>{provider}</option>)}
                   </select>
                 </div>
                 <div>
