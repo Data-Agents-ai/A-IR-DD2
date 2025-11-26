@@ -949,5 +949,36 @@ curl http://localhost:3001/api/lmstudio/metrics
 
 ---
 
-**Statut**: 🟢 Jalon 1 EN COURS  
-**Prochaine étape**: Créer structure fichiers backend et implémenter routes de base
+## 🎯 STATUT ACTUEL : JALON 4 EN COURS
+
+### ✅ Jalons 1-3 : COMPLÉTÉS
+- **Jalon 1** : Backend foundation ✅
+- **Jalon 2** : Streaming SSE ✅
+- **Jalon 3** : Sécurité (validation, rate limiting, logging) ✅
+- **Bug fixes** : IPv6 error ✅, Port conflict ✅
+
+### 🔵 Jalon 4 : Migration Frontend EN COURS
+
+#### Modifications effectuées
+1. **config/api.config.ts** - CRÉÉ
+   - Configuration centralisée des endpoints backend
+   - Fonction `buildBackendUrl()` pour construire URLs complètes
+   - Fonction `buildLMStudioProxyUrl()` pour routes LMStudio
+
+2. **vite-env.d.ts** - CRÉÉ
+   - Types TypeScript pour `import.meta.env.VITE_BACKEND_URL`
+
+3. **.env** - CRÉÉ
+   - `VITE_BACKEND_URL=http://localhost:3001`
+
+4. **services/routeDetectionService.ts** - MODIFIÉ
+   - `detectLMStudioModel()` : Utilise `/api/lmstudio/detect-endpoint` au lieu d'appeler LMStudio directement
+   - `testRoute()` : Pour `/v1/models`, utilise `/api/lmstudio/models` via backend proxy
+   - Plus d'appels directs vers LMStudio depuis le frontend
+
+#### Prochaines modifications nécessaires
+- [ ] Mettre à jour `services/lmStudioService.ts` pour router tous les appels via backend
+- [ ] Redémarrer frontend avec nouvelle configuration
+- [ ] Tests E2E : Settings → Détecter LMStudio
+
+**Prochaine étape**: Tester la détection LMStudio depuis l'interface Settings

@@ -1,8 +1,10 @@
 // services/routeDetectionService.ts
 // Jalon 1: Détection Dynamique des Routes LMStudio
 // Architecture: Strategy Pattern + Cache Pattern
+// MIGRATION JALON 4: Utilise le backend proxy au lieu d'appeler LMStudio directement
 
 import { LMStudioRoutes, LMStudioModelDetection, LLMCapability } from '../types';
+import { buildLMStudioProxyUrl } from '../config/api.config';
 
 // ============================================================================
 // CACHE SYSTEM (TTL 5 minutes)
@@ -112,12 +114,29 @@ const routeConfigs: Record<keyof LMStudioRoutes, RouteTestConfig> = {
 /**
  * Test si une route HTTP est disponible
  * Distinction: 404 (absent) vs 400/422/500 (présent mais mauvais params)
+ * MIGRATION JALON 4: Utilise le backend proxy au lieu d'appeler LMStudio directement
  */
 async function testRoute(baseEndpoint: string, config: RouteTestConfig): Promise<boolean> {
     try {
+        // Pour /v1/models, utiliser le backend proxy
+        if (config.endpoint === '/v1/models') {
+            const proxyUrl = buildLMStudioProxyUrl('models', baseEndpoint);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+            return response.ok;
+        }
+
+        // Pour les autres routes, appel direct (temporaire, sera migré progressivement)
         const url = `${baseEndpoint}${config.endpoint}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         const options: RequestInit = {
             method: config.method,
@@ -320,6 +339,7 @@ export async function routesToCapabilities(
 /**
  * Détection complète d'un modèle LMStudio avec cache
  * Point d'entrée principal du service
+ * MIGRATION JALON 4: Utilise le backend proxy /api/lmstudio/detect-endpoint
  */
 export async function detectLMStudioModel(endpoint: string): Promise<LMStudioModelDetection> {
     // Vérifier cache
@@ -329,49 +349,57 @@ export async function detectLMStudioModel(endpoint: string): Promise<LMStudioMod
         return cached;
     }
 
-    console.log(`[RouteDetection] Starting detection for ${endpoint}`);
+    console.log(`[RouteDetection] Starting detection via backend proxy for ${endpoint}`);
 
-    // Récupérer liste des modèles
-    let modelId = 'unknown';
     try {
-        const modelsResponse = await fetch(`${endpoint}/v1/models`, {
-            signal: AbortSignal.timeout(2000)
+        // Appeler le backend proxy pour détecter l'endpoint LMStudio
+        const proxyUrl = buildLMStudioProxyUrl('detectEndpoint');
+        const response = await fetch(proxyUrl, {
+            signal: AbortSignal.timeout(5000)
         });
 
-        if (modelsResponse.ok) {
-            const modelsData = await modelsResponse.json();
-            if (modelsData.data && modelsData.data.length > 0) {
-                modelId = modelsData.data[0].id;
-            }
+        if (!response.ok) {
+            throw new Error(`Backend proxy returned ${response.status}`);
         }
+
+        const data = await response.json();
+
+        if (!data.healthy) {
+            throw new Error(data.error || 'LMStudio not available');
+        }
+
+        // Récupérer le premier modèle disponible
+        const modelId = data.models && data.models.length > 0 ? data.models[0] : 'unknown';
+
+        // Détecter routes disponibles (via backend proxy)
+        const routes = await detectAvailableRoutes(endpoint);
+
+        // Détecter capacités
+        const capabilities = await routesToCapabilities(routes, modelId, endpoint);
+
+        // Construire résultat
+        const detection: LMStudioModelDetection = {
+            modelId,
+            routes,
+            capabilities,
+            detectedAt: new Date().toISOString()
+        };
+
+        // Mettre en cache
+        detectionCache.set(endpoint, detection);
+
+        console.log(`[RouteDetection] Detection complete via backend proxy for ${endpoint}:`, {
+            modelId,
+            routesCount: Object.values(routes).filter(Boolean).length,
+            capabilitiesCount: capabilities.length
+        });
+
+        return detection;
+
     } catch (error) {
-        console.warn('[RouteDetection] Failed to fetch model ID:', error);
+        console.error(`[RouteDetection] Detection failed for ${endpoint}:`, error);
+        throw error;
     }
-
-    // Détecter routes disponibles
-    const routes = await detectAvailableRoutes(endpoint);
-
-    // Détecter capacités
-    const capabilities = await routesToCapabilities(routes, modelId, endpoint);
-
-    // Construire résultat
-    const detection: LMStudioModelDetection = {
-        modelId,
-        routes,
-        capabilities,
-        detectedAt: new Date().toISOString()
-    };
-
-    // Mettre en cache
-    detectionCache.set(endpoint, detection);
-
-    console.log(`[RouteDetection] Detection complete for ${endpoint}:`, {
-        modelId,
-        routesCount: Object.values(routes).filter(Boolean).length,
-        capabilitiesCount: capabilities.length
-    });
-
-    return detection;
 }
 
 // ============================================================================
