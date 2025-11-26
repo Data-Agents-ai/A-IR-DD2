@@ -70,20 +70,29 @@ router.get('/models', async (req: Request, res: Response) => {
 /**
  * GET /api/lmstudio/detect-endpoint
  * Auto-détecter l'endpoint LMStudio disponible
+ * Response: { healthy, endpoint, models, detected }
  */
 router.get('/detect-endpoint', async (req: Request, res: Response) => {
     try {
         console.log('[LMStudio Proxy] Auto-detecting endpoint...');
         const endpoint = await detectAvailableEndpoint();
 
-        console.log(`[LMStudio Proxy] Detected endpoint: ${endpoint}`);
+        // Récupérer la liste des modèles pour enrichir la réponse
+        const modelsData = await fetchLMStudioModels(endpoint);
+        const modelsList = modelsData.data?.map(m => m.id) || [];
+
+        console.log(`[LMStudio Proxy] Detected endpoint: ${endpoint} with ${modelsList.length} models`);
+
         res.json({
+            healthy: true,
             endpoint,
+            models: modelsList,
             detected: true
         });
     } catch (error) {
         console.error('[LMStudio Proxy] Endpoint detection failed:', error);
         res.status(404).json({
+            healthy: false,
             detected: false,
             error: error instanceof Error ? error.message : 'No server detected'
         });
