@@ -355,7 +355,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
         agentConfig.apiKey,
         effectiveAgent.model,
         effectiveAgent.systemPrompt,
-        messages.concat(userMessage),
+        conversationHistoryForAPI, // Use computed history based on config
         effectiveAgent.tools,
         effectiveAgent.outputConfig,
         agentConfig.apiKey // For LMStudio: endpoint is stored in apiKey field
