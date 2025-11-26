@@ -306,10 +306,11 @@ export const generateContentStream = async function* (
         timeout: 30000
     };
 
-    // Detect model capabilities
-    const availableModels = await detectAvailableModels({ endpoint: config.endpoint });
-    const currentModel = availableModels.find(m => m.id === model) ||
-        getDefaultModels().find(m => m.id === model);
+    console.log(`[LMStudio] generateContentStream - Using endpoint: ${config.endpoint}, model: ${model}`);
+
+    // Detect model capabilities from static model data (no API call)
+    // NOTE: Removed detectAvailableModels() call here to avoid unnecessary /models requests
+    const currentModel = getDefaultModels().find(m => m.id === model);
     const modelCapabilities = currentModel?.capabilities || getModelCapabilities(model);
 
     const headers = getHeaders(config);
@@ -444,10 +445,11 @@ export const generateContent = async (
         timeout: 30000
     };
 
-    // Detect model capabilities
-    const availableModels = await detectAvailableModels({ endpoint: config.endpoint });
-    const currentModel = availableModels.find(m => m.id === model) ||
-        getDefaultModels().find(m => m.id === model);
+    console.log(`[LMStudio] generateContent - Using endpoint: ${config.endpoint}, model: ${model}`);
+
+    // Detect model capabilities from static model data (no API call)
+    // NOTE: Removed detectAvailableModels() call here to avoid unnecessary /models requests
+    const currentModel = getDefaultModels().find(m => m.id === model);
     const modelCapabilities = currentModel?.capabilities || getModelCapabilities(model);
 
     const headers = getHeaders(config);
