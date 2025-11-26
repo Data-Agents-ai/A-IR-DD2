@@ -100,6 +100,82 @@ router.get('/detect-endpoint', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/lmstudio/embeddings
+ * Generate embeddings for text
+ * Body: { endpoint, model, input }
+ */
+router.post('/embeddings', async (req: Request, res: Response) => {
+    try {
+        const { endpoint = 'http://localhost:1234', model, input } = req.body;
+
+        if (!model || !input) {
+            return res.status(400).json({
+                error: 'Missing required parameters: model and input'
+            });
+        }
+
+        console.log(`[LMStudio Proxy] Embeddings request - Model: ${model}`);
+
+        const response = await fetch(`${endpoint}/v1/embeddings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, input })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`LMStudio embeddings error: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        res.json(result);
+    } catch (error) {
+        console.error('[LMStudio Proxy] Embeddings error:', error);
+        res.status(500).json({
+            error: error instanceof Error ? error.message : 'Embeddings failed'
+        });
+    }
+});
+
+/**
+ * POST /api/lmstudio/completions
+ * Text completion (non-chat)
+ * Body: { endpoint, model, prompt, max_tokens, temperature }
+ */
+router.post('/completions', async (req: Request, res: Response) => {
+    try {
+        const { endpoint = 'http://localhost:1234', model, prompt, max_tokens = 100, temperature = 0.7 } = req.body;
+
+        if (!model || !prompt) {
+            return res.status(400).json({
+                error: 'Missing required parameters: model and prompt'
+            });
+        }
+
+        console.log(`[LMStudio Proxy] Completion request - Model: ${model}`);
+
+        const response = await fetch(`${endpoint}/v1/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, prompt, max_tokens, temperature })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => response.statusText);
+            throw new Error(`LMStudio completion error: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json();
+        res.json(result);
+    } catch (error) {
+        console.error('[LMStudio Proxy] Completion error:', error);
+        res.status(500).json({
+            error: error instanceof Error ? error.message : 'Completion failed'
+        });
+    }
+});
+
+/**
  * POST /api/lmstudio/chat/completions
  * Chat completion avec streaming ou synchrone
  * Body: { endpoint, model, messages, stream, temperature, max_tokens, tools }

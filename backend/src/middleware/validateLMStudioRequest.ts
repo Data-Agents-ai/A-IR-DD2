@@ -43,6 +43,7 @@ export function validateChatRequest(
         const msg = messages[i];
 
         if (!msg || typeof msg !== 'object') {
+            console.error('[Validation] Invalid message format at index', i, ':', msg);
             res.status(400).json({
                 error: 'Invalid message format',
                 details: `Message at index ${i} must be an object`
@@ -52,9 +53,10 @@ export function validateChatRequest(
 
         // Validation role
         if (!msg.role || !['system', 'user', 'assistant', 'tool'].includes(msg.role)) {
+            console.error('[Validation] Invalid message role at index', i, '- role:', msg.role);
             res.status(400).json({
                 error: 'Invalid message role',
-                details: `Message at index ${i} has invalid role. Must be: system, user, assistant, or tool`
+                details: `Message at index ${i} has invalid role "${msg.role}". Must be: system, user, assistant, or tool`
             });
             return;
         }

@@ -167,9 +167,49 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?
             return response.status !== 404;
         }
 
-        // Pour les autres routes non encore supportées par le backend proxy,
-        // on retourne false (indisponible) au lieu d'appeler directement LMStudio
-        console.warn(`[RouteDetection] Route ${config.endpoint} not yet proxied, marking as unavailable`);
+        // Routes embeddings et completions maintenant supportées
+        if (config.endpoint === '/v1/embeddings') {
+            const proxyUrl = `${BACKEND_URL}/api/lmstudio/embeddings?endpoint=${encodeURIComponent(baseEndpoint)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const response = await fetch(proxyUrl, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: baseEndpoint,
+                    model: modelId || 'test',
+                    input: 'test'
+                })
+            });
+
+            clearTimeout(timeoutId);
+            return response.ok;
+        }
+
+        if (config.endpoint === '/v1/completions') {
+            const proxyUrl = `${BACKEND_URL}/api/lmstudio/completions?endpoint=${encodeURIComponent(baseEndpoint)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const response = await fetch(proxyUrl, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: baseEndpoint,
+                    model: modelId || 'test',
+                    prompt: 'test'
+                })
+            });
+
+            clearTimeout(timeoutId);
+            return response.ok;
+        }
+
+        // Pour les routes non supportées (images, audio), on retourne false
+        console.warn(`[RouteDetection] Route ${config.endpoint} not supported, marking as unavailable`);
         return false;
 
     } catch (error: any) {
