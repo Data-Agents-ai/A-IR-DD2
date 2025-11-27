@@ -349,9 +349,8 @@ export const generateContentStream = async function* (
     if (tools && tools.length > 0 && modelCapabilities.functionCalling) {
         body.tools = tools.map(t => ({ type: 'function', function: t }));
         body.tool_choice = 'auto';
-        console.log(`[LMStudio Streaming] Function calling enabled for model ${model} with ${tools.length} tools:`, tools.map(t => t.name));
     } else if (tools && tools.length > 0) {
-        console.warn(`[LMStudio Streaming] Model ${model} does not support function calling, tools ignored`);
+        console.warn(`[LMStudio] Model ${model} does not support function calling, tools ignored`);
     }
 
     // Only set JSON mode if model supports it
@@ -412,7 +411,6 @@ export const generateContentStream = async function* (
 
                         // Handle tool calls if supported
                         if (delta?.tool_calls) {
-                            console.log('[LMStudio] Received tool_calls in delta:', JSON.stringify(delta.tool_calls));
                             for (const toolCall of delta.tool_calls) {
                                 if (toolCall.index !== undefined) {
                                     if (!toolCalls[toolCall.index]) {
@@ -436,8 +434,8 @@ export const generateContentStream = async function* (
                         if (data.choices?.[0]?.finish_reason) {
                             if (toolCalls.length > 0) {
                                 console.log('[LMStudio] Completing with tool calls:', toolCalls);
-                            } else {
-                                console.log('[LMStudio] Completing without tool calls (finish_reason:', data.choices[0].finish_reason, ')');
+                            } else if (tools && tools.length > 0) {
+                                console.warn(`[LMStudio] Model "${model}" did not return tool_calls. Function calling may not be supported by this model.`);
                             }
                             yield {
                                 response: { text: '' },
@@ -505,9 +503,8 @@ export const generateContent = async (
     if (tools && tools.length > 0 && modelCapabilities.functionCalling) {
         body.tools = tools.map(t => ({ type: 'function', function: t }));
         body.tool_choice = 'auto';
-        console.log(`[LMStudio Non-Streaming] Function calling enabled for model ${model} with ${tools.length} tools:`, tools.map(t => t.name));
     } else if (tools && tools.length > 0) {
-        console.warn(`[LMStudio Non-Streaming] Model ${model} does not support function calling, tools ignored`);
+        console.warn(`[LMStudio] Model ${model} does not support function calling, tools ignored`);
     }
 
     // Only set JSON mode if model supports it

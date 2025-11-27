@@ -25,9 +25,11 @@ A-IR-DD2 is a next-generation AI orchestration platform that implements a specia
 - Multi-robot workflow orchestration with governance
 
 ### 🤖 Multi-LLM Support
-- **8+ LLM Providers**: Gemini, OpenAI, Anthropic, Mistral, Grok, Perplexity, Qwen, Kimi
-- **Advanced Capabilities**: Function calling, image generation/editing, web search, OCR, embeddings
+- **9 LLM Providers**: Gemini, OpenAI, Anthropic, Mistral, Grok, Perplexity, Qwen, Kimi, DeepSeek
+- **Local Deployment**: LMStudio support with dynamic capability detection and backend proxy
+- **Advanced Capabilities**: Function calling, image generation/editing, web search, OCR, embeddings, reasoning
 - **Smart Context Management**: Auto-summarization, token optimization, conversation history
+- **CORS-Free Architecture**: Backend proxy eliminates browser CORS restrictions for local LLMs
 
 ### 🔐 Enterprise Security & Governance
 - Creator ID validation and robot permission system
@@ -94,6 +96,11 @@ GEMINI_API_KEY=your_gemini_api_key_here
 # PERPLEXITY_API_KEY=your_perplexity_key
 # QWEN_API_KEY=your_qwen_key
 # KIMI_API_KEY=your_kimi_key
+# DEEPSEEK_API_KEY=your_deepseek_key
+
+# Optional - Local LLM (LMStudio)
+# Configure LMStudio endpoint in app settings (default: http://localhost:1234)
+# No API key required for local deployment
 ```
 
 ## 🏛️ Architecture Overview
@@ -101,11 +108,24 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ### System Architecture
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend API    │    │   Python Tools  │
-│   React + TS    │◄──►│   Node.js + TS   │◄──►│   Whitelisted   │
-│   Robot UI      │    │   LLM Services   │    │   Scripts       │
+│   Frontend      │    │   Backend Proxy  │    │   LMStudio      │
+│   React + TS    │◄──►│   Node.js + TS   │◄──►│   Local Models  │
+│   Robot UI      │    │   CORS Handler   │    │   (Mistral...)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌──────────────────┐
+                       │   Cloud LLMs     │
+                       │   Gemini, GPT-4  │
+                       │   Claude, etc.   │
+                       └──────────────────┘
 ```
+
+**Backend Proxy Benefits:**
+- Eliminates CORS restrictions for local LMStudio access
+- Unified API interface for all LLM providers
+- Dynamic capability detection for local models
+- Secure localhost-to-localhost communication
 
 ### Robot Specialization Matrix
 | Robot | Primary Domain | Capabilities | UI Color |
@@ -155,6 +175,24 @@ A-IR-DD2/
 4. Push to branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
+## ⚠️ Known Limitations & Best Practices
+
+### LMStudio Local Models
+- **Function Calling**: Most base instruction models (Mistral-7B, Llama-2, etc.) do NOT implement function calling despite accepting the `tools` parameter. They will generate normal text responses instead of calling functions.
+  - ✅ **Works**: Cloud APIs (OpenAI, Gemini, Mistral API)
+  - ✅ **Works**: Specialized local models (Hermes, Functionary)
+  - ❌ **Doesn't work**: Base Mistral-7B-Instruct-v0.2 in LMStudio
+  
+- **Embeddings**: Only embedding-specific models support embeddings. Instruction models like Mistral-7B do not support this capability.
+
+- **Performance**: Local models are slower than cloud APIs and may struggle with complex multi-step reasoning.
+
+### Recommendations
+- Use **cloud APIs** (Gemini, OpenAI) for production workloads requiring function calling
+- Use **LMStudio** for privacy-sensitive tasks, basic chat, or experimentation
+- Test capability detection results before deploying workflows
+- Monitor console warnings for model compatibility issues
+
 ## 🔒 Security & Privacy
 
 ### Data Protection
@@ -167,7 +205,8 @@ A-IR-DD2/
 - Regular dependency audits with `npm audit`
 - Secure environment variable management
 - Input validation and sanitization
-- CORS and CSP headers implementation
+- Backend proxy for CORS-free local LLM access
+- Whitelisted Python tool execution
 
 ## 📄 License
 
@@ -252,13 +291,19 @@ Each robot has specialized capabilities:
 
 ### Project Structure
 ```
-├── components/          # React components
-├── services/           # LLM provider services  
-├── stores/            # Zustand state management
-├── types.ts           # TypeScript definitions
-├── utils/             # Utility functions
+├── components/          # React components (workflow, modals, panels)
+├── services/           # LLM provider services (9 providers + proxy)
+├── stores/            # Zustand state management (workflow, canvas)
+├── hooks/             # Custom React hooks (useLMStudioDetection)
+├── types.ts           # TypeScript definitions (Agent, Tool, LLMCapability)
+├── utils/             # Utility functions (pythonTools, validation)
 ├── backend/           # Node.js API server
-└── data/              # Templates and configurations
+│   └── src/
+│       ├── server.ts         # Express server + LMStudio proxy routes
+│       ├── pythonExecutor.ts # Python tool execution
+│       └── config.ts         # Whitelisted tools configuration
+├── data/              # Templates and robot navigation
+└── documentation/     # Architecture docs, migration guides
 ```
 
 ### Key Technologies
@@ -280,15 +325,34 @@ npm run preview     # Preview production build
 
 ### Backend
 ```bash
-npm run dev         # Start development server (ts-node-dev)
-npm run build       # Compile TypeScript
-npm start           # Run compiled JavaScript
-```
-
 ## 🔧 Configuration
 
 ### LLM Providers
 Configure providers in the application settings. Each provider supports different capabilities:
+
+| Provider | Chat | Function Calling | Images | Web Search | Reasoning | Local |
+|----------|------|------------------|--------|------------|-----------|-------|
+| Gemini | ✅ | ✅ | ✅ | ✅ | - | - |
+| OpenAI | ✅ | ✅ | ✅ | - | - | - |
+| Anthropic | ✅ | ✅ | - | - | - | - |
+| Mistral | ✅ | ✅ | - | - | - | - |
+| DeepSeek | ✅ | ✅ | - | - | ✅ | - |
+| LMStudio | ✅ | ⚠️* | - | - | - | ✅ |
+
+*⚠️ Function calling support depends on the specific model loaded in LMStudio. Most base models (e.g., Mistral-7B-Instruct-v0.2) accept the `tools` parameter but do not actually return tool calls. For real function calling support with local models, use specialized models like Hermes, Functionary, or stick to cloud APIs.*
+
+### LMStudio Configuration
+1. Download and install [LMStudio](https://lmstudio.ai/)
+2. Load a model (e.g., Mistral-7B-Instruct-v0.2)
+3. Start the local server (default port: 1234)
+4. Configure endpoint in application settings
+5. System automatically detects available capabilities
+
+**Backend Proxy Architecture:**
+- Frontend → `http://localhost:3001/api/lmstudio/*`
+- Backend → `http://localhost:1234/v1/*`
+- Eliminates CORS restrictions
+- Dynamic route detection (/models, /chat/completions, /embeddings, /completions)viders in the application settings. Each provider supports different capabilities:
 - Chat completion
 - Function calling  
 - Image generation/editing

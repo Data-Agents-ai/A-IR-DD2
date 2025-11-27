@@ -173,8 +173,6 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-            console.log(`[RouteDetection] Testing embeddings route with model: ${modelId}`);
-
             const response = await fetch(proxyUrl, {
                 method: 'POST',
                 signal: controller.signal,
@@ -187,7 +185,6 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?
             });
 
             clearTimeout(timeoutId);
-            console.log(`[RouteDetection] Embeddings route test result: ${response.ok} (status: ${response.status})`);
             return response.ok;
         }
 
@@ -267,10 +264,18 @@ export async function detectAvailableRoutes(endpoint: string, modelId?: string):
  * 
  * DÉSACTIVÉ TEMPORAIREMENT: Certains modèles (Mistral v0.2) rejettent les messages
  * avec des paramètres avancés. On assume Function Calling disponible par défaut.
+ * 
+ * ⚠️ LIMITATION CONNUE: Même si cette détection retourne true, certains modèles
+ * locaux (ex: mistral-7b-instruct-v0.2 dans LMStudio) N'IMPLÉMENTENT PAS réellement
+ * le function calling. Ils acceptent le paramètre 'tools' mais ne retournent jamais
+ * de 'tool_calls' dans la réponse. Pour un vrai support function calling, utilisez:
+ * - L'API officielle Mistral (cloud)
+ * - Des modèles spécialement entraînés pour function calling (ex: Hermes, functionary)
+ * - OpenAI/Gemini qui supportent nativement function calling
  */
 export async function testFunctionCalling(endpoint: string, modelName: string): Promise<boolean> {
     // WORKAROUND: Retourner true par défaut pour éviter erreurs 500 avec Mistral
-    // Les modèles Mistral supportent généralement function calling même si le test échoue
+    // Note: true signifie "accepte le paramètre tools" pas "utilise réellement function calling"
     console.log(`[RouteDetection] Assuming function calling support for ${modelName} (test skipped)`);
     return true;
 
@@ -388,10 +393,7 @@ export async function routesToCapabilities(
 
     // Embeddings
     if (routes.embeddings) {
-        console.log('[RouteDetection] Embeddings route available, adding Embedding capability');
         capabilities.push(LLMCapability.Embedding);
-    } else {
-        console.log('[RouteDetection] Embeddings route NOT available');
     }
 
     // Image Generation
