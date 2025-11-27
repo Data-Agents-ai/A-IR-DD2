@@ -19,7 +19,7 @@ export interface AgentTemplate {
  */
 const getAvailableLLMProvidersFromConfigs = (llmConfigs: LLMConfig[]): LLMProvider[] => {
   const availableProviders = llmConfigs
-    .filter(config => config.enabled && config.apiKey && config.apiKey.trim() !== '')
+    .filter(config => config.enabled)
     .map(config => config.provider);
 
   return availableProviders;
@@ -33,7 +33,7 @@ const getAvailableLLMProviders = (): LLMProvider[] => {
     try {
       const configs = JSON.parse(stored) as LLMConfig[];
       const availableProviders = configs
-        .filter(config => config.enabled && config.apiKey && config.apiKey.trim() !== '')
+        .filter(config => config.enabled)
         .map(config => config.provider);
 
       return availableProviders;

@@ -65,8 +65,8 @@ export default {
     agentForm_functions_addTool: 'Add Tool',
     agentForm_functions_pythonNote: "Note: To call a Python function executed on the backend, end its name with '_py'.",
     agentForm_saveButton: "Save",
-    agentForm_createButton: "Create Agent",
-    agentForm_alert_nameMissing: "Please provide a name for the agent.",
+    agentForm_createButton: "Create Prototype",
+    agentForm_alert_nameMissing: "Please name the agent.",
     agentForm_alert_invalidJson: 'Please fix the invalid JSON schemas before saving.',
     agentForm_error_jsonNotObject: "The JSON schema must be a valid object.",
 

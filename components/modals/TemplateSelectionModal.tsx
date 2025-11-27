@@ -50,7 +50,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
   // Local helper functions using props instead of localStorage
   const getLocalCompatibleTemplates = (): AgentTemplate[] => {
     const enabledProviders = llmConfigs
-      .filter(c => c.enabled && c.apiKey)
+      .filter(c => c.enabled)
       .map(c => c.provider);
 
     return allTemplates.filter(template => {

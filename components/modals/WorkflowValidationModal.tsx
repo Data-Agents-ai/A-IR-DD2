@@ -13,22 +13,22 @@ interface WorkflowValidationModalProps {
 
 const CheckIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-    <path d="M20 6 9 17l-5-5"/>
+    <path d="M20 6 9 17l-5-5" />
   </svg>
 );
 
 const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-    <path d="M18 6 6 18"/>
-    <path d="M6 6l12 12"/>
+    <path d="M18 6 6 18" />
+    <path d="M6 6l12 12" />
   </svg>
 );
 
 const AlertTriangleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-    <path d="M12 9v4"/>
-    <path d="m12 17 .01 0"/>
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+    <path d="M12 9v4" />
+    <path d="m12 17 .01 0" />
   </svg>
 );
 
@@ -42,10 +42,9 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
   if (!isOpen || !agent) return null;
 
   // Validation des prérequis
-  const hasEnabledLLM = llmConfigs.some(config => config.enabled && config.apiKey.trim() !== '');
-  const compatibleLLMs = llmConfigs.filter(config => 
-    config.enabled && 
-    config.apiKey.trim() !== '' &&
+  const hasEnabledLLM = llmConfigs.some(config => config.enabled);
+  const compatibleLLMs = llmConfigs.filter(config =>
+    config.enabled &&
     (!agent.llmProvider || agent.llmProvider === config.provider)
   );
 
@@ -76,7 +75,7 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
         {/* Validation Checks */}
         <div className="space-y-3 mb-6">
           <h3 className="text-white font-semibold mb-3">Vérification des prérequis :</h3>
-          
+
           {/* LLM Configuration */}
           <div className="flex items-start space-x-3">
             {hasEnabledLLM ? (
@@ -89,9 +88,9 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
                 Configuration LLM
               </p>
               <p className="text-gray-400 text-sm">
-                {hasEnabledLLM 
-                  ? `${llmConfigs.filter(c => c.enabled && c.apiKey.trim()).length} provider(s) configuré(s)`
-                  : 'Aucun provider LLM configuré avec une clé API'
+                {hasEnabledLLM
+                  ? `${llmConfigs.filter(c => c.enabled).length} provider(s) configuré(s)`
+                  : 'Aucun provider LLM configuré'
                 }
               </p>
             </div>
@@ -109,9 +108,9 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
                 Compatibilité provider
               </p>
               <p className="text-gray-400 text-sm">
-                {hasCompatibleLLM 
+                {hasCompatibleLLM
                   ? `Compatible avec ${compatibleLLMs.map(c => c.provider).join(', ')}`
-                  : !agent.llmProvider 
+                  : !agent.llmProvider
                     ? 'Compatible avec tous les providers disponibles'
                     : `Provider requis: ${agent.llmProvider} (non configuré)`
                 }
@@ -125,7 +124,7 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
             <div className="flex-1">
               <p className="font-medium text-blue-400">Outils disponibles</p>
               <p className="text-gray-400 text-sm">
-                {hasTools 
+                {hasTools
                   ? `${agent.tools!.length} outil(s) configuré(s)`
                   : 'Agent de conversation simple (aucun outil)'
                 }

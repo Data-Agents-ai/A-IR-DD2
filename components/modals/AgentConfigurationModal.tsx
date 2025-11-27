@@ -388,7 +388,7 @@ const ConfigurationTab: React.FC<{
 
     // Obtenir les providers disponibles (configurés avec apiKey)
     const availableProviders = useMemo(() =>
-        llmConfigs.filter(c => c.enabled && c.apiKey).map(c => c.provider),
+        llmConfigs.filter(c => c.enabled).map(c => c.provider),
         [llmConfigs]
     );
 
@@ -808,7 +808,7 @@ const HistoryTab: React.FC<{
     llmConfigs: LLMConfig[];
     t: (key: string) => string;
 }> = ({ config, onChange, llmConfigs, t }) => {
-    const availableProviders = llmConfigs.filter(c => c.enabled && c.apiKey).map(c => c.provider);
+    const availableProviders = llmConfigs.filter(c => c.enabled).map(c => c.provider);
 
     // Jalon 5: State pour modèles dynamiques LMStudio dans HistoryTab
     const [lmStudioDynamicModelsHistory, setLmStudioDynamicModelsHistory] = useState<any[]>([]);
