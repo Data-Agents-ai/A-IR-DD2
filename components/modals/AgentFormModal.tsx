@@ -137,17 +137,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
         });
         return newCaps;
       });
-
-      // Auto-add default weather tool if FunctionCalling detected and no tools yet
-      if (detection.capabilities.includes(LLMCapability.FunctionCalling)) {
-        setTools(prevTools => {
-          if (prevTools.length === 0) {
-            console.log('[AgentFormModal] Auto-adding default weather tool for LMStudio');
-            return [defaultWeatherTool];
-          }
-          return prevTools;
-        });
-      }
     }
   });
 
@@ -236,22 +225,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     }
   }, [isEditing, existingAgent]);
 
-  // Initial tools setup: auto-add weather tool if provider supports FunctionCalling
-  useEffect(() => {
-    if (!isEditing) {
-      const currentCapabilities = getAvailableCapabilities(llmProvider, model);
-      if (currentCapabilities.includes(LLMCapability.FunctionCalling)) {
-        setTools(prevTools => {
-          if (prevTools.length === 0) {
-            console.log(`[AgentFormModal] Initial setup: auto-adding default weather tool for ${llmProvider}`);
-            return [defaultWeatherTool];
-          }
-          return prevTools;
-        });
-      }
-    }
-  }, [llmProvider, model, isEditing, getAvailableCapabilities]);
-
   // LMStudio capability validation effect
   useEffect(() => {
     if (llmProvider === LLMProvider.LMStudio) {
@@ -304,17 +277,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
     const newCapabilities = getAvailableCapabilities(provider, firstModel);
     setSelectedCapabilities(prev => prev.filter(cap => newCapabilities.includes(cap)));
-
-    // Auto-add default weather tool if switching to a provider with FunctionCalling
-    if (newCapabilities.includes(LLMCapability.FunctionCalling)) {
-      setTools(prevTools => {
-        if (prevTools.length === 0) {
-          console.log(`[AgentFormModal] Auto-adding default weather tool for ${provider}`);
-          return [defaultWeatherTool];
-        }
-        return prevTools;
-      });
-    }
 
     setCapabilitiesExpanded(false); // Reset accordion when changing provider
   };

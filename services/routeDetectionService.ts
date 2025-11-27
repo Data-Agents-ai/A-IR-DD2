@@ -173,6 +173,8 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
 
+            console.log(`[RouteDetection] Testing embeddings route with model: ${modelId}`);
+
             const response = await fetch(proxyUrl, {
                 method: 'POST',
                 signal: controller.signal,
@@ -185,6 +187,7 @@ async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?
             });
 
             clearTimeout(timeoutId);
+            console.log(`[RouteDetection] Embeddings route test result: ${response.ok} (status: ${response.status})`);
             return response.ok;
         }
 
@@ -385,7 +388,10 @@ export async function routesToCapabilities(
 
     // Embeddings
     if (routes.embeddings) {
+        console.log('[RouteDetection] Embeddings route available, adding Embedding capability');
         capabilities.push(LLMCapability.Embedding);
+    } else {
+        console.log('[RouteDetection] Embeddings route NOT available');
     }
 
     // Image Generation
