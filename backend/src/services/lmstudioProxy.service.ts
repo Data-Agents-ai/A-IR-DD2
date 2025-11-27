@@ -42,6 +42,32 @@ export async function fetchWithTimeout(
 }
 
 /**
+ * Convert system messages to user/assistant pairs for Mistral compatibility
+ * Mistral models reject messages with 'system' role
+ */
+export function convertSystemMessages(messages: any[]): any[] {
+    const converted: any[] = [];
+
+    for (const msg of messages) {
+        if (msg.role === 'system') {
+            // Convert system message to user + assistant pair
+            converted.push({
+                role: 'user',
+                content: msg.content
+            });
+            converted.push({
+                role: 'assistant',
+                content: 'Understood. I will follow these instructions.'
+            });
+        } else {
+            converted.push(msg);
+        }
+    }
+
+    return converted;
+}
+
+/**
  * Health check du serveur LMStudio
  * Vérifie la disponibilité et le nombre de modèles chargés
  */
@@ -166,13 +192,19 @@ export async function* streamChatCompletion(
         throw new Error('Endpoint not allowed. Only localhost endpoints are permitted.');
     }
 
+    // Convert system messages for Mistral compatibility
+    const processedBody = {
+        ...requestBody,
+        messages: convertSystemMessages(requestBody.messages)
+    };
+
     try {
         const response = await fetchWithTimeout(
             `${endpoint}/v1/chat/completions`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...requestBody, stream: true })
+                body: JSON.stringify({ ...processedBody, stream: true })
             }
         );
 
@@ -219,13 +251,19 @@ export async function fetchChatCompletion(
         throw new Error('Endpoint not allowed. Only localhost endpoints are permitted.');
     }
 
+    // Convert system messages for Mistral compatibility
+    const processedBody = {
+        ...requestBody,
+        messages: convertSystemMessages(requestBody.messages)
+    };
+
     try {
         const response = await fetchWithTimeout(
             `${endpoint}/v1/chat/completions`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...requestBody, stream: false })
+                body: JSON.stringify({ ...processedBody, stream: false })
             }
         );
 

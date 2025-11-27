@@ -101,7 +101,13 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       return []; // Return empty array if provider not configured
     }
 
-    // If a specific model is selected, use its capabilities from LLM_MODELS_DETAILED
+    // PRIORITÉ 1: Pour LMStudio, utiliser les capacités détectées dynamiquement si disponibles
+    if (provider === LLMProvider.LMStudio && lmStudioDetection?.capabilities) {
+      console.log('[AgentFormModal] Using dynamically detected capabilities for LMStudio:', lmStudioDetection.capabilities);
+      return lmStudioDetection.capabilities;
+    }
+
+    // PRIORITÉ 2: If a specific model is selected, use its capabilities from LLM_MODELS_DETAILED
     if (selectedModel) {
       const modelCapabilities = getModelCapabilities(provider, selectedModel);
       if (modelCapabilities.length > 0) {
@@ -109,7 +115,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       }
     }
 
-    // Fallback: Return only capabilities that are enabled in the config
+    // PRIORITÉ 3: Fallback: Return only capabilities that are enabled in the config
     const caps = Object.keys(config.capabilities)
       .filter(cap => config.capabilities[cap as LLMCapability])
       .map(cap => cap as LLMCapability);
@@ -257,7 +263,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
   const availableCapabilities = useMemo(() => {
     return getAvailableCapabilities(llmProvider, model);
-  }, [llmProvider, model, llmConfigs]);
+  }, [llmProvider, model, llmConfigs, lmStudioDetection]);
 
   const handleProviderChange = (provider: LLMProvider) => {
     setLlmProvider(provider);

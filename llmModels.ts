@@ -318,20 +318,20 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
         {
             id: 'mistral-7b-instruct-v0.3',
             name: 'Mistral 7B Instruct v0.3',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding, LLMCapability.LocalDeployment],
             recommended: true,
             description: 'Mistral AI open source 7B instruct model'
         },
         {
             id: 'mistral-small-3.1',
             name: 'Mistral Small 3.1',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding, LLMCapability.LocalDeployment],
             description: 'Mistral Small v25.03 for local deployment'
         },
         {
             id: 'mistral-large-3.1',
             name: 'Mistral Large 3.1',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Reasoning, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding, LLMCapability.Reasoning, LLMCapability.LocalDeployment],
             recommended: true,
             description: 'Mistral Large flagship model for complex tasks'
         },
