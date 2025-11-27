@@ -191,7 +191,8 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
   }, [llmProvider, lmStudioEndpoint, lmStudioDetection]);
 
   // Helper function to get available capabilities for a provider (must be after lmStudioDetection)
-  const getAvailableCapabilities = (provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
+  // Wrapped in useCallback to prevent infinite loops in useEffect dependencies
+  const getAvailableCapabilities = React.useCallback((provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
     const config = llmConfigs.find(c => c.provider === provider && c.enabled);
     if (!config) {
       console.log('[AgentFormModal] getAvailableCapabilities - provider not enabled:', provider);
@@ -219,7 +220,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       .map(cap => cap as LLMCapability);
     console.log(`[AgentFormModal] Using config capabilities for ${provider}:`, caps);
     return caps;
-  };
+  }, [llmConfigs, lmStudioDetection]);
 
   useEffect(() => {
     if (isEditing && existingAgent) {
@@ -249,7 +250,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
         });
       }
     }
-  }, [llmProvider, model, isEditing]);
+  }, [llmProvider, model, isEditing, getAvailableCapabilities]);
 
   // LMStudio capability validation effect
   useEffect(() => {
@@ -293,7 +294,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
   const availableCapabilities = useMemo(() => {
     return getAvailableCapabilities(llmProvider, model);
-  }, [llmProvider, model, llmConfigs, lmStudioDetection]);
+  }, [llmProvider, model, llmConfigs, lmStudioDetection, getAvailableCapabilities]);
 
   const handleProviderChange = (provider: LLMProvider) => {
     setLlmProvider(provider);

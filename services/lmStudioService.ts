@@ -341,7 +341,7 @@ export const generateContentStream = async function* (
         model,
         messages,
         stream: true,
-        temperature: temperature || 0.7,
+        temperature: 0.7,
         max_tokens: 4000
     };
 
