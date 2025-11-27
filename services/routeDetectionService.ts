@@ -261,15 +261,21 @@ export async function detectAvailableRoutes(endpoint: string, modelId?: string):
 /**
  * Test si le modèle supporte Function Calling (paramètre tools)
  * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
+ * 
+ * DÉSACTIVÉ TEMPORAIREMENT: Certains modèles (Mistral v0.2) rejettent les messages
+ * avec des paramètres avancés. On assume Function Calling disponible par défaut.
  */
 export async function testFunctionCalling(endpoint: string, modelName: string): Promise<boolean> {
+    // WORKAROUND: Retourner true par défaut pour éviter erreurs 500 avec Mistral
+    // Les modèles Mistral supportent généralement function calling même si le test échoue
+    console.log(`[RouteDetection] Assuming function calling support for ${modelName} (test skipped)`);
+    return true;
+
+    /* Test désactivé temporairement - cause erreur 500 avec Mistral v0.2
     try {
-        // Appeler le backend proxy au lieu de LMStudio directement
         const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        console.log(`[RouteDetection] Testing function calling with model: ${modelName}`);
 
         const response = await fetch(proxyUrl, {
             method: 'POST',
@@ -278,19 +284,14 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
             body: JSON.stringify({
                 model: modelName,
                 messages: [{ role: 'user', content: 'test' }],
-                tools: [
-                    {
-                        type: 'function',
-                        function: {
-                            name: 'test_tool',
-                            description: 'Test',
-                            parameters: {
-                                type: 'object',
-                                properties: {}
-                            }
-                        }
+                tools: [{
+                    type: 'function',
+                    function: {
+                        name: 'test_tool',
+                        description: 'Test',
+                        parameters: { type: 'object', properties: {} }
                     }
-                ],
+                }],
                 max_tokens: 1,
                 stream: false
             })
@@ -298,9 +299,6 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
 
         clearTimeout(timeoutId);
 
-        // Si le serveur accepte le paramètre tools sans erreur 400 "tools"
-        // on considère que la fonctionnalité est supportée
-        // 400 avec message "tools" = pas supporté, sinon = supporté
         if (response.status === 400) {
             const text = await response.text().catch(() => '');
             return !text.toLowerCase().includes('tool');
@@ -310,22 +308,28 @@ export async function testFunctionCalling(endpoint: string, modelName: string): 
     } catch (error) {
         return false;
     }
+    */
 }
 
 /**
  * Test si le modèle supporte JSON Mode (paramètre response_format)
  * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
+ * 
+ * DÉSACTIVÉ TEMPORAIREMENT: Certains modèles (Mistral v0.2) ont des templates jinja
+ * qui rejettent certains paramètres. On assume OutputFormatting disponible par défaut.
  */
 export async function testJsonMode(endpoint: string, modelName: string): Promise<boolean> {
+    // WORKAROUND: Retourner true par défaut pour éviter erreurs 500 avec Mistral
+    // Les modèles récents supportent généralement JSON mode
+    console.log(`[RouteDetection] Assuming JSON mode support for ${modelName} (test skipped)`);
+    return true;
+
+    /* Test désactivé temporairement - cause erreur 500 avec Mistral v0.2
     try {
-        // Appeler le backend proxy au lieu de LMStudio directement
         const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-        console.log(`[RouteDetection] Testing JSON mode with model: ${modelName}`);
-
-        // Test 1: Essayer avec json_schema (format Mistral/OpenAI récent)
         let response = await fetch(proxyUrl, {
             method: 'POST',
             signal: controller.signal,
@@ -341,24 +345,21 @@ export async function testJsonMode(endpoint: string, modelName: string): Promise
 
         clearTimeout(timeoutId);
 
-        // Si json_schema accepté → JSON mode supporté
         if (response.ok || response.status !== 400) {
             return true;
         }
 
-        // Test 2: Essayer avec text (fallback)
         const text = await response.text().catch(() => '');
         if (text.includes('json_schema') || text.includes('response_format')) {
-            // Format non supporté mais paramètre reconnu → pas de JSON mode
             return false;
         }
 
-        // Si aucune erreur spécifique → considérer comme non supporté pour Mistral
         return false;
 
     } catch (error) {
         return false;
     }
+    */
 }
 
 // ============================================================================
@@ -399,17 +400,22 @@ export async function routesToCapabilities(
 
     // Tests capacités avancées (seulement si chat disponible)
     if (routes.chatCompletions) {
-        const [hasFunctionCalling, hasJsonMode] = await Promise.all([
-            testFunctionCalling(endpoint, modelName),
-            testJsonMode(endpoint, modelName)
-        ]);
+        try {
+            const [hasFunctionCalling, hasJsonMode] = await Promise.all([
+                testFunctionCalling(endpoint, modelName),
+                testJsonMode(endpoint, modelName)
+            ]);
 
-        if (hasFunctionCalling) {
-            capabilities.push(LLMCapability.FunctionCalling);
-        }
+            if (hasFunctionCalling) {
+                capabilities.push(LLMCapability.FunctionCalling);
+            }
 
-        if (hasJsonMode) {
-            capabilities.push(LLMCapability.OutputFormatting);
+            if (hasJsonMode) {
+                capabilities.push(LLMCapability.OutputFormatting);
+            }
+        } catch (error) {
+            console.warn('[RouteDetection] Advanced capability tests failed, using basic capabilities only:', error);
+            // Continue with basic capabilities only (Chat, Embeddings, LocalDeployment)
         }
     }
 

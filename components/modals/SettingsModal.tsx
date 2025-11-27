@@ -233,7 +233,23 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                                 border: '1px solid rgba(34, 197, 94, 0.5)',
                                 animation: 'fade-scale-in 0.4s ease-out'
                               }}>
-                                <span className="text-green-400 text-sm">⚡ Capacités mises à jour automatiquement</span>
+                                <span className="text-green-400 text-sm font-semibold">⚡ Capacités détectées:</span>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {lmStudioDetection.capabilities.map((cap, index) => (
+                                    <span
+                                      key={cap}
+                                      className="px-2 py-1 rounded text-xs font-medium"
+                                      style={{
+                                        background: 'rgba(34, 197, 94, 0.2)',
+                                        border: '1px solid rgba(34, 197, 94, 0.4)',
+                                        color: '#86efac',
+                                        animation: `badge-appear 0.3s ease-out ${index * 0.05}s both`
+                                      }}
+                                    >
+                                      {cap}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           )}

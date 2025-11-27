@@ -316,11 +316,18 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
             description: 'Alibaba coding specialist'
         },
         {
+            id: 'mistral-7b-instruct-v0.2',
+            name: 'Mistral 7B Instruct v0.2',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding, LLMCapability.LocalDeployment],
+            recommended: true,
+            description: 'Mistral AI open source 7B instruct model v0.2'
+        },
+        {
             id: 'mistral-7b-instruct-v0.3',
             name: 'Mistral 7B Instruct v0.3',
             capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding, LLMCapability.LocalDeployment],
             recommended: true,
-            description: 'Mistral AI open source 7B instruct model'
+            description: 'Mistral AI open source 7B instruct model v0.3'
         },
         {
             id: 'mistral-small-3.1',
