@@ -191,13 +191,29 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     if (options.deleteInstances) {
       // Suppression complète : prototype + instances + nodes
+      const instancesToDelete = state.agentInstances
+        .filter(instance => instance.prototypeId === id)
+        .map(instance => instance.id);
+
+      // Identify nodes to delete (nodes with instances belonging to this prototype)
+      const nodesToDelete = state.nodes
+        .filter(node => {
+          const instanceId = node.data.agentInstance?.id;
+          return instanceId && instancesToDelete.includes(instanceId);
+        })
+        .map(node => node.id);
+
       set((state) => ({
         agents: state.agents.filter(agent => agent.id !== id),
         selectedAgentId: state.selectedAgentId === id ? null : state.selectedAgentId,
         // Remove related instances
         agentInstances: state.agentInstances.filter(instance => instance.prototypeId !== id),
         // Remove related nodes
-        nodes: state.nodes.filter(node => node.data.agentInstance?.prototypeId !== id)
+        nodes: state.nodes.filter(node => !nodesToDelete.includes(node.id)),
+        // Remove related edges (edges connected to deleted nodes)
+        edges: state.edges.filter(edge =>
+          !nodesToDelete.includes(edge.source) && !nodesToDelete.includes(edge.target)
+        )
       }));
     } else {
       // Suppression du prototype uniquement : les instances deviennent orphelines
@@ -282,10 +298,21 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     })
   })),
 
-  deleteAgentInstance: (id) => set((state) => ({
-    agentInstances: state.agentInstances.filter(instance => instance.id !== id),
-    nodes: state.nodes.filter(node => node.data.agentInstance?.id !== id)
-  })),
+  deleteAgentInstance: (id) => set((state) => {
+    // Find nodes to delete (nodes with this instance)
+    const nodesToDelete = state.nodes
+      .filter(node => node.data.agentInstance?.id === id)
+      .map(node => node.id);
+
+    return {
+      agentInstances: state.agentInstances.filter(instance => instance.id !== id),
+      nodes: state.nodes.filter(node => node.data.agentInstance?.id !== id),
+      // Also delete edges connected to these nodes
+      edges: state.edges.filter(edge =>
+        !nodesToDelete.includes(edge.source) && !nodesToDelete.includes(edge.target)
+      )
+    };
+  }),
 
   getResolvedInstance: (instanceId) => {
     const state = get();
@@ -299,11 +326,13 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   },
 
   getInstancesOfPrototype: (prototypeId) => {
+    // Return all instances of this prototype (they should match nodes 1:1 if cleanup is correct)
     return get().agentInstances.filter(instance => instance.prototypeId === prototypeId);
   },
 
   getInstanceCount: (prototypeId) => {
-    return get().agentInstances.filter(instance => instance.prototypeId === prototypeId).length;
+    // Use the same logic as getInstancesOfPrototype to count only deployed instances
+    return get().getInstancesOfPrototype(prototypeId).length;
   },
 
   // PHASE 1B: Orphan detection and cleanup
@@ -407,10 +436,20 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     )
   })),
 
-  deleteNode: (id) => set((state) => ({
-    nodes: state.nodes.filter(node => node.id !== id),
-    edges: state.edges.filter(edge => edge.source !== id && edge.target !== id)
-  })),
+  deleteNode: (id) => set((state) => {
+    // Find the node being deleted to get its instance ID
+    const nodeToDelete = state.nodes.find(node => node.id === id);
+    const instanceId = nodeToDelete?.data.agentInstance?.id;
+
+    return {
+      nodes: state.nodes.filter(node => node.id !== id),
+      edges: state.edges.filter(edge => edge.source !== id && edge.target !== id),
+      // CRITICAL: Also delete the associated agentInstance to maintain consistency
+      agentInstances: instanceId
+        ? state.agentInstances.filter(instance => instance.id !== instanceId)
+        : state.agentInstances
+    };
+  }),
 
   addEdge: (edgeData) => set((state) => ({
     edges: [...state.edges, { ...edgeData, id: `edge-${Date.now()}` }]

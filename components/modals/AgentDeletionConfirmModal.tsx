@@ -10,6 +10,7 @@ interface AgentDeletionConfirmModalProps {
   agent: Agent | null;
   onConfirm: () => void;
   onCancel: () => void;
+  onDeleteNodes?: (instanceIds: string[]) => void; // Callback to delete nodes by instanceId
 }
 
 const AlertIcon2 = (props: React.SVGProps<SVGSVGElement>) => (
@@ -24,7 +25,8 @@ export const AgentDeletionConfirmModal: React.FC<AgentDeletionConfirmModalProps>
   isOpen,
   agent,
   onConfirm,
-  onCancel
+  onCancel,
+  onDeleteNodes
 }) => {
   const { getInstancesOfPrototype, deleteAgent } = useDesignStore();
   const { addNotification } = useNotifications();
@@ -59,9 +61,18 @@ export const AgentDeletionConfirmModal: React.FC<AgentDeletionConfirmModalProps>
   };
 
   const handleDeletePrototypeAndInstances = () => {
+    // Identify instance IDs to delete (for syncing with App.tsx workflowNodes)
+    const instancesToDelete = affectedInstances.map(inst => inst.id);
+
     // Supprimer le prototype ET toutes ses instances
     const result = deleteAgent(agent.id, { deleteInstances: true });
     if (result.success) {
+      // Sync with App.tsx workflowNodes if callback provided
+      // Pass instance IDs so App.tsx can filter workflowNodes by instanceId
+      if (onDeleteNodes && instancesToDelete.length > 0) {
+        onDeleteNodes(instancesToDelete);
+      }
+
       addNotification({
         type: 'success',
         title: 'Suppression complète',

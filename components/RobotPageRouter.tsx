@@ -15,6 +15,7 @@ interface RobotPageRouterProps {
   agents?: Agent[];
   workflowNodes?: WorkflowNode[];
   onDeleteNode?: (nodeId: string) => void;
+  onDeleteNodes?: (instanceIds: string[]) => void; // Batch delete nodes by instanceId
   onUpdateNodeMessages?: (nodeId: string, messages: any[]) => void;
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
   onToggleNodeMinimize?: (nodeId: string) => void;
@@ -132,6 +133,7 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
   agents,
   workflowNodes,
   onDeleteNode,
+  onDeleteNodes,
   onUpdateNodeMessages,
   onUpdateNodePosition,
   onToggleNodeMinimize,
@@ -180,11 +182,11 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
 
   // Route matching logic
   if (currentPath.startsWith('/archi/prototype')) {
-    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} />;
+    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} onDeleteNodes={onDeleteNodes} />;
   }
 
   if (currentPath.startsWith('/archi')) {
-    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} />;
+    return <ArchiPrototypingPage llmConfigs={llmConfigs} onNavigateToWorkflow={handleNavigateToWorkflow} onAddToWorkflow={onAddToWorkflow} onDeleteNodes={onDeleteNodes} />;
   }
 
   if (currentPath.startsWith('/bos/dashboard')) {

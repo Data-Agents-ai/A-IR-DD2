@@ -140,7 +140,7 @@ function App() {
   const { updateLLMConfigs, setNavigationHandler, addNodeMessage } = useRuntimeStore();
 
   // Design Store access for integrity validation  
-  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance } = useDesignStore();
+  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode } = useDesignStore();
 
   // Sync LLM configs with runtime store
   useEffect(() => {
@@ -295,6 +295,13 @@ function App() {
 
   const handleDeleteNode = (nodeId: string) => {
     setWorkflowNodes(prev => prev.filter(node => node.id !== nodeId));
+    // CRITICAL: Also delete from Zustand store to maintain consistency
+    deleteNode(nodeId);
+  };
+
+  const handleDeleteNodes = (instanceIds: string[]) => {
+    // Batch delete multiple nodes by instanceId (used when deleting prototype with instances)
+    setWorkflowNodes(prev => prev.filter(node => !node.instanceId || !instanceIds.includes(node.instanceId)));
   };
 
   const handleUpdateNodePosition = (nodeId: string, position: { x: number; y: number }) => {
@@ -416,6 +423,7 @@ function App() {
               agents={agents}
               workflowNodes={workflowNodes}
               onDeleteNode={handleDeleteNode}
+              onDeleteNodes={handleDeleteNodes}
               onUpdateNodeMessages={handleUpdateNodeMessages}
               onUpdateNodePosition={handleUpdateNodePosition}
               onToggleNodeMinimize={handleToggleNodeMinimize}

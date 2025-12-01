@@ -19,12 +19,14 @@ interface ArchiPrototypingPageProps {
   llmConfigs: LLMConfig[];
   onNavigateToWorkflow?: () => void;
   onAddToWorkflow?: (agent: Agent) => void;
+  onDeleteNodes?: (instanceIds: string[]) => void; // Callback to delete nodes by instanceId
 }
 
 export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
   llmConfigs,
   onNavigateToWorkflow,
-  onAddToWorkflow
+  onAddToWorkflow,
+  onDeleteNodes
 }) => {
   const { t } = useLocalization();
   const { addNotification } = useNotifications();
@@ -565,6 +567,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         agent={agentToDelete}
         onConfirm={confirmDeletion}
         onCancel={cancelDeletion}
+        onDeleteNodes={onDeleteNodes}
       />
 
       {/* PHASE 2A: Workflow Validation Modal */}
