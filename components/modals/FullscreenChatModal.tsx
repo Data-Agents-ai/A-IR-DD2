@@ -44,9 +44,19 @@ const WebSearchIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-interface FullscreenChatModalProps { }
+interface FullscreenChatModalProps {
+  onDeleteNode?: (nodeId: string) => void;
+  onOpenImagePanel?: (nodeId: string) => void;
+  onOpenVideoPanel?: (nodeId: string) => void;
+  onOpenMapsPanel?: (nodeId: string, preloadedResults?: { text: string; mapSources: any[]; query?: string }) => void;
+}
 
-export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
+export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
+  onDeleteNode,
+  onOpenImagePanel,
+  onOpenVideoPanel,
+  onOpenMapsPanel
+}) => {
   const {
     fullscreenChatNodeId,
     fullscreenChatAgent,
@@ -96,15 +106,10 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
   // Déterminer le nom et les infos de l'agent
   const agentName = resolvedInstance
     ? (resolvedInstance.instance.name || resolvedInstance.prototype.name)
-    : 'Agent'; // Fallback pour architecture V1
+    : (agent?.name || 'Agent'); // Fallback: utiliser agent.name si disponible
 
-  const agentModel = resolvedInstance
-    ? resolvedInstance.prototype.model
-    : 'Unknown';
-
-  const agentProvider = resolvedInstance
-    ? resolvedInstance.prototype.llmProvider
-    : 'Unknown';
+  const agentModel = agent?.model || 'Unknown';
+  const agentProvider = agent?.llmProvider || 'Unknown';
 
   const handleClose = () => {
     const { setFullscreenChatAgent } = useRuntimeStore.getState();
@@ -117,17 +122,8 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
   };
 
   const handleConfirmDelete = () => {
-    if (fullscreenChatNodeId) {
-      // Utiliser le store runtime pour accéder aux fonctions globales
-      const { setImagePanelOpen, setVideoGenerationPanelOpen, setMapsGroundingPanelOpen } = useRuntimeStore.getState();
-      // Fermer tous les panels associés
-      setImagePanelOpen(false);
-      setVideoGenerationPanelOpen(false);
-      setMapsGroundingPanelOpen(false);
-
-      // Note: La suppression du node sera gérée par App.tsx via les workflows
-      // Pour l'instant, on ferme juste le modal
-      console.warn('Node deletion from fullscreen modal not yet implemented - close modal only');
+    if (fullscreenChatNodeId && onDeleteNode) {
+      onDeleteNode(fullscreenChatNodeId);
     }
     setShowDeleteConfirm(false);
     handleClose(); // Fermer le modal après suppression
@@ -138,26 +134,20 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
   };
 
   const handleOpenImagePanel = () => {
-    if (fullscreenChatNodeId) {
-      const { setImagePanelNodeId, setImagePanelOpen } = useRuntimeStore.getState();
-      setImagePanelNodeId(fullscreenChatNodeId);
-      setImagePanelOpen(true);
+    if (fullscreenChatNodeId && onOpenImagePanel) {
+      onOpenImagePanel(fullscreenChatNodeId);
     }
   };
 
   const handleOpenVideoPanel = () => {
-    if (fullscreenChatNodeId) {
-      const { setVideoGenerationNodeId, setVideoGenerationPanelOpen } = useRuntimeStore.getState();
-      setVideoGenerationNodeId(fullscreenChatNodeId);
-      setVideoGenerationPanelOpen(true);
+    if (fullscreenChatNodeId && onOpenVideoPanel) {
+      onOpenVideoPanel(fullscreenChatNodeId);
     }
   };
 
   const handleOpenMapsPanel = () => {
-    if (fullscreenChatNodeId) {
-      const { setMapsGroundingNodeId, setMapsGroundingPanelOpen } = useRuntimeStore.getState();
-      setMapsGroundingNodeId(fullscreenChatNodeId);
-      setMapsGroundingPanelOpen(true);
+    if (fullscreenChatNodeId && onOpenMapsPanel) {
+      onOpenMapsPanel(fullscreenChatNodeId);
     }
   };
 
@@ -351,22 +341,27 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = () => {
             )}
 
             <div className="flex space-x-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept="image/*"
-                className="hidden"
-              />
+              {agent?.capabilities?.includes(LLMCapability.FileUpload) && (
+                <>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
 
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 h-10 w-10 text-gray-400 hover:text-blue-400"
-              >
-                <UploadIcon width={16} height={16} />
-              </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 h-10 w-10 text-gray-400 hover:text-blue-400"
+                    disabled={isLoading}
+                  >
+                    <UploadIcon width={16} height={16} />
+                  </Button>
+                </>
+              )}
 
               <input
                 type="text"

@@ -554,7 +554,12 @@ function App() {
         )}
 
         {/* Fullscreen Chat Modal */}
-        <FullscreenChatModal />
+        <FullscreenChatModal
+          onDeleteNode={handleDeleteNode}
+          onOpenImagePanel={handleOpenImagePanel}
+          onOpenVideoPanel={handleOpenVideoPanel}
+          onOpenMapsPanel={handleOpenMapsPanel}
+        />
 
         {/* Configuration Modal */}
         <AgentConfigurationModal llmConfigs={llmConfigs} />
