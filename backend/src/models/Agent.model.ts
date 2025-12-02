@@ -52,6 +52,10 @@ const AgentSchema = new Schema<IAgent>({
     creatorId: {
         type: String,
         required: true,
+        enum: {
+            values: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'],
+            message: 'RobotId invalide. Seuls AR_001, BOS_001, COM_001, PHIL_001, TIM_001 sont autorisés'
+        },
         index: true
     },
     ownerId: {

@@ -42,6 +42,8 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
 
 // Unique constraint: 1 config par provider par user
 LLMConfigSchema.index({ userId: 1, provider: 1 }, { unique: true });
+// Index simple pour filtrage enabled (listing configs actives)
+LLMConfigSchema.index({ enabled: 1 });
 
 // Méthode: Déchiffrer API key
 LLMConfigSchema.methods.getDecryptedApiKey = function (): string {
