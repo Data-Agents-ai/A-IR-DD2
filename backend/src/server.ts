@@ -7,8 +7,10 @@ import path from 'path';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
 import dotenv from 'dotenv';
+import passport from './middleware/auth.middleware';
 import { connectDatabase } from './config/database';
 import lmstudioRoutes from './routes/lmstudio.routes';
+import authRoutes from './routes/auth.routes';
 
 // Charger variables d'environnement
 dotenv.config();
@@ -31,10 +33,17 @@ app.use(cors({
 
 app.use(express.json());
 
-// Route de test
+// ===== PASSPORT INITIALIZATION =====
+app.use(passport.initialize());
+
+// ===== ROUTES =====
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend is running' });
 });
+
+// Auth routes (Jalon 2)
+app.use('/api/auth', authRoutes);
 
 // Routes proxy LMStudio
 app.use('/api/lmstudio', lmstudioRoutes);
@@ -118,7 +127,9 @@ async function startServer() {
       console.log(`📡 WebSocket prêt pour les connexions`);
       console.log(`🔐 Mode: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✅ Jalon 1: Infrastructure prête (MongoDB + Encryption)`);
+      console.log(`✅ Jalon 2: Authentification JWT (Passport + Zod)`);
       console.log(`🔓 Mode Guest: OPÉRATIONNEL (Python tools, WebSocket)`);
+      console.log(`🔐 Mode Auth: DISPONIBLE (/api/auth/*)`);
       console.log('═══════════════════════════════════════════\n');
     });
   } catch (error) {
