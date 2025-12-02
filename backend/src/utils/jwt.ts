@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '24h';
@@ -19,14 +19,14 @@ export interface JWTPayload {
  * Génère un access token JWT (courte durée)
  */
 export const generateAccessToken = (payload: JWTPayload): string => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION } as SignOptions);
 };
 
 /**
  * Génère un refresh token JWT (longue durée)
  */
 export const generateRefreshToken = (payload: JWTPayload): string => {
-  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRATION });
+  return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRATION } as SignOptions);
 };
 
 /**

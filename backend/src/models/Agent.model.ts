@@ -5,7 +5,7 @@ export interface IAgent extends Document {
     role: string;
     systemPrompt: string;
     llmProvider: string;
-    model: string;
+    llmModel: string;
     capabilities: string[];
     historyConfig?: object;
     tools?: object[];
@@ -39,7 +39,7 @@ const AgentSchema = new Schema<IAgent>({
         type: String,
         required: true
     },
-    model: {
+    llmModel: {
         type: String,
         required: true
     },
