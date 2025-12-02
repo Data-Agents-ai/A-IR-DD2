@@ -119,7 +119,7 @@ async function startServer() {
       console.warn('   - Docker: docker run -d -p 27017:27017 --name mongodb mongo:6');
       console.warn('');
     }
-    
+
     // Démarrer le serveur HTTP (même sans MongoDB)
     httpServer.listen(PORT, () => {
       console.log('\n✨ ===== A-IR-DD2 BACKEND DÉMARRÉ ===== ✨');

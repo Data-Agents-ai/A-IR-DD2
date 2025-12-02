@@ -39,19 +39,19 @@ export async function connectDatabase(retryCount = 0): Promise<void> {
         console.log('✅ MongoDB connecté avec succès');
         console.log(`📍 URI: ${MONGODB_URI.replace(/\/\/.*@/, '//<credentials>@')}`);
 
-  } catch (error) {
-    console.error('❌ Erreur de connexion MongoDB:', error instanceof Error ? error.message : error);
-    
-    if (retryCount < MAX_RETRIES - 1) {
-      console.log(`⏳ Nouvelle tentative dans ${RETRY_DELAY / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return connectDatabase(retryCount + 1);
-    } else {
-      console.error('💀 Échec de connexion MongoDB après toutes les tentatives');
-      console.error('   Le backend fonctionnera en mode Guest uniquement (localStorage)');
-      throw new Error('MongoDB non disponible');
+    } catch (error) {
+        console.error('❌ Erreur de connexion MongoDB:', error instanceof Error ? error.message : error);
+
+        if (retryCount < MAX_RETRIES - 1) {
+            console.log(`⏳ Nouvelle tentative dans ${RETRY_DELAY / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return connectDatabase(retryCount + 1);
+        } else {
+            console.error('💀 Échec de connexion MongoDB après toutes les tentatives');
+            console.error('   Le backend fonctionnera en mode Guest uniquement (localStorage)');
+            throw new Error('MongoDB non disponible');
+        }
     }
-  }
 }/**
  * Déconnecte proprement de MongoDB
  */
