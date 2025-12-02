@@ -589,6 +589,11 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                             {cap === LLMCapability.OCR && '🎵 Audio'}
                             {cap === LLMCapability.LocalDeployment && '🔌 Local'}
                             {cap === LLMCapability.CodeSpecialization && '💻 Code'}
+                            {cap === LLMCapability.ExtendedThinking && '💭 Extended Thinking'}
+                            {cap === LLMCapability.PDFSupport && '📄 PDF Support'}
+                            {cap === LLMCapability.StructuredOutputs && '🔖 Structured Outputs'}
+                            {cap === LLMCapability.WebFetchTool && '🌐 Web Fetch'}
+                            {cap === LLMCapability.WebSearchToolAnthropic && '🔍 Web Search'}
                             {!Object.values(LLMCapability).includes(cap) && cap}
                           </span>
                         </div>

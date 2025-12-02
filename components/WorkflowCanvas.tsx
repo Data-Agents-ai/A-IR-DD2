@@ -113,9 +113,19 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     reactFlowNodes: [] as Node[]
   });
 
-  // Hooks React Flow - MAIS nous allons les contrôler manuellement
-  const [reactFlowNodes, setReactFlowNodes, onNodesChange] = useNodesState([]);
+  // Hooks React Flow - avec gestion d'erreur pour éviter les crashes
+  const [reactFlowNodes, setReactFlowNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Wrapper sécurisé pour onNodesChange avec logging d'erreurs
+  const onNodesChange = useCallback((changes: any) => {
+    try {
+      onNodesChangeInternal(changes);
+    } catch (error) {
+      console.error('[WorkflowCanvas] Error in onNodesChange:', error);
+      // Ne pas propager l'erreur pour éviter de casser l'UI
+    }
+  }, [onNodesChangeInternal]);
 
   // Calculer actualNodes de manière stable
   const actualNodes = useMemo(() => {
@@ -271,13 +281,10 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     }
   }, [reactFlowNodes.length, reactFlowInstance]); // Se déclenche au chargement initial uniquement
 
-  // useEffect pour initialiser la MiniMap après que le composant soit monté
+  // useEffect pour initialiser la MiniMap immédiatement (pas de délai pour éviter desync)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setInternalState(prev => ({ ...prev, minimapReady: true }));
-    }, 100); // Délai court pour laisser le temps aux dimensions de se calculer
-
-    return () => clearTimeout(timer);
+    // Initialiser immédiatement pour éviter la désynchronisation
+    setInternalState(prev => ({ ...prev, minimapReady: true }));
   }, []);
 
   // Handlers stables avec useCallback
@@ -392,7 +399,7 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
           nodesConnectable={true}
           elementsSelectable={false}
         >
-          {/* Controls - Collés à la minimap sans conflit de position */}
+          {/* Controls - Harmonisé avec MiniMap (même border et border-radius) */}
           <Controls
             position="bottom-right"
             showZoom={true}
@@ -400,14 +407,14 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
             showInteractive={true}
             className="workflow-controls-fixed"
             style={{
-              background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(26, 26, 26, 0.8) 100%)',
-              border: '2px solid rgba(255, 0, 255, 0.6)',
-              borderRadius: '10px',
+              background: theme.backgroundGradient,
+              border: `2px solid ${theme.particleColors[0]}`,
+              borderRadius: '8px',
               boxShadow: `
-                0 0 20px rgba(255, 0, 255, 0.4),
-                0 0 40px rgba(255, 0, 255, 0.2),
+                0 0 20px ${theme.particleColors[0]}40,
+                0 0 40px ${theme.particleColors[0]}20,
                 0 8px 25px rgba(0, 0, 0, 0.7),
-                inset 0 1px 0 rgba(255, 0, 255, 0.2)
+                inset 0 1px 0 ${theme.particleColors[0]}20
               `,
               backdropFilter: 'blur(12px)'
             }}

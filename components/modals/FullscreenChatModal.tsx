@@ -73,6 +73,9 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
   const [userInput, setUserInput] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
+  const [webFetchEnabled, setWebFetchEnabled] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -92,7 +95,8 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
     nodeId: fullscreenChatNodeId || '',
     agent,
     llmConfigs,
-    t
+    t,
+    nativeToolsConfig: { webFetch: webFetchEnabled, webSearch: webSearchEnabled }
   });
 
   // Auto-scroll vers le bas quand de nouveaux messages arrivent
@@ -184,6 +188,18 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
             ? 'bg-red-600/20 text-red-200 mr-12'
             : 'bg-gray-700 text-gray-100 mr-12'
           }`}>
+          {/* Extended Thinking display (collapsible) */}
+          {message.thinking && showThinking && (
+            <details className="mb-2 p-2 bg-purple-900/20 border border-purple-500/30 rounded">
+              <summary className="cursor-pointer text-xs font-semibold text-purple-400 hover:text-purple-300">
+                💭 {t('extended_thinking') || 'Extended Thinking'}
+              </summary>
+              <div className="mt-2 text-xs text-purple-200 whitespace-pre-wrap">
+                {message.thinking}
+              </div>
+            </details>
+          )}
+
           <div className="whitespace-pre-wrap break-words">
             {message.text}
           </div>
@@ -341,13 +357,30 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
             )}
 
             <div className="flex space-x-2">
+              {/* Extended Thinking toggle */}
+              {agent?.capabilities?.includes(LLMCapability.ExtendedThinking) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${showThinking
+                      ? 'text-purple-400 bg-purple-500/20 hover:text-purple-300 hover:bg-purple-500/30'
+                      : 'text-gray-400 hover:text-purple-400 hover:bg-purple-500/20'
+                    }`}
+                  onClick={() => setShowThinking(!showThinking)}
+                  disabled={isLoading}
+                  title={showThinking ? 'Masquer la pensée' : 'Afficher la pensée'}
+                >
+                  💭
+                </Button>
+              )}
+
               {agent?.capabilities?.includes(LLMCapability.FileUpload) && (
                 <>
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileUpload}
-                    accept="image/*"
+                    accept={agent?.capabilities?.includes(LLMCapability.PDFSupport) ? "image/*,application/pdf" : "image/*"}
                     className="hidden"
                   />
 
@@ -361,6 +394,40 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
                     <UploadIcon width={16} height={16} />
                   </Button>
                 </>
+              )}
+
+              {/* Anthropic Web Fetch Tool */}
+              {agent?.capabilities?.includes(LLMCapability.WebFetchTool) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${webFetchEnabled
+                      ? 'text-teal-300 bg-teal-500/30 hover:text-teal-200 hover:bg-teal-500/40 shadow-lg shadow-teal-500/40'
+                      : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/20'
+                    }`}
+                  onClick={() => setWebFetchEnabled(!webFetchEnabled)}
+                  disabled={isLoading}
+                  title={webFetchEnabled ? 'Web Fetch activé' : 'Web Fetch désactivé'}
+                >
+                  🌐
+                </Button>
+              )}
+
+              {/* Anthropic Web Search Tool */}
+              {agent?.capabilities?.includes(LLMCapability.WebSearchToolAnthropic) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${webSearchEnabled
+                      ? 'text-orange-300 bg-orange-500/30 hover:text-orange-200 hover:bg-orange-500/40 shadow-lg shadow-orange-500/40'
+                      : 'text-gray-400 hover:text-orange-400 hover:bg-orange-500/20'
+                    }`}
+                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                  disabled={isLoading}
+                  title={webSearchEnabled ? 'Web Search activé' : 'Web Search désactivé'}
+                >
+                  🔍
+                </Button>
               )}
 
               <input

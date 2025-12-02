@@ -136,6 +136,9 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
+  const [webFetchEnabled, setWebFetchEnabled] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   // Arc-LLM states
   const [showWebSearchResults, setShowWebSearchResults] = useState(false);
@@ -358,7 +361,8 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
         conversationHistoryForAPI, // Use computed history based on config
         effectiveAgent.tools,
         effectiveAgent.outputConfig,
-        agentConfig.apiKey // For LMStudio: endpoint is stored in apiKey field
+        agentConfig.apiKey, // For LMStudio: endpoint is stored in apiKey field
+        { webFetch: webFetchEnabled, webSearch: webSearchEnabled } // Native tools config
       );
 
       let currentResponse = '';
@@ -641,6 +645,18 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                   )}
                 </div>
               </div>
+            )}
+
+            {/* Extended Thinking display (collapsible) */}
+            {message.thinking && showThinking && (
+              <details className="mb-2 p-2 bg-purple-900/20 border border-purple-500/30 rounded">
+                <summary className="cursor-pointer text-xs font-semibold text-purple-400 hover:text-purple-300">
+                  💭 {t('extended_thinking') || 'Extended Thinking'}
+                </summary>
+                <div className="mt-2 text-xs text-purple-200 whitespace-pre-wrap">
+                  {message.thinking}
+                </div>
+              </details>
             )}
 
             {/* Text content */}
@@ -1033,6 +1049,23 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
                 {/* Action buttons */}
                 <div className="flex flex-col space-y-1">
+                  {/* Extended Thinking toggle */}
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.ExtendedThinking) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={`p-2 h-8 w-8 transition-all duration-200 rounded-md hover:scale-110 active:scale-95 ${showThinking
+                          ? 'text-purple-400 bg-purple-500/20 hover:text-purple-300 hover:bg-purple-500/30'
+                          : 'text-gray-400 hover:text-purple-400 hover:bg-purple-500/20'
+                        }`}
+                      onClick={() => setShowThinking(!showThinking)}
+                      disabled={isLoading}
+                      title={showThinking ? 'Masquer la pensée' : 'Afficher la pensée'}
+                    >
+                      💭
+                    </Button>
+                  )}
+
                   {/* File upload */}
                   {effectiveAgent?.capabilities?.includes(LLMCapability.FileUpload) && (
                     <Button
@@ -1117,6 +1150,40 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
                     </Button>
                   )}
 
+                  {/* Anthropic Web Fetch Tool */}
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.WebFetchTool) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={`p-2 h-8 w-8 transition-all duration-200 rounded-md hover:scale-110 active:scale-95 ${webFetchEnabled
+                          ? 'text-teal-300 bg-teal-500/30 hover:text-teal-200 hover:bg-teal-500/40 shadow-lg shadow-teal-500/40'
+                          : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/20'
+                        }`}
+                      onClick={() => setWebFetchEnabled(!webFetchEnabled)}
+                      disabled={isLoading}
+                      title={webFetchEnabled ? 'Web Fetch activé' : 'Web Fetch désactivé'}
+                    >
+                      🌐
+                    </Button>
+                  )}
+
+                  {/* Anthropic Web Search Tool */}
+                  {effectiveAgent?.capabilities?.includes(LLMCapability.WebSearchToolAnthropic) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={`p-2 h-8 w-8 transition-all duration-200 rounded-md hover:scale-110 active:scale-95 ${webSearchEnabled
+                          ? 'text-orange-300 bg-orange-500/30 hover:text-orange-200 hover:bg-orange-500/40 shadow-lg shadow-orange-500/40'
+                          : 'text-gray-400 hover:text-orange-400 hover:bg-orange-500/20'
+                        }`}
+                      onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                      disabled={isLoading}
+                      title={webSearchEnabled ? 'Web Search activé' : 'Web Search désactivé'}
+                    >
+                      🔍
+                    </Button>
+                  )}
+
                   {/* Send - avec effet spécial quand actif */}
                   <Button
                     type="submit"
@@ -1140,7 +1207,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
               type="file"
               onChange={handleFileUpload}
               className="hidden"
-              accept="image/*,text/*,.pdf,.doc,.docx"
+              accept={effectiveAgent?.capabilities?.includes(LLMCapability.PDFSupport) ? "image/*,application/pdf" : "image/*,text/*,.pdf,.doc,.docx"}
             />
           </div>
         </div>

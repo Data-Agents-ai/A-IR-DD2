@@ -181,26 +181,61 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
     ],
     [LLMProvider.Anthropic]: [
         {
-            id: 'claude-3-5-sonnet-20240620',
-            name: 'Claude 3.5 Sonnet',
-            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling, LLMCapability.CacheOptimization],
+            id: 'claude-sonnet-4-5-20250929',
+            name: 'Claude Sonnet 4.5',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.PDFSupport,
+                LLMCapability.FunctionCalling,
+                LLMCapability.ExtendedThinking,
+                LLMCapability.StructuredOutputs,
+                LLMCapability.WebFetchTool,
+                LLMCapability.WebSearchToolAnthropic
+            ],
             recommended: true,
-            description: 'Latest and most intelligent'
+            description: 'Latest flagship with extended thinking & advanced tools (200K context)'
         },
         {
-            id: 'claude-3-opus-20240229',
-            name: 'Claude 3 Opus',
-            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
+            id: 'claude-haiku-4-5-20251001',
+            name: 'Claude Haiku 4.5',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.PDFSupport,
+                LLMCapability.FunctionCalling,
+                LLMCapability.WebFetchTool,
+                LLMCapability.WebSearchToolAnthropic
+            ],
+            description: 'Fast & efficient with web tools (200K context)'
         },
         {
-            id: 'claude-3-sonnet-20240229',
-            name: 'Claude 3 Sonnet',
-            capabilities: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
+            id: 'claude-opus-4-5-20251101',
+            name: 'Claude Opus 4.5',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.PDFSupport,
+                LLMCapability.FunctionCalling,
+                LLMCapability.ExtendedThinking,
+                LLMCapability.StructuredOutputs,
+                LLMCapability.WebFetchTool,
+                LLMCapability.WebSearchToolAnthropic
+            ],
+            recommended: true,
+            description: 'Most capable model with full feature set (200K context)'
         },
         {
-            id: 'claude-3-haiku-20240307',
-            name: 'Claude 3 Haiku',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
+            id: 'claude-opus-4-1-20250805',
+            name: 'Claude Opus 4.1',
+            capabilities: [
+                LLMCapability.Chat,
+                LLMCapability.FileUpload,
+                LLMCapability.PDFSupport,
+                LLMCapability.FunctionCalling,
+                LLMCapability.StructuredOutputs
+            ],
+            description: 'Stable version with core features (200K context)'
         },
     ],
     [LLMProvider.Grok]: [

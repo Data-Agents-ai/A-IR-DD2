@@ -34,6 +34,15 @@ export enum LLMCapability {
   VideoGeneration = 'Video Generation',
   MapsGrounding = 'Maps Grounding',
   WebSearchGrounding = 'Web Search Grounding', // Distinct from basic WebSearch
+
+  // 🆕 Anthropic Claude 4 - Core Capabilities
+  ExtendedThinking = 'Extended Thinking',        // Raisonnement étendu avec thinking blocks
+  PDFSupport = 'PDF Support',                    // Support natif des documents PDF
+  StructuredOutputs = 'Structured Outputs',      // Sorties structurées avec validation JSON Schema
+
+  // 🆕 Anthropic Claude 4 - Tools (natifs côté Anthropic)
+  WebFetchTool = 'Web Fetch Tool',               // Récupération de contenu web (Anthropic exécute)
+  WebSearchToolAnthropic = 'Web Search Tool (Anthropic)', // Recherche web native (Anthropic exécute)
 }
 
 export interface LLMConfig {
@@ -224,6 +233,11 @@ export interface ChatMessage {
     status: 'processing' | 'completed' | 'failed';
     error?: string;
   };
+
+  // 🆕 Anthropic Claude 4 fields
+  thinking?: string;              // Extended thinking content
+  document?: string;              // Base64 encoded document (PDF)
+  documentType?: 'image' | 'pdf'; // Type de document uploadé
 }
 
 export interface WorkflowNode {

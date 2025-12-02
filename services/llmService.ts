@@ -36,13 +36,17 @@ const getServiceProvider = (provider: LLMProvider) => {
 export const generateContentStream = async function* (
     provider: LLMProvider, apiKey: string, model: string,
     systemInstruction?: string, history?: ChatMessage[], tools?: Tool[], outputConfig?: OutputConfig,
-    endpoint?: string // For LMStudio local endpoint
+    endpoint?: string, // For LMStudio local endpoint
+    nativeToolsConfig?: { webFetch?: boolean; webSearch?: boolean } // For Anthropic native tools
 ) {
     const service = getServiceProvider(provider);
 
     // Handle LMStudio special case with endpoint parameter
     if (provider === LLMProvider.LMStudio) {
         yield* (service as any).generateContentStream(endpoint || 'http://localhost:3928', model, systemInstruction, history, tools, outputConfig, apiKey);
+    } else if (provider === LLMProvider.Anthropic && nativeToolsConfig) {
+        // Pass native tools config to Anthropic service
+        yield* (service as any).generateContentStream(apiKey, model, systemInstruction, history, tools, outputConfig, nativeToolsConfig);
     } else {
         yield* service.generateContentStream(apiKey, model, systemInstruction, history, tools, outputConfig);
     }

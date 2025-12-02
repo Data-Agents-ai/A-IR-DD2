@@ -11,6 +11,7 @@ interface UseAgentChatOptions {
     agent: Agent | null;
     llmConfigs: LLMConfig[];
     t: (key: string) => string;
+    nativeToolsConfig?: { webFetch?: boolean; webSearch?: boolean };
 }
 
 interface UseAgentChatReturn {
@@ -27,7 +28,8 @@ export const useAgentChat = ({
     nodeId,
     agent,
     llmConfigs,
-    t
+    t,
+    nativeToolsConfig
 }: UseAgentChatOptions): UseAgentChatReturn => {
     const {
         getNodeMessages,
@@ -158,7 +160,9 @@ export const useAgentChat = ({
                 agent.systemPrompt,
                 messages.concat(userMessage),
                 agent.tools,
-                agent.outputConfig
+                agent.outputConfig,
+                undefined, // endpoint (for LMStudio)
+                nativeToolsConfig // native tools config (for Anthropic)
             );
 
             let currentResponse = '';
@@ -284,7 +288,9 @@ export const useAgentChat = ({
                         agent.systemPrompt,
                         messagesWithoutToolResults,
                         agent.tools,
-                        agent.outputConfig
+                        agent.outputConfig,
+                        undefined, // endpoint (for LMStudio)
+                        nativeToolsConfig // native tools config (for Anthropic)
                     );
 
                     let followUpResponse = '';
