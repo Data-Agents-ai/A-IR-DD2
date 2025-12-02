@@ -4,14 +4,28 @@ import { createServer } from 'http';
 import { WebSocketManager } from './websocket/WebSocketManager';
 import { spawn } from 'child_process';
 import path from 'path';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
+import dotenv from 'dotenv';
+import { connectDatabase } from './config/database';
 import lmstudioRoutes from './routes/lmstudio.routes';
+
+// Charger variables d'environnement
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ===== SECURITY MIDDLEWARE =====
+// Helmet: Sécurise les headers HTTP
+app.use(helmet());
+
+// MongoDB query sanitization (prévention injection NoSQL)
+app.use(mongoSanitize());
+
 // Configuration CORS
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
 
@@ -83,10 +97,35 @@ const httpServer = createServer(app);
 // Initialiser WebSocket
 const wsManager = new WebSocketManager(httpServer);
 
-// Démarrer le serveur
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Backend démarré sur le port ${PORT}`);
-  console.log(`📡 WebSocket prêt pour les connexions`);
-});
+// ===== DÉMARRAGE DU SERVEUR =====
+async function startServer() {
+  try {
+    // Tentative connexion MongoDB (non-bloquante pour Jalon 1)
+    try {
+      await connectDatabase();
+    } catch (dbError) {
+      console.warn('⚠️  MongoDB non disponible - Mode Guest uniquement');
+      console.warn('   Pour activer le mode Authenticated, démarrer MongoDB :');
+      console.warn('   - Windows: Installer MongoDB Community Server');
+      console.warn('   - Docker: docker run -d -p 27017:27017 --name mongodb mongo:6');
+      console.warn('');
+    }
+    
+    // Démarrer le serveur HTTP (même sans MongoDB)
+    httpServer.listen(PORT, () => {
+      console.log('\n✨ ===== A-IR-DD2 BACKEND DÉMARRÉ ===== ✨');
+      console.log(`🚀 Serveur HTTP: http://localhost:${PORT}`);
+      console.log(`📡 WebSocket prêt pour les connexions`);
+      console.log(`🔐 Mode: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✅ Jalon 1: Infrastructure prête (MongoDB + Encryption)`);
+      console.log(`🔓 Mode Guest: OPÉRATIONNEL (Python tools, WebSocket)`);
+      console.log('═══════════════════════════════════════════\n');
+    });
+  } catch (error) {
+    console.error('💀 Erreur critique au démarrage:', error);
+    process.exit(1);
+  }
+}// Lancer le serveur
+startServer();
 
 export { };
