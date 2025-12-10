@@ -4,7 +4,7 @@ export interface IAgentInstance extends Document {
     workflowId: mongoose.Types.ObjectId; // FK → Workflow (LOCAL)
     userId: mongoose.Types.ObjectId; // FK → User (dénormalisé pour queries)
     prototypeId?: mongoose.Types.ObjectId; // FK → AgentPrototype (optionnel)
-    
+
     // Snapshot config (copie indépendante du prototype)
     name: string;
     role: string;
@@ -16,13 +16,13 @@ export interface IAgentInstance extends Document {
     tools?: object[];
     outputConfig?: object;
     robotId: string;
-    
+
     // Canvas properties
     position: { x: number; y: number };
     isMinimized: boolean;
     isMaximized: boolean;
     zIndex: number;
-    
+
     createdAt: Date;
     updatedAt: Date;
 }
@@ -45,7 +45,7 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
         ref: 'AgentPrototype',
         index: true
     },
-    
+
     // Snapshot config
     name: {
         type: String,
@@ -79,7 +79,7 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
         required: true,
         enum: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001']
     },
-    
+
     // Canvas properties
     position: {
         type: {

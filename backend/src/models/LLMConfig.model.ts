@@ -22,7 +22,20 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
     },
     provider: {
         type: String,
-        required: true
+        required: true,
+        trim: true,
+        enum: [
+            'OpenAI',
+            'Anthropic',
+            'Gemini',
+            'Mistral',
+            'DeepSeek',
+            'Grok',
+            'Perplexity',
+            'Qwen',
+            'Kimi',
+            'LMStudio'
+        ]
     },
     enabled: {
         type: Boolean,

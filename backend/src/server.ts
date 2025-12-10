@@ -14,6 +14,8 @@ import authRoutes from './routes/auth.routes';
 import workflowsRoutes from './routes/workflows.routes';
 import agentPrototypesRoutes from './routes/agent-prototypes.routes';
 import agentInstancesRoutes from './routes/agent-instances.routes';
+import llmConfigsRoutes from './routes/llm-configs.routes';
+import llmProxyRoutes from './routes/llm-proxy.routes';
 
 // Charger variables d'environnement
 dotenv.config();
@@ -48,12 +50,16 @@ app.get('/api/health', (req, res) => {
 // Auth routes (Jalon 2)
 app.use('/api/auth', authRoutes);
 
-// Workflow routes (Jalon 3)
+// Workflow routes (Jalon 3 - Phase 1)
 app.use('/api/workflows', workflowsRoutes);
 app.use('/api/agent-prototypes', agentPrototypesRoutes);
 app.use('/api/agent-instances', agentInstancesRoutes);
 
-// Routes proxy LMStudio
+// LLM routes (Jalon 3 - Phase 2)
+app.use('/api/llm-configs', llmConfigsRoutes);
+app.use('/api/llm', llmProxyRoutes);
+
+// Routes proxy LMStudio (legacy)
 app.use('/api/lmstudio', lmstudioRoutes);
 
 // Route pour exécuter les outils Python
