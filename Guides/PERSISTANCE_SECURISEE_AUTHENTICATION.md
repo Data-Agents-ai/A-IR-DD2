@@ -2,10 +2,16 @@
 ## **PERSISTANCE SÉCURISÉE & AUTHENTIFICATION MULTI-UTILISATEURS**
 ### A-IR-DD2 - Migration Architecture Hybride (Guest + Authenticated)
 
-**Version**: 1.0.0  
-**Date**: 2 Décembre 2025  
+**Version**: 1.1.0  
+**Date**: 10 Décembre 2025 *(Mise à jour critique)*  
 **Auteur**: ARC-1 (Agent IA Architecte)  
 **Statut**: 🔄 EN DÉVELOPPEMENT
+
+> ⚠️ **CORRECTIONS ARCHITECTURALES CRITIQUES (Jalon 3)**  
+> Ce document décrit l'architecture initiale. Les **corrections critiques validées** (hiérarchie Workflow, gouvernance ownership-based, portée GLOBAL vs LOCAL) sont documentées dans :
+> - **📄 [CORRECTIONS v1.1](./PERSISTANCE_SECURISEE_AUTHENTICATION_v1.1_CORRECTIONS.md)** ← **LIRE EN PRIORITÉ**
+> - **📄 [ADDENDUM_CRITIQUE_WORKFLOW_SCHEMA.md](../backend/documentation/guides/jalons/ADDENDUM_CRITIQUE_WORKFLOW_SCHEMA.md)** (analyse détaillée)
+> - **📄 [JALON3_PHASE1_COMPLETION.md](../backend/documentation/guides/jalons/JALON3_PHASE1_COMPLETION.md)** (implémentation Phase 1)
 
 ---
 
@@ -631,28 +637,168 @@ UserSchema.methods.comparePassword = async function(candidatePassword: string): 
 export const User = mongoose.model<IUser>('User', UserSchema);
 ```
 
-**Fichier**: `backend/src/models/Agent.model.ts`
+**Fichier**: `backend/src/models/Workflow.model.ts` *(NOUVEAU - Jalon 3)*
 
 ```typescript
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IAgent extends Document {
+export interface IWorkflow extends Document {
+  userId: mongoose.Types.ObjectId; // FK → User
   name: string;
-  role: string;
-  systemPrompt: string;
-  llmProvider: string;
-  model: string;
-  capabilities: string[];
-  historyConfig?: object;
-  tools?: object[];
-  outputConfig?: object;
-  creatorId: string; // RobotId
-  ownerId: mongoose.Types.ObjectId; // FK → User
+  description?: string;
+  isActive: boolean; // Un seul actif par user
+  isDirty: boolean; // Détection modifications non sauvegardées
+  lastSavedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const AgentSchema = new Schema<IAgent>({
+const WorkflowSchema = new Schema<IWorkflow>({
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 200
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 1000
+  },
+  isActive: {
+    type: Boolean,
+    default: false
+  },
+  isDirty: {
+    type: Boolean,
+    default: false
+  },
+  lastSavedAt: {
+    type: Date
+  }
+}, {
+  timestamps: true
+});
+
+// Index composés pour queries optimisées
+WorkflowSchema.index({ userId: 1, isActive: 1 }); // Trouver workflow actif
+WorkflowSchema.index({ userId: 1, updatedAt: -1 }); // Listing chronologique
+
+export const Workflow = mongoose.model<IWorkflow>('Workflow', WorkflowSchema);
+```
+
+---
+
+**Fichier**: `backend/src/models/WorkflowEdge.model.ts` *(NOUVEAU - Jalon 3)*
+
+```typescript
+import mongoose, { Document, Schema } from 'mongoose';
+
+export interface IWorkflowEdge extends Document {
+  workflowId: mongoose.Types.ObjectId; // FK → Workflow
+  userId: mongoose.Types.ObjectId; // FK → User
+  sourceInstanceId: mongoose.Types.ObjectId; // FK → AgentInstance
+  targetInstanceId: mongoose.Types.ObjectId; // FK → AgentInstance
+  sourceHandle?: string;
+  targetHandle?: string;
+  edgeType?: string; // 'default' | 'step' | 'smoothstep' | 'straight'
+  animated?: boolean;
+  label?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const WorkflowEdgeSchema = new Schema<IWorkflowEdge>({
+  workflowId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Workflow',
+    required: true,
+    index: true
+  },
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  sourceInstanceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentInstance',
+    required: true,
+    index: true
+  },
+  targetInstanceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentInstance',
+    required: true,
+    index: true
+  },
+  sourceHandle: String,
+  targetHandle: String,
+  edgeType: {
+    type: String,
+    default: 'default'
+  },
+  animated: {
+    type: Boolean,
+    default: false
+  },
+  label: String
+}, {
+  timestamps: true
+});
+
+// Index pour queries par workflow
+WorkflowEdgeSchema.index({ workflowId: 1 });
+WorkflowEdgeSchema.index({ sourceInstanceId: 1 });
+WorkflowEdgeSchema.index({ targetInstanceId: 1 });
+
+export const WorkflowEdge = mongoose.model<IWorkflowEdge>('WorkflowEdge', WorkflowEdgeSchema);
+```
+
+---
+
+**Fichier**: `backend/src/models/AgentPrototype.model.ts` *(RENOMMÉ depuis Agent.model.ts - Jalon 3)*
+
+```typescript
+import mongoose, { Document, Schema } from 'mongoose';
+
+export interface IAgentPrototype extends Document {
+  userId: mongoose.Types.ObjectId; // FK → User (ownership)
+  robotId: string; // RobotId (metadata seulement, pas de restriction)
+  name: string;
+  role: string;
+  systemPrompt: string;
+  llmProvider: string;
+  llmModel: string;
+  capabilities: string[];
+  historyConfig?: object;
+  tools?: object[];
+  outputConfig?: object;
+  isPrototype: boolean; // Immutable = true
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AgentPrototypeSchema = new Schema<IAgentPrototype>({
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  robotId: {
+    type: String,
+    required: true,
+    enum: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'],
+    index: true
+  },
   name: {
     type: String,
     required: true,
@@ -675,7 +821,7 @@ const AgentSchema = new Schema<IAgent>({
     type: String,
     required: true
   },
-  model: {
+  llmModel: {
     type: String,
     required: true
   },
@@ -685,26 +831,20 @@ const AgentSchema = new Schema<IAgent>({
   historyConfig: Schema.Types.Mixed,
   tools: [Schema.Types.Mixed],
   outputConfig: Schema.Types.Mixed,
-  creatorId: {
-    type: String,
-    required: true,
-    index: true
-  },
-  ownerId: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-    index: true
+  isPrototype: {
+    type: Boolean,
+    default: true,
+    immutable: true
   }
 }, {
   timestamps: true
 });
 
-// Index composé pour queries optimisées
-AgentSchema.index({ ownerId: 1, creatorId: 1 });
-AgentSchema.index({ ownerId: 1, createdAt: -1 });
+// Index composés pour queries optimisées
+AgentPrototypeSchema.index({ userId: 1, createdAt: -1 });
+AgentPrototypeSchema.index({ userId: 1, robotId: 1 });
 
-export const Agent = mongoose.model<IAgent>('Agent', AgentSchema);
+export const AgentPrototype = mongoose.model<IAgentPrototype>('AgentPrototype', AgentPrototypeSchema);
 ```
 
 **Fichier**: `backend/src/models/LLMConfig.model.ts`
@@ -767,34 +907,91 @@ LLMConfigSchema.methods.setApiKey = function(plainKey: string): void {
 export const LLMConfig = mongoose.model<ILLMConfig>('LLMConfig', LLMConfigSchema);
 ```
 
-**Fichier**: `backend/src/models/AgentInstance.model.ts`
+**Fichier**: `backend/src/models/AgentInstance.model.ts` *(MODIFIÉ - Jalon 3)*
 
 ```typescript
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IAgentInstance extends Document {
-  prototypeId: mongoose.Types.ObjectId;
+  workflowId: mongoose.Types.ObjectId; // FK → Workflow (LOCAL scope)
+  userId: mongoose.Types.ObjectId; // FK → User (ownership)
+  prototypeId?: mongoose.Types.ObjectId; // FK → AgentPrototype (optional)
+  
+  // SNAPSHOT CONFIG (copie indépendante du prototype)
   name: string;
+  role: string;
+  systemPrompt: string;
+  llmProvider: string;
+  llmModel: string;
+  capabilities: string[];
+  historyConfig?: object;
+  tools?: object[];
+  outputConfig?: object;
+  robotId: string;
+  
+  // Canvas properties
   position: { x: number; y: number };
+  zIndex: number;
   isMinimized: boolean;
   isMaximized: boolean;
-  configurationJson: object;
+  
   createdAt: Date;
   updatedAt: Date;
 }
 
 const AgentInstanceSchema = new Schema<IAgentInstance>({
-  prototypeId: {
+  workflowId: {
     type: Schema.Types.ObjectId,
-    ref: 'Agent',
+    ref: 'Workflow',
     required: true,
     index: true
   },
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  prototypeId: {
+    type: Schema.Types.ObjectId,
+    ref: 'AgentPrototype',
+    index: true
+  },
+  
+  // SNAPSHOT CONFIG
   name: {
     type: String,
     required: true,
     trim: true
   },
+  role: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  systemPrompt: {
+    type: String,
+    required: true
+  },
+  llmProvider: {
+    type: String,
+    required: true
+  },
+  llmModel: {
+    type: String,
+    required: true
+  },
+  capabilities: [String],
+  historyConfig: Schema.Types.Mixed,
+  tools: [Schema.Types.Mixed],
+  outputConfig: Schema.Types.Mixed,
+  robotId: {
+    type: String,
+    required: true,
+    enum: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001']
+  },
+  
+  // Canvas properties
   position: {
     type: {
       x: { type: Number, required: true },
@@ -1234,123 +1431,221 @@ app.listen(PORT, () => {
 ---
 
 ## 📦 JALON 3: API MÉTIER & GOUVERNANCE (Semaine 2-3)
-**Durée**: 7-9 jours | **Criticité**: 🟠 HAUTE | **Impact Guest Mode**: ✅ AUCUN
+**Durée**: 12-14 jours (+5 jours corrections) | **Criticité**: 🟠 HAUTE | **Impact Guest Mode**: ✅ AUCUN
+
+> ⚠️ **CORRECTIONS MAJEURES IMPLÉMENTÉES (Phase 1)**  
+> - ❌ Gouvernance Robot stricte ABANDONNÉE → ✅ Gouvernance ownership-based  
+> - ✅ Hiérarchie Workflow implémentée (User → Workflow → AgentInstance)  
+> - ✅ AgentPrototype (GLOBAL) + AgentInstance (LOCAL) avec snapshot  
+> - ✅ 20 endpoints créés (workflows, agent-prototypes, agent-instances)  
+> - 📄 Détails : [`PERSISTANCE_SECURISEE_AUTHENTICATION_v1.1_CORRECTIONS.md`](./PERSISTANCE_SECURISEE_AUTHENTICATION_v1.1_CORRECTIONS.md)
 
 ### **Objectifs**
-- Créer routes CRUD pour Agents, Instances, Workflows
-- Implémenter gouvernance backend (RobotId validation)
-- Proxy LLM sécurisé (API keys déchiffrées côté serveur)
-- Routes LLM Configs avec chiffrement
+- ✅ **Phase 1 (COMPLÉTÉ)** : Routes Workflows, AgentPrototypes, AgentInstances avec gouvernance ownership
+- ⏳ **Phase 2 (EN COURS)** : Routes LLM Configs + Proxy LLM sécurisé (SSE streaming)
+- ⏳ **Phase 3** : Tests automatisés (unitaires, fonctionnels, non-régression)
 
-### **JALON 3.1: Routes Agents (Prototypes)**
+### **JALON 3.1: Routes Workflows** ✅ **(IMPLÉMENTÉ - Phase 1)**
 
-**Fichier**: `backend/src/routes/agents.routes.ts`
+**Fichier**: `backend/src/routes/workflows.routes.ts` (246 lignes)
 
+> 🎯 **Portée** : Gestion des canvas workflow utilisateur (1:N par user)  
+> 🔐 **Gouvernance** : `requireAuth` + `requireOwnershipAsync`  
+> 📊 **État** : ✅ 8 endpoints opérationnels
+
+**Routes disponibles** :
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| GET | `/api/workflows` | Liste workflows user + agent counts | requireAuth |
+| GET | `/api/workflows/:id` | Workflow + agents + edges (composite) | requireAuth + ownership |
+| POST | `/api/workflows` | Créer workflow (premier auto-active) | requireAuth |
+| PUT | `/api/workflows/:id` | Mettre à jour (gère isActive toggle) | requireAuth + ownership |
+| DELETE | `/api/workflows/:id` | Supprimer (cascade instances + edges) | requireAuth + ownership |
+| POST | `/api/workflows/:id/save` | Marquer sauvegardé (reset isDirty) | requireAuth + ownership |
+| POST | `/api/workflows/:id/mark-dirty` | Marquer modifié | requireAuth + ownership |
+
+**Exemple requête composite** :
 ```typescript
-import { Router } from 'express';
-import { z } from 'zod';
-import { Agent } from '../models/Agent.model';
-import { AgentInstance } from '../models/AgentInstance.model';
-import { requireAuth } from '../middleware/auth.middleware';
-import { validateRequest } from '../middleware/validation.middleware';
-
-const router = Router();
-
-// Schema validation
-const createAgentSchema = z.object({
-  name: z.string().min(1).max(100),
-  role: z.string().min(1).max(200),
-  systemPrompt: z.string().min(1),
-  llmProvider: z.string(),
-  model: z.string(),
-  capabilities: z.array(z.string()),
-  historyConfig: z.object({}).passthrough().optional(),
-  tools: z.array(z.object({}).passthrough()).optional(),
-  outputConfig: z.object({}).passthrough().optional(),
-  creatorId: z.string()
-});
-
-// GET /api/agents - Liste des agents de l'utilisateur
-router.get('/', requireAuth, async (req, res) => {
-  try {
-    const user = req.user as any;
-    const agents = await Agent.find({ ownerId: user.id }).sort({ createdAt: -1 });
-    res.json(agents);
-  } catch (error) {
-    console.error('[Agents] GET error:', error);
-    res.status(500).json({ error: 'Erreur récupération agents' });
-  }
-});
-
-// GET /api/agents/:id - Agent spécifique
-router.get('/:id', requireAuth, async (req, res) => {
-  try {
-    const user = req.user as any;
-    const agent = await Agent.findOne({ _id: req.params.id, ownerId: user.id });
-    
-    if (!agent) {
-      return res.status(404).json({ error: 'Agent introuvable' });
+// GET /api/workflows/[id]
+// Response enrichie avec agents + edges
+{
+  "workflow": {
+    "_id": "...",
+    "userId": "...",
+    "name": "Mon Workflow Principal",
+    "isActive": true,
+    "isDirty": false,
+    "lastSavedAt": "2025-12-10T14:30:00Z"
+  },
+  "agents": [
+    {
+      "_id": "...",
+      "workflowId": "...",
+      "name": "Agent Analyste",
+      "position": { "x": 100, "y": 200 },
+      "robotId": "AR_001",
+      // ... snapshot complet config
     }
-    
-    res.json(agent);
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur récupération agent' });
-  }
-});
-
-// POST /api/agents - Création avec gouvernance
-router.post('/', requireAuth, validateRequest(createAgentSchema), async (req, res) => {
-  try {
-    const user = req.user as any;
-    const { creatorId, ...agentData } = req.body;
-    
-    // GOUVERNANCE: Vérifier que le creatorId est valide
-    const validCreators = ['AR_001']; // RobotId.Archi uniquement pour agents
-    if (!validCreators.includes(creatorId)) {
-      return res.status(403).json({
-        error: 'Seul le robot Archi peut créer des agents',
-        allowedCreators: validCreators
-      });
+  ],
+  "edges": [
+    {
+      "_id": "...",
+      "workflowId": "...",
+      "sourceInstanceId": "...",
+      "targetInstanceId": "...",
+      "edgeType": "default"
     }
-    
-    // Créer agent avec ownerId
-    const agent = new Agent({
-      ...agentData,
-      creatorId,
-      ownerId: user.id
-    });
-    
-    await agent.save();
-    
-    res.status(201).json(agent);
-  } catch (error) {
-    console.error('[Agents] POST error:', error);
-    res.status(500).json({ error: 'Erreur création agent' });
-  }
-});
+  ]
+}
+```
 
-// PATCH /api/agents/:id - Modification
-router.patch('/:id', requireAuth, async (req, res) => {
-  try {
-    const user = req.user as any;
-    const agent = await Agent.findOne({ _id: req.params.id, ownerId: user.id });
-    
-    if (!agent) {
-      return res.status(404).json({ error: 'Agent introuvable' });
-    }
-    
-    // Empêcher modification creatorId et ownerId
-    delete req.body.creatorId;
-    delete req.body.ownerId;
-    
-    Object.assign(agent, req.body);
-    await agent.save();
-    
-    res.json(agent);
-  } catch (error) {
-    res.status(500).json({ error: 'Erreur modification agent' });
-  }
+**Fonctionnalités clés** :
+- ✅ Cascade delete : Suppression workflow → delete instances + edges
+- ✅ Gestion `isDirty` : Auto-update sur modifications instances
+- ✅ `isActive` : Un seul workflow actif par user (toggle automatique)
+- ✅ Enrichissement : Agent count dans liste workflows
+
+---
+
+### **JALON 3.2: Routes Agent Prototypes** ✅ **(IMPLÉMENTÉ - Phase 1)**
+
+**Fichier**: `backend/src/routes/agent-prototypes.routes.ts` (124 lignes)
+
+> 🎯 **Portée** : GLOBAL (templates réutilisables, accessibles de tous workflows)  
+> 🔐 **Gouvernance** : Ownership-based (PAS de restriction robotId)  
+> 📊 **État** : ✅ 5 endpoints opérationnels
+
+**Routes disponibles** :
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| GET | `/api/agent-prototypes` | Liste prototypes user (filter robotId optionnel) | requireAuth |
+| GET | `/api/agent-prototypes/:id` | Prototype spécifique | requireAuth + ownership |
+| POST | `/api/agent-prototypes` | Créer prototype (AUCUNE restriction robotId) | requireAuth |
+| PUT | `/api/agent-prototypes/:id` | Modifier prototype | requireAuth + ownership |
+| DELETE | `/api/agent-prototypes/:id` | Supprimer (instances gardent snapshot) | requireAuth + ownership |
+
+**⚠️ CHANGEMENT CRITIQUE vs Plan Initial** :
+```typescript
+// ❌ ANCIEN (SUPPRIMÉ)
+// GOUVERNANCE: Vérifier que le creatorId est valide
+const validCreators = ['AR_001']; // Seul Archi pouvait créer
+if (!validCreators.includes(creatorId)) {
+  return res.status(403).json({ error: 'Non autorisé' });
+}
+
+// ✅ NOUVEAU (IMPLÉMENTÉ)
+// User authentifié peut créer avec N'IMPORTE QUEL robotId
+const prototype = new AgentPrototype({
+  userId: user.id,
+  robotId: req.body.robotId, // Metadata, pas de restriction
+  // ...
 });
+```
+
+**Exemple requête** :
+```typescript
+// POST /api/agent-prototypes
+{
+  "robotId": "COM_001",  // ✅ Accepté (metadata uniquement)
+  "name": "Agent API Connector",
+  "role": "Connexion APIs externes",
+  "systemPrompt": "Tu gères les connexions...",
+  "llmProvider": "Anthropic",
+  "llmModel": "claude-3-5-sonnet-20241022",
+  "capabilities": ["api-calls", "oauth"],
+  "tools": [...]
+}
+
+// Response
+{
+  "_id": "...",
+  "userId": "...",
+  "robotId": "COM_001",
+  "name": "Agent API Connector",
+  "isPrototype": true,
+  "createdAt": "..."
+}
+```
+
+---
+
+### **JALON 3.3: Routes Agent Instances** ✅ **(IMPLÉMENTÉ - Phase 1)**
+
+**Fichier**: `backend/src/routes/agent-instances.routes.ts` (216 lignes)
+
+> 🎯 **Portée** : LOCAL (liées à UN workflow spécifique)  
+> 🔐 **Gouvernance** : Ownership workflow + agent  
+> 📊 **État** : ✅ 6 endpoints opérationnels
+
+**Routes disponibles** :
+
+| Méthode | Endpoint | Description | Auth |
+|---------|----------|-------------|------|
+| GET | `/api/agent-instances?workflowId=X` | Liste instances workflow (workflowId requis) | requireAuth |
+| GET | `/api/agent-instances/:id` | Instance spécifique | requireAuth + ownership |
+| POST | `/api/agent-instances` | Créer instance sur workflow | requireAuth |
+| PUT | `/api/agent-instances/:id` | Modifier instance (auto isDirty workflow) | requireAuth + ownership |
+| DELETE | `/api/agent-instances/:id` | Supprimer instance (auto isDirty workflow) | requireAuth + ownership |
+| POST | `/api/agent-instances/from-prototype` | Créer depuis prototype (snapshot) | requireAuth |
+
+**Fonctionnalités critiques** :
+
+1. **Snapshot indépendant** :
+```typescript
+// POST /api/agent-instances/from-prototype
+{
+  "workflowId": "...",
+  "prototypeId": "...",
+  "position": { "x": 100, "y": 200 }
+}
+
+// Response - Instance avec SNAPSHOT COMPLET
+{
+  "_id": "...",
+  "workflowId": "...",
+  "userId": "...",
+  "prototypeId": "...", // Lien optionnel
+  // SNAPSHOT CONFIG (copie indépendante)
+  "name": "Agent API Connector",
+  "role": "Connexion APIs externes",
+  "systemPrompt": "Tu gères les connexions...",
+  "llmProvider": "Anthropic",
+  "llmModel": "claude-3-5-sonnet-20241022",
+  "capabilities": ["api-calls", "oauth"],
+  "tools": [...],
+  "robotId": "COM_001",
+  // Canvas properties
+  "position": { "x": 100, "y": 200 },
+  "zIndex": 0,
+  "isMinimized": false
+}
+```
+
+2. **Auto isDirty workflow** :
+```typescript
+// PUT /api/agent-instances/:id
+{
+  "systemPrompt": "Nouvelle instruction..."
+}
+
+// Side-effect automatique:
+// → Workflow.isDirty = true
+// → Bouton "Sauvegarde" UI activé
+```
+
+3. **Validation ownership cascade** :
+```typescript
+// Vérifie que:
+// - User authentifié = owner de l'instance
+// - User authentifié = owner du workflow parent
+// - (optionnel) User authentifié = owner du prototype source
+```
+
+---
+
+### **JALON 3.4: Routes LLM Configs** ⏳ **(PHASE 2 - À VENIR)**
 
 // DELETE /api/agents/:id - Suppression avec cascade optionnel
 router.delete('/:id', requireAuth, async (req, res) => {
@@ -1395,9 +1690,82 @@ router.delete('/:id', requireAuth, async (req, res) => {
 export default router;
 ```
 
-### **JALON 3.2: Routes LLM Configs (Sécurisées)**
+### **JALON 3.4: Routes LLM Configs** ⏳ **(PHASE 2 - À VENIR)**
 
-**Fichier**: `backend/src/routes/llm-configs.routes.ts`
+**Fichier**: `backend/src/routes/llm-configs.routes.ts` *(à créer)*
+
+> 🎯 **Portée** : GLOBAL (configs LLM accessibles de tous workflows)  
+> 🔐 **Sécurité** : Chiffrement AES-256-GCM server-side (utils/encryption.ts)  
+> 📊 **État** : ⏳ À implémenter (Phase 2)
+
+**Routes à implémenter** :
+
+| Méthode | Endpoint | Description | Sécurité |
+|---------|----------|-------------|----------|
+| GET | `/api/llm-configs` | Liste configs user (API keys JAMAIS retournées) | requireAuth |
+| POST | `/api/llm-configs` | Créer/Mettre à jour config (upsert) | requireAuth + encrypt |
+| DELETE | `/api/llm-configs/:provider` | Supprimer config | requireAuth + ownership |
+
+**Modèle LLMConfig** (conservé du plan initial) :
+```typescript
+import mongoose, { Document, Schema } from 'mongoose';
+import { encrypt, decrypt } from '../utils/encryption';
+
+export interface ILLMConfig extends Document {
+  userId: mongoose.Types.ObjectId;
+  provider: string;
+  enabled: boolean;
+  apiKeyEncrypted: string;
+  capabilities: Record<string, boolean>;
+  updatedAt: Date;
+  getDecryptedApiKey(): string;
+  setApiKey(plainKey: string): void;
+}
+
+const LLMConfigSchema = new Schema<ILLMConfig>({
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  provider: {
+    type: String,
+    required: true
+  },
+  enabled: {
+    type: Boolean,
+    default: true
+  },
+  apiKeyEncrypted: {
+    type: String,
+    required: true
+  },
+  capabilities: {
+    type: Schema.Types.Mixed,
+    default: {}
+  }
+}, {
+  timestamps: true
+});
+
+// Unique constraint: 1 config par provider par user
+LLMConfigSchema.index({ userId: 1, provider: 1 }, { unique: true });
+
+// Méthode: Déchiffrer API key
+LLMConfigSchema.methods.getDecryptedApiKey = function(): string {
+  return decrypt(this.apiKeyEncrypted, this.userId.toString());
+};
+
+// Méthode: Chiffrer et stocker API key
+LLMConfigSchema.methods.setApiKey = function(plainKey: string): void {
+  this.apiKeyEncrypted = encrypt(plainKey, this.userId.toString());
+};
+
+export const LLMConfig = mongoose.model<ILLMConfig>('LLMConfig', LLMConfigSchema);
+```
+
+**Routes à implémenter** :
 
 ```typescript
 import { Router } from 'express';
@@ -1496,9 +1864,13 @@ router.delete('/:provider', requireAuth, async (req, res) => {
 export default router;
 ```
 
-### **JALON 3.3: Proxy LLM Sécurisé**
+### **JALON 3.5: Proxy LLM Sécurisé** ⏳ **(PHASE 2 - À VENIR)**
 
-**Fichier**: `backend/src/routes/llm-proxy.routes.ts`
+**Fichier**: `backend/src/routes/llm-proxy.routes.ts` *(à créer)*
+
+> 🎯 **Objectif** : Router LLM requests via backend (API keys jamais exposées client)  
+> 🔐 **Sécurité** : Déchiffrement API keys server-side uniquement  
+> 📊 **État** : ⏳ À implémenter (Phase 2)
 
 ```typescript
 import { Router } from 'express';
@@ -1594,19 +1966,51 @@ app.use('/api/llm', llmProxyRoutes);
 ```
 
 ### **Livrables Jalon 3**
-- ✅ Routes `/api/agents` (CRUD avec gouvernance)
-- ✅ Routes `/api/llm-configs` (chiffrement API keys)
-- ✅ Routes `/api/llm/stream` (proxy sécurisé)
-- ✅ Validation Zod sur toutes routes
-- ✅ Ownership checks (user ne voit que ses données)
+
+#### **✅ Phase 1 - COMPLÉTÉ** (10 Décembre 2025)
+- ✅ Modèle `Workflow` (51 lignes, indexes optimisés)
+- ✅ Modèle `WorkflowEdge` (65 lignes)
+- ✅ Modèle `AgentPrototype` (84 lignes, renommé depuis Agent)
+- ✅ Modèle `AgentInstance` modifié (workflowId + snapshot complet)
+- ✅ Middleware `requireOwnershipAsync` (async MongoDB queries)
+- ✅ Routes `/api/workflows` (246 lignes, 8 endpoints)
+- ✅ Routes `/api/agent-prototypes` (124 lignes, 5 endpoints)
+- ✅ Routes `/api/agent-instances` (216 lignes, 6 endpoints)
+- ✅ Suppression gouvernance Robot stricte (2 fichiers)
+- ✅ Intégration server.ts (montage routes)
+- ✅ Build TypeScript 0 erreurs
+- ✅ Commit Git : `f416e3f` (11 fichiers, 889 insertions, 105 suppressions)
+
+#### **⏳ Phase 2 - EN COURS**
+- ⏳ Modèle `LLMConfig` (chiffrement AES-256-GCM)
+- ⏳ Routes `/api/llm-configs` (GET, POST, DELETE avec encryption)
+- ⏳ Routes `/api/llm/stream` (proxy SSE streaming)
+- ⏳ Routes `/api/llm/generate` (proxy non-streaming)
+- ⏳ Utilisation `utils/encryption.ts` existant
+
+#### **⏳ Phase 3 - TESTS**
+- ⏳ Tests unitaires modèles (Workflow, AgentInstance, middlewares)
+- ⏳ Tests fonctionnels routes (workflows CRUD, instances CRUD)
+- ⏳ Tests non-régression (Guest mode préservé)
 
 ### **Checklist Sécurité Jalon 3**
-- [ ] Tous endpoints protégés par `requireAuth`
-- [ ] Filter par `ownerId` sur toutes queries
+
+#### **✅ Phase 1 - Validé**
+- ✅ Tous endpoints protégés par `requireAuth`
+- ✅ Ownership checks avec `requireOwnershipAsync`
+- ✅ Filter par `userId` sur toutes queries
+- ✅ Cascade delete workflows (instances + edges)
+- ✅ Snapshot indépendant AgentInstance
+- ✅ **TEST MANUEL** : `GET /api/workflows` fonctionne
+- ✅ **TEST MANUEL** : `POST /api/agent-prototypes` accepte tous robotId
+- ✅ **BUILD** : TypeScript 0 erreurs
+
+#### **⏳ Phase 2 - À Valider**
+- [ ] API keys chiffrées AES-256-GCM
 - [ ] API keys JAMAIS retournées déchiffrées
-- [ ] Gouvernance RobotId validée backend
-- [ ] **TEST** : `GET /api/agents` retourne agents user uniquement
+- [ ] SSE streaming opérationnel
 - [ ] **TEST** : `POST /api/llm-configs` chiffre API key
+- [ ] **TEST** : `POST /api/llm/stream` stream sans exposer API key
 - [ ] **TEST NON-RÉGRESSION** : Frontend Guest mode intact
 
 ---
