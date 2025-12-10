@@ -95,4 +95,37 @@ export const requireOwnership = (getUserIdFromRequest: (req: Request) => string)
     };
 };
 
+/**
+ * Middleware: Vérifie ownership avec query async MongoDB
+ * @param getResourceUserId Fonction async qui retourne l'userId de la ressource ou null si introuvable
+ */
+export const requireOwnershipAsync = (
+    getResourceUserId: (req: Request) => Promise<string | null>
+) => {
+    return async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            if (!req.user) {
+                return res.status(401).json({ error: 'Non authentifié' });
+            }
+
+            const user = req.user as IUser;
+            const resourceUserId = await getResourceUserId(req);
+
+            if (!resourceUserId) {
+                return res.status(404).json({ error: 'Ressource introuvable' });
+            }
+
+            // Admin bypass ownership check
+            if (user.id !== resourceUserId && user.role !== 'admin') {
+                return res.status(403).json({ error: 'Accès non autorisé à cette ressource' });
+            }
+
+            next();
+        } catch (error) {
+            console.error('[requireOwnershipAsync] Error:', error);
+            res.status(500).json({ error: 'Erreur vérification ownership' });
+        }
+    };
+};
+
 export default passport;

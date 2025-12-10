@@ -11,6 +11,9 @@ import passport from './middleware/auth.middleware';
 import { connectDatabase } from './config/database';
 import lmstudioRoutes from './routes/lmstudio.routes';
 import authRoutes from './routes/auth.routes';
+import workflowsRoutes from './routes/workflows.routes';
+import agentPrototypesRoutes from './routes/agent-prototypes.routes';
+import agentInstancesRoutes from './routes/agent-instances.routes';
 
 // Charger variables d'environnement
 dotenv.config();
@@ -44,6 +47,11 @@ app.get('/api/health', (req, res) => {
 
 // Auth routes (Jalon 2)
 app.use('/api/auth', authRoutes);
+
+// Workflow routes (Jalon 3)
+app.use('/api/workflows', workflowsRoutes);
+app.use('/api/agent-prototypes', agentPrototypesRoutes);
+app.use('/api/agent-instances', agentInstancesRoutes);
 
 // Routes proxy LMStudio
 app.use('/api/lmstudio', lmstudioRoutes);

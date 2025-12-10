@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IAgent extends Document {
+export interface IAgentPrototype extends Document {
+    userId: mongoose.Types.ObjectId;
     name: string;
     role: string;
     systemPrompt: string;
@@ -10,13 +11,19 @@ export interface IAgent extends Document {
     historyConfig?: object;
     tools?: object[];
     outputConfig?: object;
-    creatorId: string; // RobotId (e.g., 'AR_001')
-    ownerId: mongoose.Types.ObjectId; // FK → User
+    robotId: string;
+    isPrototype: true;
     createdAt: Date;
     updatedAt: Date;
 }
 
-const AgentSchema = new Schema<IAgent>({
+const AgentPrototypeSchema = new Schema<IAgentPrototype>({
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true
+    },
     name: {
         type: String,
         required: true,
@@ -49,7 +56,7 @@ const AgentSchema = new Schema<IAgent>({
     historyConfig: Schema.Types.Mixed,
     tools: [Schema.Types.Mixed],
     outputConfig: Schema.Types.Mixed,
-    creatorId: {
+    robotId: {
         type: String,
         required: true,
         enum: {
@@ -58,18 +65,17 @@ const AgentSchema = new Schema<IAgent>({
         },
         index: true
     },
-    ownerId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        index: true
+    isPrototype: {
+        type: Boolean,
+        default: true,
+        immutable: true
     }
 }, {
     timestamps: true
 });
 
-// Index composé pour queries optimisées
-AgentSchema.index({ ownerId: 1, creatorId: 1 });
-AgentSchema.index({ ownerId: 1, createdAt: -1 });
+// Index pour queries optimisées
+AgentPrototypeSchema.index({ userId: 1, createdAt: -1 });
+AgentPrototypeSchema.index({ userId: 1, robotId: 1 });
 
-export const Agent = mongoose.model<IAgent>('Agent', AgentSchema);
+export const AgentPrototype = mongoose.model<IAgentPrototype>('AgentPrototype', AgentPrototypeSchema);
