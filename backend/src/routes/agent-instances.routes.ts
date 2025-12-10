@@ -129,6 +129,68 @@ router.post('/',
     }
 );
 
+// POST /api/agent-instances/from-prototype - Créer instance depuis prototype
+router.post('/from-prototype', requireAuth, async (req, res) => {
+    try {
+        const user = req.user as IUser;
+        const { prototypeId, workflowId, position } = req.body;
+
+        if (!prototypeId || !workflowId || !position) {
+            return res.status(400).json({
+                error: 'prototypeId, workflowId et position requis'
+            });
+        }
+
+        // Vérifier ownership prototype
+        const prototype = await AgentPrototype.findOne({ _id: prototypeId, userId: user.id });
+        if (!prototype) {
+            return res.status(404).json({ error: 'Prototype introuvable' });
+        }
+
+        // Vérifier ownership workflow
+        const workflow = await Workflow.findOne({ _id: workflowId, userId: user.id });
+        if (!workflow) {
+            return res.status(404).json({ error: 'Workflow introuvable' });
+        }
+
+        // Créer instance avec snapshot du prototype
+        const instance = new AgentInstance({
+            workflowId,
+            userId: user.id,
+            prototypeId: prototype.id,
+
+            // Snapshot config
+            name: prototype.name,
+            role: prototype.role,
+            systemPrompt: prototype.systemPrompt,
+            llmProvider: prototype.llmProvider,
+            llmModel: prototype.llmModel,
+            capabilities: prototype.capabilities,
+            historyConfig: prototype.historyConfig,
+            tools: prototype.tools,
+            outputConfig: prototype.outputConfig,
+            robotId: prototype.robotId,
+
+            // Canvas properties
+            position,
+            isMinimized: false,
+            isMaximized: false,
+            zIndex: 0
+        });
+
+        await instance.save();
+
+        // Marquer workflow comme dirty
+        workflow.isDirty = true;
+        await workflow.save();
+
+        res.status(201).json(instance);
+    } catch (error) {
+        console.error('[AgentInstances] POST/from-prototype error:', error);
+        res.status(500).json({ error: 'Erreur création instance depuis prototype' });
+    }
+});
+
 // PUT /api/agent-instances/:id - Mettre à jour instance
 router.put('/:id',
     requireAuth,
@@ -201,67 +263,5 @@ router.delete('/:id',
         }
     }
 );
-
-// POST /api/agent-instances/from-prototype - Créer instance depuis prototype
-router.post('/from-prototype', requireAuth, async (req, res) => {
-    try {
-        const user = req.user as IUser;
-        const { prototypeId, workflowId, position } = req.body;
-
-        if (!prototypeId || !workflowId || !position) {
-            return res.status(400).json({
-                error: 'prototypeId, workflowId et position requis'
-            });
-        }
-
-        // Vérifier ownership prototype
-        const prototype = await AgentPrototype.findOne({ _id: prototypeId, userId: user.id });
-        if (!prototype) {
-            return res.status(404).json({ error: 'Prototype introuvable' });
-        }
-
-        // Vérifier ownership workflow
-        const workflow = await Workflow.findOne({ _id: workflowId, userId: user.id });
-        if (!workflow) {
-            return res.status(404).json({ error: 'Workflow introuvable' });
-        }
-
-        // Créer instance avec snapshot du prototype
-        const instance = new AgentInstance({
-            workflowId,
-            userId: user.id,
-            prototypeId: prototype.id,
-
-            // Snapshot config
-            name: prototype.name,
-            role: prototype.role,
-            systemPrompt: prototype.systemPrompt,
-            llmProvider: prototype.llmProvider,
-            llmModel: prototype.llmModel,
-            capabilities: prototype.capabilities,
-            historyConfig: prototype.historyConfig,
-            tools: prototype.tools,
-            outputConfig: prototype.outputConfig,
-            robotId: prototype.robotId,
-
-            // Canvas properties
-            position,
-            isMinimized: false,
-            isMaximized: false,
-            zIndex: 0
-        });
-
-        await instance.save();
-
-        // Marquer workflow comme dirty
-        workflow.isDirty = true;
-        await workflow.save();
-
-        res.status(201).json(instance);
-    } catch (error) {
-        console.error('[AgentInstances] POST/from-prototype error:', error);
-        res.status(500).json({ error: 'Erreur création instance depuis prototype' });
-    }
-});
 
 export default router;
