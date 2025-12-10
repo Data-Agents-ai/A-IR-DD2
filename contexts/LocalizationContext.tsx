@@ -42,7 +42,7 @@ export const LocalizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const t = useCallback((key: string, params: Record<string, string | number> = {}) => {
         const translations = allTranslations[locale] || allTranslations[defaultLocale];
         let translation = translations[key];
-        
+
         if (!translation) {
             console.warn(`Translation key '${key}' not found for locale '${locale}'.`);
             return key;
@@ -61,4 +61,19 @@ export const LocalizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             {children}
         </LocalizationContext.Provider>
     );
+};
+
+/**
+ * useLocalization hook - Access localization context
+ * 
+ * Usage:
+ * const { locale, setLocale, t } = useLocalization();
+ * const translated = t('key');
+ */
+export const useLocalization = (): LocalizationContextType => {
+    const context = React.useContext(LocalizationContext);
+    if (!context) {
+        throw new Error('useLocalization must be used within LocalizationProvider');
+    }
+    return context;
 };

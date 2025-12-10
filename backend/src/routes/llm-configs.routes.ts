@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { LLMConfig } from '../models/LLMConfig.model';
+import UserSettings from '../models/UserSettings.model';
 import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 
@@ -143,10 +144,11 @@ router.get('/:provider', requireAuth, async (req: Request, res: Response) => {
 router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: Request, res: Response) => {
     try {
         const user = req.user as any;
+        const userId = user.id || user._id;
         const { provider, apiKey, enabled, capabilities } = req.body;
 
         // Upsert: chercher config existante
-        let config = await LLMConfig.findOne({ userId: user.id, provider });
+        let config = await LLMConfig.findOne({ userId, provider });
 
         if (config) {
             // Update existant
@@ -155,11 +157,11 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
             config.setApiKey(apiKey); // Chiffrement automatique
             await config.save();
 
-            console.log(`[LLMConfig] Updated config for user ${user.id}, provider ${provider}`);
+            console.log(`[LLMConfig] Updated config for user ${userId}, provider ${provider}`);
         } else {
             // Nouveau
             config = new LLMConfig({
-                userId: user.id,
+                userId,
                 provider,
                 enabled,
                 capabilities
@@ -167,7 +169,34 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
             config.setApiKey(apiKey); // Chiffrement automatique
             await config.save();
 
-            console.log(`[LLMConfig] Created config for user ${user.id}, provider ${provider}`);
+            console.log(`[LLMConfig] Created config for user ${userId}, provider ${provider}`);
+        }
+
+        // SYNC J4.3: Also update UserSettings
+        try {
+            let userSettings = await UserSettings.findOne({ userId });
+
+            if (!userSettings) {
+                userSettings = new UserSettings({
+                    userId,
+                    llmConfigs: {},
+                    preferences: { language: 'fr', theme: 'dark' }
+                });
+            }
+
+            // Update UserSettings.llmConfigs for this provider
+            userSettings.llmConfigs[provider] = {
+                enabled,
+                apiKeyEncrypted: config.apiKeyEncrypted,
+                capabilities,
+                lastUpdated: new Date()
+            };
+
+            await userSettings.save();
+            console.log(`[LLMConfig] Synced to UserSettings for provider ${provider}`);
+        } catch (syncError) {
+            // Log but don't fail - UserSettings is secondary
+            console.warn('[LLMConfig] UserSettings sync warning:', syncError);
         }
 
         // Response sécurisée (sans API key)
@@ -204,15 +233,29 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
 router.delete('/:provider', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = req.user as any;
+        const userId = user.id || user._id;
         const { provider } = req.params;
 
-        const result = await LLMConfig.deleteOne({ userId: user.id, provider });
+        const result = await LLMConfig.deleteOne({ userId, provider });
 
         if (result.deletedCount === 0) {
             return res.status(404).json({ error: 'Config LLM introuvable' });
         }
 
-        console.log(`[LLMConfig] Deleted config for user ${user.id}, provider ${provider}`);
+        // SYNC J4.3: Also remove from UserSettings
+        try {
+            const userSettings = await UserSettings.findOne({ userId });
+            if (userSettings && userSettings.llmConfigs[provider]) {
+                delete userSettings.llmConfigs[provider];
+                await userSettings.save();
+                console.log(`[LLMConfig] Removed from UserSettings for provider ${provider}`);
+            }
+        } catch (syncError) {
+            // Log but don't fail - UserSettings is secondary
+            console.warn('[LLMConfig] UserSettings sync warning on delete:', syncError);
+        }
+
+        console.log(`[LLMConfig] Deleted config for user ${userId}, provider ${provider}`);
         res.json({ message: 'Config LLM supprimée' });
     } catch (error) {
         console.error('[LLMConfig] DELETE error:', error);

@@ -16,6 +16,7 @@ import agentPrototypesRoutes from './routes/agent-prototypes.routes';
 import agentInstancesRoutes from './routes/agent-instances.routes';
 import llmConfigsRoutes from './routes/llm-configs.routes';
 import llmProxyRoutes from './routes/llm-proxy.routes';
+import userSettingsRoutes from './routes/user-settings.routes';
 
 // Charger variables d'environnement
 dotenv.config();
@@ -58,6 +59,9 @@ app.use('/api/agent-instances', agentInstancesRoutes);
 // LLM routes (Jalon 3 - Phase 2)
 app.use('/api/llm-configs', llmConfigsRoutes);
 app.use('/api/llm', llmProxyRoutes);
+
+// User settings routes (Jalon 4 - Phase 3)
+app.use(userSettingsRoutes);
 
 // Routes proxy LMStudio (legacy)
 app.use('/api/lmstudio', lmstudioRoutes);

@@ -16,8 +16,11 @@ import { FullscreenChatModal } from './components/modals/FullscreenChatModal';
 import { AgentConfigurationModal } from './components/modals/AgentConfigurationModal';
 import { useRuntimeStore } from './stores/useRuntimeStore';
 import { useDesignStore } from './stores/useDesignStore';
-import { NotificationProvider } from './contexts/NotificationContext';
+import { NotificationProvider } from './contexts';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationDisplay } from './components/NotificationDisplay';
+import { QueryProvider } from './providers';
+import { getSettingsStorage } from './utils/SettingsStorage';
 
 
 const LLM_CONFIGS_KEY = 'llmAgentWorkflow_configs';
@@ -111,7 +114,12 @@ interface UpdateConfirmationState {
 }
 
 
-function App() {
+/**
+ * Inner App component that uses Auth context
+ * Must be wrapped by AuthProvider to access useAuth()
+ */
+function AppContent() {
+  const { isAuthenticated, accessToken } = useAuth();
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isAgentModalOpen, setAgentModalOpen] = useState(false);
   const [isImagePanelOpen, setImagePanelOpen] = useState(false);
@@ -194,7 +202,7 @@ function App() {
     console.log(`Navigating to robot ${robotId} at path ${path}`);
   };
 
-  const handleSaveSettings = (newLLMConfigs: LLMConfig[]) => {
+  const handleSaveSettings = async (newLLMConfigs: LLMConfig[]) => {
     try {
       console.log('[App] handleSaveSettings called with configs:', newLLMConfigs);
       const lmStudioConfig = newLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
@@ -203,13 +211,42 @@ function App() {
         endpoint: lmStudioConfig?.apiKey
       });
 
-      localStorage.setItem(LLM_CONFIGS_KEY, JSON.stringify(newLLMConfigs));
-      console.log('[App] Configs saved to localStorage successfully');
+      // Get appropriate storage based on auth state
+      const storage = getSettingsStorage({
+        isAuthenticated,
+        accessToken,
+        user: null,
+        login: async () => { },
+        register: async () => { },
+        logout: () => { },
+        refreshToken: async () => { },
+        llmApiKeys: null,
+        isLoading: false,
+        error: null
+      });
 
+      // Transform LLMConfig to UserSettingsData format
+      const llmConfigsData: Record<string, any> = {};
+      newLLMConfigs.forEach(config => {
+        llmConfigsData[config.provider] = {
+          enabled: config.enabled,
+          apiKey: config.apiKey,
+          capabilities: config.capabilities,
+          lastUpdated: new Date()
+        };
+      });
+
+      // Save using abstraction (localStorage for guest, DB for auth)
+      await storage.saveSettings({
+        llmConfigs: llmConfigsData,
+        preferences: { language: 'fr' }
+      });
+
+      console.log('[App] Configs saved to storage successfully');
       setLlmConfigs(newLLMConfigs);
       console.log('[App] React state updated with new configs');
     } catch (error) {
-      console.error("[App] Failed to save settings to localStorage", error);
+      console.error("[App] Failed to save settings", error);
     }
   };
 
@@ -398,175 +435,189 @@ function App() {
   };
 
   return (
-    <NotificationProvider>
-      <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
-        <Header
-          onOpenSettings={() => setSettingsModalOpen(true)}
-        />
-        <div className="flex flex-1 overflow-hidden">
-          <NavigationLayout
-            agents={agents}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
-            onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
-            onAddToWorkflow={addAgentToWorkflow}
-            onDeleteAgent={handleDeleteAgent}
-            onEditAgent={handleOpenEditAgentModal}
-            currentPath={currentPath}
-            onNavigate={handleRobotNavigation}
+    <QueryProvider>
+      <NotificationProvider>
+        <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
+          <Header
+            onOpenSettings={() => setSettingsModalOpen(true)}
           />
-          <main className="flex-1 bg-gray-800/50 overflow-hidden">
-            <RobotPageRouter
-              currentPath={currentPath}
-              llmConfigs={llmConfigs}
-              onNavigate={handleRobotNavigation}
+          <div className="flex flex-1 overflow-hidden">
+            <NavigationLayout
               agents={agents}
-              workflowNodes={workflowNodes}
-              onDeleteNode={handleDeleteNode}
-              onDeleteNodes={handleDeleteNodes}
-              onUpdateNodeMessages={handleUpdateNodeMessages}
-              onUpdateNodePosition={handleUpdateNodePosition}
-              onToggleNodeMinimize={handleToggleNodeMinimize}
-              onToggleNodeMaximize={handleToggleNodeMaximize}
-              onOpenImagePanel={handleOpenImagePanel}
-              onOpenImageModificationPanel={handleOpenImageModificationPanel}
-              onOpenVideoPanel={handleOpenVideoPanel}
-              onOpenMapsPanel={handleOpenMapsPanel}
-              onOpenFullscreen={handleOpenFullscreen}
-              onOpenAgentFullscreen={handleOpenAgentFullscreen}
-              onAddToWorkflow={handleAddToWorkflow}
-              isImagePanelOpen={isImagePanelOpen}
-              isImageModificationPanelOpen={isImageModificationPanelOpen}
-              isVideoPanelOpen={isVideoPanelOpen}
-              isMapsPanelOpen={isMapsPanelOpen}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
+              onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
+              onAddToWorkflow={addAgentToWorkflow}
+              onDeleteAgent={handleDeleteAgent}
+              onEditAgent={handleOpenEditAgentModal}
+              currentPath={currentPath}
+              onNavigate={handleRobotNavigation}
             />
-          </main>
-        </div>
-
-        {isSettingsModalOpen && (
-          <SettingsModal
-            llmConfigs={llmConfigs}
-            onClose={() => setSettingsModalOpen(false)}
-            onSave={handleSaveSettings}
-          />
-        )}
-
-        {isAgentModalOpen && (
-          <AgentFormModal
-            onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
-            onSave={handleSaveAgent}
-            llmConfigs={llmConfigs}
-            existingAgent={editingAgent}
-          />
-        )}
-
-        {updateConfirmation && (
-          <ConfirmationModal
-            isOpen={true}
-            title={t('dialog_update_title')}
-            message={t('dialog_update_message', { count: updateConfirmation.count })}
-            confirmText={t('dialog_update_confirmButton')}
-            cancelText={t('dialog_update_cancelButton')}
-            onConfirm={() => handleUpdateConfirmation(true)}
-            onCancel={() => handleUpdateConfirmation(false)}
-          />
-        )}
-
-        {deleteConfirmation && (
-          <ConfirmationModal
-            isOpen={true}
-            title={t('dialog_delete_title')}
-            message={t('dialog_delete_message', { agentName: deleteConfirmation.agentName })}
-            confirmText={t('dialog_delete_confirmButton')}
-            onConfirm={confirmDeleteAgent}
-            onCancel={() => setDeleteConfirmation(null)}
-            variant="danger"
-          />
-        )}
-
-        {isImagePanelOpen && (
-          <ImageGenerationPanel
-            isOpen={isImagePanelOpen}
-            nodeId={currentImageNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setImagePanelOpen(false)}
-            onImageGenerated={handleImageGenerated}
-            onOpenImageModificationPanel={handleOpenImageModificationPanel}
-          />
-        )}
-
-        {isImageModificationPanelOpen && (
-          <ImageModificationPanel
-            isOpen={isImageModificationPanelOpen}
-            editingImageInfo={editingImageInfo}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setImageModificationPanelOpen(false)}
-            onImageModified={handleImageModified}
-          />
-        )}
-
-        {isVideoPanelOpen && (
-          <VideoGenerationConfigPanel
-            isOpen={isVideoPanelOpen}
-            nodeId={currentVideoNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setVideoPanelOpen(false)}
-          />
-        )}
-
-        {isMapsPanelOpen && (
-          <MapsGroundingConfigPanel
-            isOpen={isMapsPanelOpen}
-            nodeId={currentMapsNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => {
-              setMapsPanelOpen(false);
-              setMapsPreloadedResults(null);
-            }}
-            preloadedResults={mapsPreloadedResults || undefined}
-          />
-        )}
-
-        {fullscreenImage && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
-            onClick={() => setFullscreenImage(null)}
-          >
-            <img
-              src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`}
-              alt={t('fullscreenModal_alt')}
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Button
-              variant="ghost"
-              onClick={() => setFullscreenImage(null)}
-              className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
-              aria-label={t('fullscreenModal_close_aria')}
-            >
-              &times;
-            </Button>
+            <main className="flex-1 bg-gray-800/50 overflow-hidden">
+              <RobotPageRouter
+                currentPath={currentPath}
+                llmConfigs={llmConfigs}
+                onNavigate={handleRobotNavigation}
+                agents={agents}
+                workflowNodes={workflowNodes}
+                onDeleteNode={handleDeleteNode}
+                onDeleteNodes={handleDeleteNodes}
+                onUpdateNodeMessages={handleUpdateNodeMessages}
+                onUpdateNodePosition={handleUpdateNodePosition}
+                onToggleNodeMinimize={handleToggleNodeMinimize}
+                onToggleNodeMaximize={handleToggleNodeMaximize}
+                onOpenImagePanel={handleOpenImagePanel}
+                onOpenImageModificationPanel={handleOpenImageModificationPanel}
+                onOpenVideoPanel={handleOpenVideoPanel}
+                onOpenMapsPanel={handleOpenMapsPanel}
+                onOpenFullscreen={handleOpenFullscreen}
+                onOpenAgentFullscreen={handleOpenAgentFullscreen}
+                onAddToWorkflow={handleAddToWorkflow}
+                isImagePanelOpen={isImagePanelOpen}
+                isImageModificationPanelOpen={isImageModificationPanelOpen}
+                isVideoPanelOpen={isVideoPanelOpen}
+                isMapsPanelOpen={isMapsPanelOpen}
+              />
+            </main>
           </div>
-        )}
 
-        {/* Fullscreen Chat Modal */}
-        <FullscreenChatModal
-          onDeleteNode={handleDeleteNode}
-          onOpenImagePanel={handleOpenImagePanel}
-          onOpenVideoPanel={handleOpenVideoPanel}
-          onOpenMapsPanel={handleOpenMapsPanel}
-        />
+          {isSettingsModalOpen && (
+            <SettingsModal
+              llmConfigs={llmConfigs}
+              onClose={() => setSettingsModalOpen(false)}
+              onSave={handleSaveSettings}
+            />
+          )}
 
-        {/* Configuration Modal */}
-        <AgentConfigurationModal llmConfigs={llmConfigs} />
+          {isAgentModalOpen && (
+            <AgentFormModal
+              onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
+              onSave={handleSaveAgent}
+              llmConfigs={llmConfigs}
+              existingAgent={editingAgent}
+            />
+          )}
 
-        <NotificationDisplay />
-      </div>
-    </NotificationProvider>
+          {updateConfirmation && (
+            <ConfirmationModal
+              isOpen={true}
+              title={t('dialog_update_title')}
+              message={t('dialog_update_message', { count: updateConfirmation.count })}
+              confirmText={t('dialog_update_confirmButton')}
+              cancelText={t('dialog_update_cancelButton')}
+              onConfirm={() => handleUpdateConfirmation(true)}
+              onCancel={() => handleUpdateConfirmation(false)}
+            />
+          )}
+
+          {deleteConfirmation && (
+            <ConfirmationModal
+              isOpen={true}
+              title={t('dialog_delete_title')}
+              message={t('dialog_delete_message', { agentName: deleteConfirmation.agentName })}
+              confirmText={t('dialog_delete_confirmButton')}
+              onConfirm={confirmDeleteAgent}
+              onCancel={() => setDeleteConfirmation(null)}
+              variant="danger"
+            />
+          )}
+
+          {isImagePanelOpen && (
+            <ImageGenerationPanel
+              isOpen={isImagePanelOpen}
+              nodeId={currentImageNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setImagePanelOpen(false)}
+              onImageGenerated={handleImageGenerated}
+              onOpenImageModificationPanel={handleOpenImageModificationPanel}
+            />
+          )}
+
+          {isImageModificationPanelOpen && (
+            <ImageModificationPanel
+              isOpen={isImageModificationPanelOpen}
+              editingImageInfo={editingImageInfo}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setImageModificationPanelOpen(false)}
+              onImageModified={handleImageModified}
+            />
+          )}
+
+          {isVideoPanelOpen && (
+            <VideoGenerationConfigPanel
+              isOpen={isVideoPanelOpen}
+              nodeId={currentVideoNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setVideoPanelOpen(false)}
+            />
+          )}
+
+          {isMapsPanelOpen && (
+            <MapsGroundingConfigPanel
+              isOpen={isMapsPanelOpen}
+              nodeId={currentMapsNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => {
+                setMapsPanelOpen(false);
+                setMapsPreloadedResults(null);
+              }}
+              preloadedResults={mapsPreloadedResults || undefined}
+            />
+          )}
+
+          {fullscreenImage && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
+              onClick={() => setFullscreenImage(null)}
+            >
+              <img
+                src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`}
+                alt={t('fullscreenModal_alt')}
+                className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <Button
+                variant="ghost"
+                onClick={() => setFullscreenImage(null)}
+                className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
+                aria-label={t('fullscreenModal_close_aria')}
+              >
+                &times;
+              </Button>
+            </div>
+          )}
+
+          {/* Fullscreen Chat Modal */}
+          <FullscreenChatModal
+            onDeleteNode={handleDeleteNode}
+            onOpenImagePanel={handleOpenImagePanel}
+            onOpenVideoPanel={handleOpenVideoPanel}
+            onOpenMapsPanel={handleOpenMapsPanel}
+          />
+
+          {/* Configuration Modal */}
+          <AgentConfigurationModal llmConfigs={llmConfigs} />
+
+          <NotificationDisplay />
+        </div>
+      </NotificationProvider>
+    </QueryProvider>
+  );
+}
+
+/**
+ * Root App component with all providers
+ * AuthProvider wraps AppContent to enable useAuth() hook
+ */
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

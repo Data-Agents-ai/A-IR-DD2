@@ -15,7 +15,7 @@ interface SettingsModalProps {
 export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProps) => {
   const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfig[]>(JSON.parse(JSON.stringify(llmConfigs)));
   const { t, locale, setLocale } = useLocalization();
-  const [activeTab, setActiveTab] = useState<'llms' | 'language'>('llms');
+  const [activeTab, setActiveTab] = useState<'llms' | 'apikeys' | 'language'>('llms');
 
   // LMStudio Detection State
   const [lmStudioDetection, setLmStudioDetection] = useState<LMStudioModelDetection | null>(null);
@@ -110,6 +110,7 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
       <div className="border-b border-gray-700">
         <nav className="-mb-px flex space-x-6" aria-label="Tabs">
           <button type="button" onClick={() => setActiveTab('llms')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'llms' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_llms_tab')}</button>
+          <button type="button" onClick={() => setActiveTab('apikeys')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'apikeys' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>Clés API</button>
           <button type="button" onClick={() => setActiveTab('language')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'language' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_language_tab')}</button>
         </nav>
       </div>
@@ -126,6 +127,28 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
               >
                 {Object.entries(locales).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
               </select>
+            </div>
+          </div>
+        )}
+        {activeTab === 'apikeys' && (
+          <div className="space-y-4">
+            <div className="bg-indigo-900/20 border border-indigo-600/30 rounded-lg p-4">
+              <p className="text-sm text-gray-300 mb-3">
+                {t('settings_apikeys_info') || 'Les clés API sont chiffrées et stockées de façon sécurisée.'}
+              </p>
+              <div className="space-y-3">
+                {currentLLMConfigs.map(({ provider, enabled, apiKey }) => (
+                  <div key={provider} className="flex items-center justify-between p-3 bg-gray-800 rounded-md">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${enabled && apiKey ? 'bg-green-500' : 'bg-gray-600'}`} />
+                      <span className="text-sm font-medium text-gray-300">{provider}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {enabled && apiKey ? '✓ Configurée' : enabled ? '⚠ Clé manquante' : '✗ Désactivée'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
