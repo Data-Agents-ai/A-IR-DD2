@@ -43,7 +43,7 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
     },
     apiKeyEncrypted: {
         type: String,
-        required: true
+        required: false // Optionnel: ajouté via setApiKey()
     },
     capabilities: {
         type: Schema.Types.Mixed,

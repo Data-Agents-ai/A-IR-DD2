@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { LLMConfig } from '../models/LLMConfig.model.js';
-import { requireAuth } from '../middleware/auth.middleware.js';
-import { validateRequest } from '../middleware/validation.middleware.js';
+import { LLMConfig } from '../models/LLMConfig.model';
+import { requireAuth } from '../middleware/auth.middleware';
+import { validateRequest } from '../middleware/validation.middleware';
 
 const router = Router();
 

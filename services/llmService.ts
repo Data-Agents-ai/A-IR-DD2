@@ -16,7 +16,7 @@ import * as arcLLMService from './arcLLMService';
 import type { VideoGenerationOptions, VideoGenerationStatus, MapsGroundingResponse, WebSearchGroundingResponse } from '../types';
 
 
-const getServiceProvider = (provider: LLMProvider) => {
+const getServiceProvider = (provider: Exclude<LLMProvider, LLMProvider.ArcLLM>) => {
     switch (provider) {
         case LLMProvider.Gemini: return geminiService;
         case LLMProvider.OpenAI: return openAIService;
@@ -28,8 +28,7 @@ const getServiceProvider = (provider: LLMProvider) => {
         case LLMProvider.Kimi: return kimiService;
         case LLMProvider.DeepSeek: return deepSeekService;
         case LLMProvider.LMStudio: return lmStudioService;
-        case LLMProvider.ArcLLM: return arcLLMService;
-        default: return geminiService;
+        // Note: ArcLLM excluded via Exclude<> type - specialized service (video/maps/web)
     }
 };
 
@@ -39,6 +38,10 @@ export const generateContentStream = async function* (
     endpoint?: string, // For LMStudio local endpoint
     nativeToolsConfig?: { webFetch?: boolean; webSearch?: boolean } // For Anthropic native tools
 ) {
+    if (provider === LLMProvider.ArcLLM) {
+        throw new Error('ArcLLM does not support generateContentStream. Use generateVideo, generateContentWithMaps, or generateContentWithWebSearch.');
+    }
+
     const service = getServiceProvider(provider);
 
     // Handle LMStudio special case with endpoint parameter
@@ -57,6 +60,10 @@ export const generateContent = (
     systemInstruction?: string, history?: ChatMessage[], tools?: Tool[], outputConfig?: OutputConfig,
     endpoint?: string // For LMStudio local endpoint
 ): Promise<{ text: string }> => {
+    if (provider === LLMProvider.ArcLLM) {
+        throw new Error('ArcLLM does not support generateContent. Use generateVideo, generateContentWithMaps, or generateContentWithWebSearch.');
+    }
+
     const service = getServiceProvider(provider);
 
     // Handle LMStudio special case with endpoint parameter  
@@ -70,6 +77,10 @@ export const generateContent = (
 export const generateContentWithSearch = (
     provider: LLMProvider, apiKey: string, model: string, prompt: string, systemInstruction?: string
 ): Promise<{ text: string; citations: { title: string; uri: string }[] }> => {
+    if (provider === LLMProvider.ArcLLM) {
+        throw new Error('ArcLLM does not support generateContentWithSearch. Use generateContentWithWebSearch instead.');
+    }
+
     const service = getServiceProvider(provider);
     if (!(service as any).generateContentWithSearch) {
         return Promise.resolve({ text: `Error: ${provider} does not support Web Search.`, citations: [] });

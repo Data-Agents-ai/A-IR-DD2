@@ -31,8 +31,7 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
     workflowId: {
         type: Schema.Types.ObjectId,
         ref: 'Workflow',
-        required: true,
-        index: true
+        required: true
     },
     userId: {
         type: Schema.Types.ObjectId,
@@ -42,8 +41,7 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
     },
     prototypeId: {
         type: Schema.Types.ObjectId,
-        ref: 'AgentPrototype',
-        index: true
+        ref: 'AgentPrototype'
     },
 
     // Snapshot config

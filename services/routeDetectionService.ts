@@ -4,7 +4,7 @@
 // MIGRATION JALON 4: Utilise le backend proxy au lieu d'appeler LMStudio directement
 
 import { LMStudioRoutes, LMStudioModelDetection, LLMCapability } from '../types';
-import { buildLMStudioProxyUrl } from '../config/api.config';
+import { buildLMStudioProxyUrl, BACKEND_URL } from '../config/api.config';
 
 // ============================================================================
 // CACHE SYSTEM (TTL 5 minutes)
