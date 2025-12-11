@@ -14,9 +14,9 @@
 
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { app } from '../../server';
-import { User } from '../../models/User.model';
-import { LLMConfig } from '../../models/LLMConfig.model';
+import { app } from '../../src/server';
+import { User } from '../../src/models/User.model';
+import { LLMConfig } from '../../src/models/LLMConfig.model';
 import jwt from 'jsonwebtoken';
 
 // Mock users pour tests

@@ -36,7 +36,14 @@ export interface UserSettingsData {
 
 export interface ISettingsStorage {
     getSettings(): Promise<UserSettingsData>;
-    saveSettings(data: Partial<UserSettingsData>): Promise<UserSettingsData>;
+    saveSettings(data: {
+        llmConfigs?: Partial<Record<string, LLMConfigData>>;
+        preferences?: {
+            language?: 'fr' | 'en' | 'de' | 'es' | 'pt';
+            theme?: 'dark' | 'light';
+        };
+        updatedAt?: Date;
+    }): Promise<UserSettingsData>;
 }
 
 /**

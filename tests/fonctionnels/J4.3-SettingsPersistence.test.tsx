@@ -13,7 +13,7 @@
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SettingsStorage, getSettingsStorage, MockSettingsStorage, UserSettingsData } from '../../utils/SettingsStorage';
+import { ISettingsStorage, getSettingsStorage, MockSettingsStorage, UserSettingsData } from '../../utils/SettingsStorage';
 import React from 'react';
 
 /**
@@ -58,7 +58,7 @@ describe('J4.3 - SettingsStorage Factory', () => {
  * Test Suite 2: Guest Mode - localStorage persistence
  */
 describe('J4.3 - Guest Mode Settings Persistence', () => {
-    let storage: SettingsStorage;
+    let storage: ISettingsStorage;
 
     beforeEach(() => {
         localStorage.clear();
@@ -373,7 +373,7 @@ describe('J4.3 - API Key Security', () => {
  * Test Suite 6: Preferences Synchronization
  */
 describe('J4.3 - User Preferences', () => {
-    let storage: SettingsStorage;
+    let storage: ISettingsStorage;
 
     beforeEach(() => {
         localStorage.clear();

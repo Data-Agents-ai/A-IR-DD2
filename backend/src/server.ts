@@ -157,4 +157,4 @@ async function startServer() {
 }// Lancer le serveur
 startServer();
 
-export { };
+export { app };

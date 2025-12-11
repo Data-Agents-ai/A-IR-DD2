@@ -7,8 +7,8 @@
 
 ## Table of Contents
 
-1. [System Requirements](#system-requirements)
-2. [MongoDB Setup](#mongodb-setup)
+1. [Docker Setup (Recommended)](#docker-setup-recommended)
+2. [Manual MongoDB Setup](#manual-mongodb-setup)
 3. [Node.js & npm](#nodejs--npm)
 4. [Project Installation](#project-installation)
 5. [Environment Configuration](#environment-configuration)
@@ -18,6 +18,168 @@
 9. [Troubleshooting](#troubleshooting)
 
 ---
+
+## Docker Setup (Recommended)
+
+> **🎯 Fastest & Most Professional Way**: Use Docker for consistent MongoDB deployment with automatic schema initialization.
+
+### Prerequisites
+- Docker & Docker Compose installed ([docker.com](https://docker.com))
+- Node.js 18+ installed
+
+### Quick Start (5 minutes)
+
+```bash
+# 1. Start MongoDB with automatic initialization
+cd backend/docker
+docker-compose up -d
+
+# 2. Verify container is running
+docker ps | grep a-ir-dd2-mongodb
+
+# 3. Return to project root
+cd ../..
+
+# 4. Configure backend
+cp backend/docker/.env.docker backend/.env
+
+# 5. Generate security keys
+node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+# → Copy outputs to backend/.env
+
+# 6. Start backend (Terminal 1)
+cd backend && npm run dev
+
+# 7. Start frontend (Terminal 2, from root)
+npm run dev
+
+# 8. Test login at http://localhost:5173
+# Email: test@example.com
+# Password: TestPassword123
+```
+
+### What Gets Created Automatically ✅
+
+**MongoDB Container**
+- Image: mongo:6.0
+- Port: 27017
+- Persistent data volume
+- Auto-restart enabled
+- Health checks configured
+
+**Database (a-ir-dd2-dev)**
+- 9 collections with schema validation
+- Performance indexes pre-created
+- Test user account (test@example.com)
+
+**Collections Created**
+- `users` - User accounts
+- `llm_configs` - LLM provider configurations
+- `user_settings` (J4.3) - Encrypted API keys
+- `workflows`, `agents` - Workflow definitions
+- `workflow_nodes`, `workflow_edges` - Visual components
+- `agent_prototypes`, `agent_instances` - Agent lifecycle
+
+**Default Test Account**
+```
+Email: test@example.com
+Password: TestPassword123
+Status: Active and ready to use
+```
+
+### Verification
+
+```bash
+# Check container status
+docker ps | grep a-ir-dd2-mongodb
+
+# View initialization logs
+docker-compose -f backend/docker/docker-compose.yml logs mongodb | grep "✓"
+
+# Connect to MongoDB
+docker exec -it a-ir-dd2-mongodb mongosh \
+  --username admin \
+  --password SecurePassword123! \
+  --authenticationDatabase admin
+
+# In mongosh shell:
+> use a-ir-dd2-dev
+> show collections
+# Should show all 9 collections
+
+> db.users.findOne({email:"test@example.com"})
+# Should show test user
+> exit()
+```
+
+### Connection String for Backend
+
+Copy this to `backend/.env`:
+```env
+MONGODB_URI=mongodb://admin:SecurePassword123!@localhost:27017/a-ir-dd2-dev?authSource=admin
+```
+
+### Stop or Restart
+
+```bash
+# Stop (keep data)
+cd backend/docker
+docker-compose stop
+
+# Start again (data restored)
+docker-compose start
+
+# Remove everything (⚠️ deletes data)
+docker-compose down -v
+```
+
+### Troubleshooting Docker Setup
+
+**Container won't start**
+```bash
+# Check logs
+docker-compose -f backend/docker/docker-compose.yml logs mongodb
+
+# Common: Port 27017 in use
+lsof -i :27017  # macOS/Linux
+netstat -ano | findstr :27017  # Windows
+```
+
+**MongoDB not responding**
+```bash
+# Verify running
+docker ps | grep a-ir-dd2-mongodb
+
+# Restart container
+docker-compose -f backend/docker/docker-compose.yml restart mongodb
+
+# Wait for health check
+docker-compose -f backend/docker/docker-compose.yml ps
+```
+
+**Test user not created**
+```bash
+# Check initialization logs
+docker-compose -f backend/docker/docker-compose.yml logs mongodb | tail -20
+
+# Restart container
+docker-compose -f backend/docker/docker-compose.yml restart mongodb
+```
+
+### For More Details
+
+See `backend/docker/README.md` for:
+- Backup and restore procedures
+- Security recommendations
+- Production deployment guide
+- Advanced configuration
+
+---
+
+## Manual MongoDB Setup
+
+**⚠️ Note**: Docker setup (above) is recommended. Use this only if Docker is unavailable.
 
 ## System Requirements
 
@@ -46,7 +208,9 @@
 
 ---
 
-## MongoDB Setup
+## Manual MongoDB Setup
+
+**⚠️ Note**: Docker setup (above) is recommended. Use this only if Docker is unavailable.
 
 ### Why MongoDB?
 
