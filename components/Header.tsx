@@ -43,11 +43,6 @@ export const Header = ({ onOpenSettings }: HeaderProps) => {
             <span className="ml-2">
               {isAuthenticated ? 'Paramètres LLM' : t('header_settings')}
             </span>
-            {isAuthenticated && (
-              <span className="ml-3 text-xs px-2 py-1 bg-indigo-600 rounded-full text-white">
-                {user?.email}
-              </span>
-            )}
           </Button>
 
           {/* Authentication UI */}

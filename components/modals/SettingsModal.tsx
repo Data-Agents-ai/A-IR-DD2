@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { LLMConfig, LLMCapability, LLMProvider, LMStudioModelDetection } from '../../types';
 import { Button, Modal, ToggleSwitch } from '../UI';
+import { CloseIcon } from '../Icons';
 import { useLocalization } from '../../hooks/useLocalization';
+import { useAuth } from '../../hooks/useAuth';
 import { locales, Locale } from '../../i18n/locales';
 import { detectLMStudioModel } from '../../services/routeDetectionService';
 import { invalidateLMStudioCache } from '../../llmModels';
@@ -15,6 +17,7 @@ interface SettingsModalProps {
 export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProps) => {
   const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfig[]>(JSON.parse(JSON.stringify(llmConfigs)));
   const { t, locale, setLocale } = useLocalization();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'llms' | 'apikeys' | 'language'>('llms');
 
   // LMStudio Detection State
@@ -106,7 +109,25 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
   };
 
   return (
-    <Modal title={t('settings_title')} isOpen={true} onClose={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" aria-modal="true" role="dialog">
+      <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-xl w-full max-w-md m-4">
+        {/* Custom Header with User Info */}
+        <div className="flex flex-col p-4 border-b border-gray-700">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold text-gray-100">{t('settings_title')}</h2>
+            <Button variant="ghost" onClick={onClose} className="p-2">
+              <CloseIcon />
+            </Button>
+          </div>
+          {user && (
+            <p className="text-sm text-gray-400">
+              pour l'utilisateur <span className="text-yellow-400 font-semibold">{user.email}</span>
+            </p>
+          )}
+        </div>
+        
+        {/* Content */}
+        <div className="p-6">
       <div className="border-b border-gray-700">
         <nav className="-mb-px flex space-x-6" aria-label="Tabs">
           <button type="button" onClick={() => setActiveTab('llms')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'llms' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_llms_tab')}</button>
@@ -357,6 +378,8 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
           {t('save')}
         </Button>
       </div>
-    </Modal>
+        </div>
+      </div>
+    </div>
   );
 };

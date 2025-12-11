@@ -37,6 +37,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
+    const [showValidationRules, setShowValidationRules] = useState(false);
     const [validationErrors, setValidationErrors] = useState<{
         password?: string;
         confirmPassword?: string;
@@ -155,7 +156,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         {validationErrors.password && (
                             <p className="mt-1 text-xs text-red-400">{validationErrors.password}</p>
                         )}
-                        <p className="mt-1 text-xs text-gray-500">Minimum 8 caractères</p>
+                        <p className="mt-1 text-xs text-gray-500">Minimum 8 caractères avec règles spécifiques (voir ci-dessous)</p>
                     </div>
 
                     {/* Confirm Password Input */}
@@ -185,6 +186,45 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         />
                         {validationErrors.confirmPassword && (
                             <p className="mt-1 text-xs text-red-400">{validationErrors.confirmPassword}</p>
+                        )}
+                    </div>
+
+                    {/* Validation Rules Info Box */}
+                    <div className="bg-indigo-900/30 border border-indigo-600/40 rounded-lg p-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowValidationRules(!showValidationRules)}
+                            className="flex items-center justify-between w-full cursor-pointer hover:opacity-80 transition"
+                        >
+                            <span className="text-sm font-medium text-indigo-300">📋 Règles de validation</span>
+                            <span className={`text-indigo-400 transform transition-transform ${showValidationRules ? 'rotate-180' : ''}`}>
+                                ▼
+                            </span>
+                        </button>
+                        
+                        {showValidationRules && (
+                            <div className="mt-3 space-y-2 text-xs text-indigo-200">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-indigo-400 font-bold mt-0.5">•</span>
+                                    <span>Email valide</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="text-indigo-400 font-bold mt-0.5">•</span>
+                                    <span>Minimum 8 caractères</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="text-indigo-400 font-bold mt-0.5">•</span>
+                                    <span>Au moins 1 majuscule requise</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="text-indigo-400 font-bold mt-0.5">•</span>
+                                    <span>Au moins 1 minuscule requise</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <span className="text-indigo-400 font-bold mt-0.5">•</span>
+                                    <span>Au moins 1 chiffre requis</span>
+                                </div>
+                            </div>
                         )}
                     </div>
 
