@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useLocalization } from '../../hooks/useLocalization';
 import { Button } from '../UI';
 
 interface RegisterModalProps {
@@ -33,6 +34,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
     onSwitchToLogin
 }) => {
     const { register, isLoading } = useAuth();
+    const { t } = useLocalization();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -49,11 +51,11 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
         const errors: typeof validationErrors = {};
 
         if (password.length < 8) {
-            errors.password = 'Minimum 8 caractères';
+            errors.password = t('register_password_min_length');
         }
 
         if (password !== confirmPassword) {
-            errors.confirmPassword = 'Les mots de passe ne correspondent pas';
+            errors.confirmPassword = t('register_password_mismatch');
         }
 
         setValidationErrors(errors);
@@ -65,7 +67,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
         setError('');
 
         if (!email || !password || !confirmPassword) {
-            setError('Tous les champs sont requis');
+            setError(t('register_all_fields_required'));
             return;
         }
 
@@ -81,7 +83,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            setError(err.message || 'Erreur lors de l\'inscription');
+            setError(err.message || t('register_error_message'));
         }
     };
 
@@ -90,7 +92,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white">Inscription</h2>
+                    <h2 className="text-xl font-bold text-white">{t('register_modal_title')}</h2>
                     <button
                         onClick={onClose}
                         className="text-gray-400 hover:text-white transition text-2xl leading-none"
@@ -112,7 +114,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                     {/* Email Input */}
                     <div>
                         <label htmlFor="register-email" className="block text-sm font-medium text-gray-300 mb-1">
-                            Email
+                            {t('register_email_label')}
                         </label>
                         <input
                             id="register-email"
@@ -130,7 +132,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                     {/* Password Input */}
                     <div>
                         <label htmlFor="register-password" className="block text-sm font-medium text-gray-300 mb-1">
-                            Mot de passe
+                            {t('register_password_label')}
                         </label>
                         <input
                             id="register-password"
@@ -156,13 +158,13 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         {validationErrors.password && (
                             <p className="mt-1 text-xs text-red-400">{validationErrors.password}</p>
                         )}
-                        <p className="mt-1 text-xs text-gray-500">Minimum 8 caractères avec règles spécifiques (voir ci-dessous)</p>
+                        <p className="mt-1 text-xs text-gray-500">{t('register_password_hint')}</p>
                     </div>
 
                     {/* Confirm Password Input */}
                     <div>
                         <label htmlFor="register-confirm-password" className="block text-sm font-medium text-gray-300 mb-1">
-                            Confirmer le mot de passe
+                            {t('register_confirm_password_label')}
                         </label>
                         <input
                             id="register-confirm-password"
@@ -196,7 +198,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                             onClick={() => setShowValidationRules(!showValidationRules)}
                             className="flex items-center justify-between w-full cursor-pointer hover:opacity-80 transition"
                         >
-                            <span className="text-sm font-medium text-indigo-300">📋 Règles de validation</span>
+                            <span className="text-sm font-medium text-indigo-300">{t('register_rules_title')}</span>
                             <span className={`text-indigo-400 transform transition-transform ${showValidationRules ? 'rotate-180' : ''}`}>
                                 ▼
                             </span>
@@ -206,23 +208,23 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                             <div className="mt-3 space-y-2 text-xs text-indigo-200">
                                 <div className="flex items-start gap-2">
                                     <span className="text-indigo-400 font-bold mt-0.5">•</span>
-                                    <span>Email valide</span>
+                                    <span>{t('register_rule_valid_email')}</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <span className="text-indigo-400 font-bold mt-0.5">•</span>
-                                    <span>Minimum 8 caractères</span>
+                                    <span>{t('register_rule_min_chars')}</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <span className="text-indigo-400 font-bold mt-0.5">•</span>
-                                    <span>Au moins 1 majuscule requise</span>
+                                    <span>{t('register_rule_uppercase')}</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <span className="text-indigo-400 font-bold mt-0.5">•</span>
-                                    <span>Au moins 1 minuscule requise</span>
+                                    <span>{t('register_rule_lowercase')}</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <span className="text-indigo-400 font-bold mt-0.5">•</span>
-                                    <span>Au moins 1 chiffre requis</span>
+                                    <span>{t('register_rule_digit')}</span>
                                 </div>
                             </div>
                         )}
@@ -240,13 +242,13 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         }
                         className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-lg transition"
                     >
-                        {isLoading ? 'Inscription en cours...' : 'S\'inscrire'}
+                        {isLoading ? t('register_button_loading') : t('register_button_text')}
                     </Button>
                 </form>
 
                 {/* Footer */}
                 <div className="mt-4 text-center text-sm text-gray-400">
-                    Déjà inscrit?{' '}
+                    {t('register_footer_text')}{' '}
                     <button
                         onClick={() => {
                             onClose();
@@ -254,7 +256,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                         }}
                         className="text-indigo-400 hover:text-indigo-300 transition cursor-pointer"
                     >
-                        Se connecter
+                        {t('register_footer_link')}
                     </button>
                 </div>
             </div>

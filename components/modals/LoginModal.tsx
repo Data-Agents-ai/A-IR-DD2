@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { useLocalization } from '../../hooks/useLocalization';
 import { Button } from '../UI';
 
 interface LoginModalProps {
@@ -33,6 +34,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onSwitchToRegister
 }) => {
     const { login, isLoading } = useAuth();
+    const { t } = useLocalization();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -44,7 +46,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         setError('');
 
         if (!email || !password) {
-            setError('Email et mot de passe requis');
+            setError(t('login_error_required_fields'));
             return;
         }
 
@@ -55,7 +57,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             onSuccess?.();
             onClose();
         } catch (err: any) {
-            setError(err.message || 'Erreur de connexion');
+            setError(err.message || t('login_error_message'));
         }
     };
 
@@ -64,7 +66,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-gray-700">
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-white">Connexion</h2>
+                    <h2 className="text-xl font-bold text-white">{t('login_modal_title')}</h2>
                     <button
                         onClick={onClose}
                         className="text-gray-400 hover:text-white transition text-2xl leading-none"
@@ -86,7 +88,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     {/* Email Input */}
                     <div>
                         <label htmlFor="login-email" className="block text-sm font-medium text-gray-300 mb-1">
-                            Email
+                            {t('login_email_label')}
                         </label>
                         <input
                             id="login-email"
@@ -103,7 +105,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     {/* Password Input */}
                     <div>
                         <label htmlFor="login-password" className="block text-sm font-medium text-gray-300 mb-1">
-                            Mot de passe
+                            {t('login_password_label')}
                         </label>
                         <input
                             id="login-password"
@@ -124,13 +126,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         disabled={isLoading || !email || !password}
                         className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-lg transition"
                     >
-                        {isLoading ? 'Connexion en cours...' : 'Se connecter'}
+                        {isLoading ? t('login_button_loading') : t('login_button_text')}
                     </Button>
                 </form>
 
                 {/* Footer */}
                 <div className="mt-4 text-center text-sm text-gray-400">
-                    Pas encore inscrit?{' '}
+                    {t('login_footer_text')}{' '}
                     <button
                         onClick={() => {
                             onClose();
@@ -138,7 +140,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         }}
                         className="text-indigo-400 hover:text-indigo-300 transition cursor-pointer"
                     >
-                        Créer un compte
+                        {t('login_footer_link')}
                     </button>
                 </div>
             </div>
