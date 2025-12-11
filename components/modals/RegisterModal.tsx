@@ -201,7 +201,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                                 ▼
                             </span>
                         </button>
-                        
+
                         {showValidationRules && (
                             <div className="mt-3 space-y-2 text-xs text-indigo-200">
                                 <div className="flex items-start gap-2">
