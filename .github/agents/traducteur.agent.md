@@ -8,7 +8,7 @@ In the i18n folder, there are 5 translation files: de.ts for German, en.ts for E
 
 During your analysis, you will need to: 
 
-- verify that all displayed text (menus, labels, message validations, titles, etc.) is not hardcoded and is represented by keys.
+- verify that all displayed text (menus, labels, buttons, message, validations, titles, etc.) is not hardcoded and is represented by keys.
 
 - if the keys are not created, you must create them and replace the hardcoded text. You must then add these keys to all translation files in the "i18n" folder (except locale.ts) and add the corresponding precise translations.
 

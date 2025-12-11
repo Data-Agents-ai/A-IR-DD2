@@ -327,16 +327,16 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           <div className="flex items-center space-x-3">
             <WrenchIcon className="w-6 h-6 text-indigo-400" />
             <div>
-              <h1 className="text-xl font-bold text-white">Prototypage d'Agents</h1>
-              <p className="text-gray-400 text-sm">Créez et configurez les agents IA pour votre workflow</p>
+              <h1 className="text-xl font-bold text-white">{t('page_prototyping_title')}</h1>
+              <p className="text-gray-400 text-sm">{t('page_prototyping_description')}</p>
             </div>
           </div>
 
           {/* Governance Indicator */}
           <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-lg px-3 py-1.5">
-            <div className="text-xs text-indigo-300 font-medium">Robot Actuel</div>
+            <div className="text-xs text-indigo-300 font-medium">{t('current_robot_label')}</div>
             <div className="text-sm text-indigo-100 font-bold">{currentRobotId}</div>
-            <div className="text-xs text-indigo-400">Créateur autorisé</div>
+            <div className="text-xs text-indigo-400">{t('authorized_creator')}</div>
           </div>
         </div>
       </div>
@@ -394,19 +394,18 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
             {agents.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <WrenchIcon className="w-16 h-16 text-gray-600 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-400 mb-2">Aucun prototype d'agent</h3>
+                <h3 className="text-xl font-semibold text-gray-400 mb-2">{t('no_prototype_empty_title')}</h3>
                 <p className="text-gray-500 mb-6 max-w-md">
-                  Commencez par créer votre premier agent. Définissez son rôle, ses capacités
-                  et les outils qu'il peut utiliser.
+                  {t('no_prototype_empty_description')}
                 </p>
                 <div className="flex space-x-3">
                   <Button onClick={handleCreateFromTemplate} className="flex items-center space-x-2" variant="secondary">
                     <span>📋</span>
-                    <span>Partir d'un Template</span>
+                    <span>{t('button_create_from_template')}</span>
                   </Button>
                   <Button onClick={handleCreateAgent} className="flex items-center space-x-2">
                     <PlusIcon className="w-4 h-4" />
-                    <span>Créer un Prototype</span>
+                    <span>{t('button_create_prototype')}</span>
                   </Button>
                 </div>
               </div>
@@ -458,15 +457,15 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                       {/* Metadata */}
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Fournisseur</span>
+                          <span className="text-gray-500">{t('provider_label')}</span>
                           <span className="text-gray-300">{agent.llmProvider}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Modèle</span>
+                          <span className="text-gray-500">{t('model_label')}</span>
                           <span className="text-gray-300">{agent.model}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Capacités</span>
+                          <span className="text-gray-500">{t('capabilities_label')}</span>
                           <span className="text-gray-300">{agent.capabilities.length}</span>
                         </div>
                       </div>
@@ -481,7 +480,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                             handleAddToWorkflow(agent);
                           }}
                         >
-                          Ajouter au Workflow
+                          {t('button_add_to_workflow')}
                         </Button>
                         <Button
                           variant="outline"
@@ -491,7 +490,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                             handleAddToTemplates(agent);
                           }}
                         >
-                          💾 Ajouter aux Templates
+                          {t('button_add_to_templates')}
                         </Button>
                       </div>
                     </div>

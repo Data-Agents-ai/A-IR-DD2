@@ -524,4 +524,33 @@ export default {
     register_footer_text: 'Déjà inscrit?',
     register_footer_link: 'Se connecter',
     register_error_message: 'Erreur lors de l\'inscription',
+
+    // Page Titles & Descriptions
+    page_dashboard_title: 'Dashboard - Carte des Workflows',
+    page_dashboard_description: 'Vue d\'ensemble cartographique de tous les workflows et leur statut',
+    page_bos_supervision_title: 'Bos Supervision',
+    page_bos_supervision_description: 'Outils de supervision, debugging et monitoring des coûts',
+    page_prototyping_title: 'Prototypage d\'Agents',
+    page_prototyping_description: 'Créez et configurez les agents IA pour votre workflow',
+    page_orchestrator_title: 'Workflow Orchestrator',
+    page_orchestrator_description: 'Sélectionnez un robot dans la navigation pour commencer',
+
+    // UI Labels & Headers
+    current_robot_label: 'Robot Actuel',
+    authorized_creator: 'Créateur autorisé',
+    provider_label: 'Fournisseur',
+    model_label: 'Modèle',
+    capabilities_label: 'Capacités',
+    no_prototype_empty_title: 'Aucun prototype d\'agent',
+    no_prototype_empty_description: 'Commencez par créer un premier prototype d\'agent ou charger un template',
+
+    // Button Labels
+    button_create_from_template: 'Partir d\'un Template',
+    button_create_prototype: 'Créer un Prototype',
+    button_create_agent: 'Créer un Agent',
+    button_add_to_workflow: 'Ajouter au Workflow',
+    button_load_template: 'Charger depuis Template',
+    button_delete: 'Supprimer',
+    button_edit: 'Modifier',
+    button_add_to_templates: '💾 Ajouter aux Templates',
 };

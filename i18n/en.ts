@@ -478,4 +478,33 @@ export default {
     register_footer_text: 'Already have an account?',
     register_footer_link: 'Sign in',
     register_error_message: 'Registration error',
+
+    // Page Titles & Descriptions
+    page_dashboard_title: 'Dashboard - Workflow Map',
+    page_dashboard_description: 'Global workflow map and project status overview',
+    page_bos_supervision_title: 'Bos Supervision',
+    page_bos_supervision_description: 'Supervision tools, debugging and cost monitoring',
+    page_prototyping_title: 'Agent Prototyping',
+    page_prototyping_description: 'Create and configure AI agents for your workflow',
+    page_orchestrator_title: 'Workflow Orchestrator',
+    page_orchestrator_description: 'Select a robot from navigation to get started',
+
+    // UI Labels & Headers
+    current_robot_label: 'Current Robot',
+    authorized_creator: 'Authorized Creator',
+    provider_label: 'Provider',
+    model_label: 'Model',
+    capabilities_label: 'Capabilities',
+    no_prototype_empty_title: 'No agent prototype',
+    no_prototype_empty_description: 'Start by creating your first agent prototype or loading a template',
+
+    // Button Labels
+    button_create_from_template: 'Load from Template',
+    button_create_prototype: 'Create Prototype',
+    button_create_agent: 'Create Agent',
+    button_add_to_workflow: 'Add to Workflow',
+    button_load_template: 'Load from Template',
+    button_delete: 'Delete',
+    button_edit: 'Edit',
+    button_add_to_templates: '💾 Add to Templates',
 };

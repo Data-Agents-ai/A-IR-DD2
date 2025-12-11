@@ -445,4 +445,33 @@ export default {
     register_footer_text: '¿Ya tienes cuenta?',
     register_footer_link: 'Inicia sesión',
     register_error_message: 'Error de registro',
+
+    // Page Titles & Descriptions
+    page_dashboard_title: 'Dashboard - Mapa de flujo',
+    page_dashboard_description: 'Mapa global de flujo de trabajo y resumen del estado del proyecto',
+    page_bos_supervision_title: 'Supervisión Bos',
+    page_bos_supervision_description: 'Herramientas de supervisión, depuración y monitoreo de costos',
+    page_prototyping_title: 'Prototipo de Agente',
+    page_prototyping_description: 'Cree y configure agentes IA para su flujo de trabajo',
+    page_orchestrator_title: 'Orquestador de Flujo de Trabajo',
+    page_orchestrator_description: 'Seleccione un robot de la navegación para comenzar',
+
+    // UI Labels & Headers
+    current_robot_label: 'Robot Actual',
+    authorized_creator: 'Creador Autorizado',
+    provider_label: 'Proveedor',
+    model_label: 'Modelo',
+    capabilities_label: 'Capacidades',
+    no_prototype_empty_title: 'Sin prototipo de agente',
+    no_prototype_empty_description: 'Comience creando su primer prototipo de agente o cargando una plantilla',
+
+    // Button Labels
+    button_create_from_template: 'Cargar desde Plantilla',
+    button_create_prototype: 'Crear Prototipo',
+    button_create_agent: 'Crear Agente',
+    button_add_to_workflow: 'Agregar al Flujo de Trabajo',
+    button_load_template: 'Cargar desde Plantilla',
+    button_delete: 'Eliminar',
+    button_edit: 'Editar',
+    button_add_to_templates: '💾 Agregar a Plantillas',
 };

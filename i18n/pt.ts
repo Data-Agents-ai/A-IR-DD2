@@ -445,4 +445,33 @@ export default {
     register_footer_text: 'Já tem uma conta?',
     register_footer_link: 'Entre',
     register_error_message: 'Erro de registro',
+
+    // Page Titles & Descriptions
+    page_dashboard_title: 'Dashboard - Mapa de fluxo',
+    page_dashboard_description: 'Mapa global de fluxo de trabalho e visão geral do status do projeto',
+    page_bos_supervision_title: 'Supervisão Bos',
+    page_bos_supervision_description: 'Ferramentas de supervisão, depuração e monitoramento de custos',
+    page_prototyping_title: 'Prototipagem de Agentes',
+    page_prototyping_description: 'Crie e configure agentes de IA para seu fluxo de trabalho',
+    page_orchestrator_title: 'Orquestrador de Fluxo de Trabalho',
+    page_orchestrator_description: 'Selecione um robô na navegação para começar',
+
+    // UI Labels & Headers
+    current_robot_label: 'Robô Atual',
+    authorized_creator: 'Criador Autorizado',
+    provider_label: 'Provedor',
+    model_label: 'Modelo',
+    capabilities_label: 'Capacidades',
+    no_prototype_empty_title: 'Sem protótipo de agente',
+    no_prototype_empty_description: 'Comece criando seu primeiro protótipo de agente ou carregando um modelo',
+
+    // Button Labels
+    button_create_from_template: 'Carregar do Modelo',
+    button_create_prototype: 'Criar Protótipo',
+    button_create_agent: 'Criar Agente',
+    button_add_to_workflow: 'Adicionar ao Fluxo de Trabalho',
+    button_load_template: 'Carregar do Modelo',
+    button_delete: 'Excluir',
+    button_edit: 'Editar',
+    button_add_to_templates: '💾 Adicionar aos Modelos',
 };

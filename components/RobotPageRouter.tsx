@@ -192,8 +192,8 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
   if (currentPath.startsWith('/bos/dashboard')) {
     return (
       <WorkflowPage
-        robotName="Dashboard - Carte des Workflows"
-        description="Vue d'ensemble cartographique de tous les workflows et leur statut"
+        robotName={t('page_dashboard_title')}
+        description={t('page_dashboard_description')}
         {...workflowProps}
       />
     );
@@ -202,8 +202,8 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
   if (currentPath.startsWith('/bos')) {
     return (
       <WorkflowPage
-        robotName="Bos Supervision"
-        description="Outils de supervision, debugging et monitoring des coûts"
+        robotName={t('page_bos_supervision_title')}
+        description={t('page_bos_supervision_description')}
         {...workflowProps}
       />
     );
@@ -239,8 +239,8 @@ export const RobotPageRouter: React.FC<RobotPageRouterProps> = ({
   // Default fallback
   return (
     <PlaceholderPage
-      robotName="Workflow Orchestrator"
-      description="Sélectionnez un robot dans la navigation pour commencer"
+      robotName={t('page_orchestrator_title')}
+      description={t('page_orchestrator_description')}
     />
   );
 };

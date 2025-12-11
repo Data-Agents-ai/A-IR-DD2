@@ -445,4 +445,33 @@ export default {
     register_footer_text: 'Haben Sie bereits ein Konto?',
     register_footer_link: 'Anmelden',
     register_error_message: 'Registrierungsfehler',
+
+    // Page Titles & Descriptions
+    page_dashboard_title: 'Dashboard - Workflow-Karte',
+    page_dashboard_description: 'Globale Workflow-Karte und Projektstatusübersicht',
+    page_bos_supervision_title: 'Bos Überwachung',
+    page_bos_supervision_description: 'Überwachungstools, Debugging und Kostenüberwachung',
+    page_prototyping_title: 'Agent-Prototyping',
+    page_prototyping_description: 'Erstellen und konfigurieren Sie KI-Agenten für Ihren Workflow',
+    page_orchestrator_title: 'Workflow-Orchestrator',
+    page_orchestrator_description: 'Wählen Sie einen Roboter aus der Navigation aus, um zu beginnen',
+
+    // UI Labels & Headers
+    current_robot_label: 'Aktueller Roboter',
+    authorized_creator: 'Autorisierter Ersteller',
+    provider_label: 'Anbieter',
+    model_label: 'Modell',
+    capabilities_label: 'Fähigkeiten',
+    no_prototype_empty_title: 'Kein Agent-Prototyp',
+    no_prototype_empty_description: 'Beginnen Sie, indem Sie Ihren ersten Agent-Prototyp erstellen oder eine Vorlage laden',
+
+    // Button Labels
+    button_create_from_template: 'Aus Vorlage laden',
+    button_create_prototype: 'Prototyp erstellen',
+    button_create_agent: 'Agent erstellen',
+    button_add_to_workflow: 'Zum Workflow hinzufügen',
+    button_load_template: 'Aus Vorlage laden',
+    button_delete: 'Löschen',
+    button_edit: 'Bearbeiten',
+    button_add_to_templates: '💾 Zu Vorlagen hinzufügen',
 };
