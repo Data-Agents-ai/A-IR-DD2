@@ -76,7 +76,8 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
 });
 
 /**
- * POST /api/user-settings
+ * POST /api/user-settings (alias for PUT for compatibility)
+ * PUT /api/user-settings
  * Save user settings atomically
  * 
  * Request body: {
@@ -86,7 +87,7 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
  * 
  * Note: If apiKey provided, it will be encrypted before storage
  */
-router.post('/api/user-settings', requireAuth, async (req: Request, res: Response) => {
+const saveSettingsHandler = async (req: Request, res: Response) => {
     try {
         const user = req.user as any;
         const userId = user.id || user._id;
@@ -173,12 +174,15 @@ router.post('/api/user-settings', requireAuth, async (req: Request, res: Respons
             updatedAt: settings.updatedAt
         });
     } catch (error) {
-        console.error('[POST /api/user-settings] Error:', error);
+        console.error('[SAVE user-settings] Error:', error);
         res.status(500).json({
             error: 'Failed to save user settings',
             message: error instanceof Error ? error.message : 'Unknown error'
         });
     }
-});
+};
+
+router.post('/api/user-settings', requireAuth, saveSettingsHandler);
+router.put('/api/user-settings', requireAuth, saveSettingsHandler);
 
 export default router;

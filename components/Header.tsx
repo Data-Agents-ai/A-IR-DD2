@@ -31,18 +31,15 @@ export const Header = ({ onOpenSettings }: HeaderProps) => {
         <LogoIcon />
 
         <div className="flex items-center space-x-3">
-          {/* Settings Button - J4.3: Show LLM settings when authenticated */}
+          {/* Settings Button - Always visible (Guest: localStorage, Auth: API) */}
           <Button
             variant="ghost"
             onClick={onOpenSettings}
-            disabled={!isAuthenticated}
-            className="flex items-center px-4 py-2 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title={!isAuthenticated ? 'Connectez-vous pour accéder aux paramètres' : 'Paramètres LLM'}
+            className="flex items-center px-4 py-2 font-semibold text-sm hover:bg-gray-800 transition"
+            title={t('header_settings')}
           >
             <SettingsIcon className="text-gray-400" />
-            <span className="ml-2">
-              {isAuthenticated ? 'Paramètres LLM' : t('header_settings')}
-            </span>
+            <span className="ml-2">{t('header_settings')}</span>
           </Button>
 
           {/* Authentication UI */}

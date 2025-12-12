@@ -7,9 +7,12 @@
 **Auteur**: ARC-1 (Agent IA Architecte)  
 **Statut**: 🔄 EN DÉVELOPPEMENT
 
-> ⚠️ **CORRECTIONS ARCHITECTURALES CRITIQUES (Jalon 3)**  
-> Ce document décrit l'architecture initiale. Les **corrections critiques validées** (hiérarchie Workflow, gouvernance ownership-based, portée GLOBAL vs LOCAL) sont documentées dans :
-> - **📄 [CORRECTIONS v1.1](./PERSISTANCE_SECURISEE_AUTHENTICATION_v1.1_CORRECTIONS.md)** ← **LIRE EN PRIORITÉ**
+> ⚠️ **CORRECTIONS CRITIQUES - JALON 4 FRONTEND MODE HYBRIDE**  
+> **RÉGRESSION IDENTIFIÉE**: Settings button not accessible in Guest mode  
+> **DOCUMENT DE CORRECTION**: [PERSISTANCE_SECURISEE_AUTHENTICATION_v1.2_CORRECTIONS.md](./PERSISTANCE_SECURISEE_AUTHENTICATION_v1.2_CORRECTIONS.md) ← **EXÉCUTER EN PRIORITÉ**  
+> 
+> Ce document décrit l'architecture cible. Les **corrections précédentes** sont documentées dans :
+> - **📄 [CORRECTIONS v1.1](./PERSISTANCE_SECURISEE_AUTHENTICATION_v1.1_CORRECTIONS.md)** (Jalon 3 architectural fixes)
 > - **📄 [ADDENDUM_CRITIQUE_WORKFLOW_SCHEMA.md](../backend/documentation/guides/jalons/ADDENDUM_CRITIQUE_WORKFLOW_SCHEMA.md)** (analyse détaillée)
 > - **📄 [JALON3_PHASE1_COMPLETION.md](../backend/documentation/guides/jalons/JALON3_PHASE1_COMPLETION.md)** (implémentation Phase 1)
 

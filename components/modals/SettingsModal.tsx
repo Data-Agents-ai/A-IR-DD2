@@ -17,7 +17,7 @@ interface SettingsModalProps {
 export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProps) => {
   const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfig[]>(JSON.parse(JSON.stringify(llmConfigs)));
   const { t, locale, setLocale } = useLocalization();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<'llms' | 'apikeys' | 'language'>('llms');
 
   // LMStudio Detection State
@@ -119,9 +119,13 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
               <CloseIcon />
             </Button>
           </div>
-          {user && (
+          {isAuthenticated && user ? (
             <p className="text-sm text-gray-400">
               pour l'utilisateur <span className="text-yellow-400 font-semibold">{user.email}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-gray-400">
+              Mode <span className="text-indigo-400 font-semibold">Invité</span> - Paramètres en localStorage
             </p>
           )}
         </div>
@@ -131,7 +135,9 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
           <div className="border-b border-gray-700">
             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
               <button type="button" onClick={() => setActiveTab('llms')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'llms' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_llms_tab')}</button>
-              <button type="button" onClick={() => setActiveTab('apikeys')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'apikeys' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>Clés API</button>
+              {isAuthenticated && (
+                <button type="button" onClick={() => setActiveTab('apikeys')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'apikeys' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>Clés API</button>
+              )}
               <button type="button" onClick={() => setActiveTab('language')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'language' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_language_tab')}</button>
             </nav>
           </div>
@@ -175,6 +181,13 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
             )}
             {activeTab === 'llms' && (
               <div className="space-y-6">
+                {!isAuthenticated && (
+                  <div className="p-3 rounded-md bg-amber-900/30 border border-amber-700/50">
+                    <p className="text-sm text-amber-400">
+                      ⚠️ <span className="font-semibold">Mode Invité:</span> Les clés API sont stockées en localStorage (non chiffré). Connectez-vous pour chiffrer vos données de façon sécurisée.
+                    </p>
+                  </div>
+                )}
                 {currentLLMConfigs.map(({ provider, enabled, capabilities, apiKey }) => (
                   <div key={provider}>
                     <div className="flex items-center justify-between">
