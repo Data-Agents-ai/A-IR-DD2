@@ -49,7 +49,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
         const user = new User({
             email: email.toLowerCase(),
             password,
-            role: 'user'
+            role: 'user',              // CORRECTION: Valeur par défaut explicite
+            isActive: true              // CORRECTION: Valeur par défaut explicite
         });
         await user.save();
 

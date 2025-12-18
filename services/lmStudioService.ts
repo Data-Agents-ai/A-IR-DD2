@@ -1,5 +1,17 @@
 // services/lmStudioService.ts
-// MIGRATION JALON 4: Tous les appels doivent passer par le backend proxy
+// OPTION C HYBRID ARCHITECTURE: Local LLM Runtime Integration
+// 
+// Responsibility: Unified interface for local LLM communication (Ollama, LMStudio, Jan, etc.)
+// 
+// Architecture:
+// - Configuration Phase: Backend proxy validates endpoint + probes capabilities
+// - Runtime Phase: Frontend calls directly to local LLM endpoint (zero-latency)
+//
+// Why this architecture?
+// - Performance: Direct calls eliminate proxy latency for frequent chat operations
+// - Robustness: Backend validates config once during setup
+// - SOLID: Single Responsibility - Backend validates, Frontend executes
+// - OpenAI Compatible: All local LLMs use /v1/chat/completions interface
 import { ChatMessage, Tool, ToolCall, OutputConfig } from '../types';
 import { buildLMStudioProxyUrl } from '../config/api.config';
 
@@ -27,31 +39,17 @@ interface LMStudioModelInfo {
     };
 }
 
-// Default configuration for local LMStudio deployment
+// Default configuration for local LLM deployment
 const DEFAULT_CONFIG: LMStudioConfig = {
-    endpoint: 'http://localhost:3928', // Jan default endpoint
+    endpoint: 'http://localhost:3928', // LMStudio default port
     timeout: 30000
 };
 
-// Alternative endpoints to try
-const ALTERNATIVE_ENDPOINTS = [
-    'http://localhost:1234',  // LM Studio default
-    'http://localhost:11434', // Ollama default
-    'http://localhost:8000',  // vLLM default
-    'http://localhost:5000'   // Generic local server
-];
-
 const getHeaders = (config: LMStudioConfig) => {
-    const headers: Record<string, string> = {
+    return {
         'Content-Type': 'application/json',
         'User-Agent': 'A-IR-DD2/1.0'
     };
-
-    if (config.apiKey) {
-        headers['Authorization'] = `Bearer ${config.apiKey}`;
-    }
-
-    return headers;
 };
 
 const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => {
@@ -97,25 +95,8 @@ const formatMessages = (history?: ChatMessage[], systemInstruction?: string) => 
 };
 
 const detectLocalEndpoint = async (): Promise<string> => {
-    // MIGRATION JALON 4: Utiliser le backend proxy pour détecter l'endpoint disponible
-    try {
-        const proxyUrl = buildLMStudioProxyUrl('detectEndpoint');
-        const response = await fetch(proxyUrl, {
-            method: 'GET',
-            signal: AbortSignal.timeout(5000)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.healthy && data.endpoint) {
-                return data.endpoint;
-            }
-        }
-    } catch (error) {
-        console.warn('[LMStudio] Failed to detect endpoint via backend proxy:', error);
-    }
-
-    // Fallback sur le endpoint par défaut si détection échoue
+    // Fallback to default endpoint if not configured
+    // Actual detection happens during configuration via backend proxy
     return DEFAULT_CONFIG.endpoint;
 };
 
@@ -145,13 +126,13 @@ export const detectAvailableModels = async (config?: Partial<LMStudioConfig>): P
     const fullConfig = { ...DEFAULT_CONFIG, ...config };
 
     try {
-        const endpoint = config?.endpoint || await detectLocalEndpoint();
+        const endpoint = config?.endpoint || DEFAULT_CONFIG.endpoint;
 
-        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
+        // Configuration Phase: Use backend proxy to list available models
+        // Keeps model detection logic centralized on backend
         const proxyUrl = buildLMStudioProxyUrl('models', endpoint);
         const response = await fetchWithTimeout(proxyUrl, {
-            method: 'GET',
-            // Ne pas ajouter de headers custom pour le backend proxy
+            method: 'GET'
         }, 5000);
 
         if (!response.ok) throw await createApiError(response, endpoint);
@@ -314,12 +295,12 @@ export const generateContentStream = async function* (
     apiKey?: string
 ) {
     const config: LMStudioConfig = {
-        endpoint: endpoint || await detectLocalEndpoint(),
+        endpoint: endpoint || DEFAULT_CONFIG.endpoint,
         apiKey,
         timeout: 30000
     };
 
-    console.log(`[LMStudio] generateContentStream - Using endpoint: ${config.endpoint}, model: ${model}`);
+    console.log(`[LMStudio] generateContentStream - endpoint: ${config.endpoint}, model: ${model}`);
 
     // Detect model capabilities from static model data (no API call)
     // NOTE: Removed detectAvailableModels() call here to avoid unnecessary /models requests
@@ -364,9 +345,10 @@ export const generateContentStream = async function* (
     }
 
     try {
-        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
-        const proxyUrl = buildLMStudioProxyUrl('chat', config.endpoint);
-        const response = await fetchWithTimeout(proxyUrl, {
+        // OPTION C HYBRID: Runtime Phase - Direct call to local LLM endpoint (not via backend proxy)
+        // Configuration was validated by backend during setup, now frontend calls directly
+        const directUrl = `${config.endpoint}/v1/chat/completions`;
+        const response = await fetchWithTimeout(directUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -468,12 +450,12 @@ export const generateContent = async (
     apiKey?: string
 ): Promise<{ text: string; toolCalls?: ToolCall[] }> => {
     const config: LMStudioConfig = {
-        endpoint: endpoint || await detectLocalEndpoint(),
+        endpoint: endpoint || DEFAULT_CONFIG.endpoint,
         apiKey,
         timeout: 30000
     };
 
-    console.log(`[LMStudio] generateContent - Using endpoint: ${config.endpoint}, model: ${model}`);
+    console.log(`[LMStudio] generateContent - endpoint: ${config.endpoint}, model: ${model}`);
 
     // Detect model capabilities from static model data (no API call)
     // NOTE: Removed detectAvailableModels() call here to avoid unnecessary /models requests
@@ -518,9 +500,10 @@ export const generateContent = async (
     }
 
     try {
-        // MIGRATION JALON 4: Appeler le backend proxy au lieu de LMStudio directement
-        const proxyUrl = buildLMStudioProxyUrl('chat', config.endpoint);
-        const response = await fetchWithTimeout(proxyUrl, {
+        // OPTION C HYBRID: Runtime Phase - Direct call to local LLM endpoint (not via backend proxy)
+        // Configuration was validated by backend during setup, now frontend calls directly
+        const directUrl = `${config.endpoint}/v1/chat/completions`;
+        const response = await fetchWithTimeout(directUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
@@ -555,7 +538,7 @@ export const generateContent = async (
 // Health check for local server
 export const checkServerHealth = async (endpoint?: string): Promise<{ healthy: boolean; endpoint?: string; models?: number }> => {
     try {
-        const detectedEndpoint = endpoint || await detectLocalEndpoint();
+        const detectedEndpoint = endpoint || DEFAULT_CONFIG.endpoint;
         const models = await detectAvailableModels({ endpoint: detectedEndpoint });
 
         return {

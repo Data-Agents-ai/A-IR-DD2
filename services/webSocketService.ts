@@ -74,13 +74,24 @@ class WebSocketService {
     this.connectionState.error = null;
     this.emit('connectionStateChanged', this.connectionState);
 
-    this.socket = io('http://localhost:3001', {
-      transports: ['websocket', 'polling'],
-      timeout: 5000,
-      forceNew: true
-    });
+    try {
+      this.socket = io('http://localhost:3001', {
+        transports: ['websocket', 'polling'],
+        timeout: 5000,
+        forceNew: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5
+      });
 
-    this.setupEventHandlers();
+      this.setupEventHandlers();
+    } catch (error) {
+      console.warn('[WebSocket] Erreur lors de la création du socket:', error);
+      this.connectionState.isConnecting = false;
+      this.connectionState.error = 'Échec de création du socket';
+      this.emit('connectionStateChanged', this.connectionState);
+    }
   }
 
   private setupEventHandlers() {
@@ -116,9 +127,9 @@ class WebSocketService {
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('[WebSocket] Erreur de connexion:', error);
+      console.warn('[WebSocket] Erreur de connexion:', error?.message || error);
       this.connectionState.isConnecting = false;
-      this.connectionState.error = error.message;
+      this.connectionState.error = error?.message || 'Erreur de connexion';
       this.emit('connectionStateChanged', this.connectionState);
       
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -126,48 +137,82 @@ class WebSocketService {
       }
     });
 
+    // === GESTION DES ERREURS DE PORT ===
+    this.socket.on('error', (error) => {
+      console.warn('[WebSocket] Erreur socket:', error);
+      // Ne pas propager - l'erreur est gérée
+    });
+
     // === ÉTAT DE CONNEXION ===
     this.socket.on('connection:status', (status) => {
-      if (status === 'connected') {
-        this.connectionState.userId = this.socket?.id || null;
-        this.emit('connectionStateChanged', this.connectionState);
+      try {
+        if (status === 'connected') {
+          this.connectionState.userId = this.socket?.id || null;
+          this.emit('connectionStateChanged', this.connectionState);
+        }
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans connection:status:', error);
       }
     });
 
     // === GESTION DES UTILISATEURS ===
     this.socket.on('workspace:user:joined', (data) => {
-      const existingUser = this.connectionState.connectedUsers.find(u => u.userId === data.userId);
-      if (!existingUser) {
-        this.connectionState.connectedUsers.push(data);
-        this.emit('connectionStateChanged', this.connectionState);
-        this.emit('userJoined', data);
+      try {
+        const existingUser = this.connectionState.connectedUsers.find(u => u.userId === data.userId);
+        if (!existingUser) {
+          this.connectionState.connectedUsers.push(data);
+          this.emit('connectionStateChanged', this.connectionState);
+          this.emit('userJoined', data);
+        }
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans workspace:user:joined:', error);
       }
     });
 
     this.socket.on('workspace:user:left', (data) => {
-      this.connectionState.connectedUsers = this.connectionState.connectedUsers.filter(
-        u => u.userId !== data.userId
-      );
-      this.emit('connectionStateChanged', this.connectionState);
-      this.emit('userLeft', data);
+      try {
+        this.connectionState.connectedUsers = this.connectionState.connectedUsers.filter(
+          u => u.userId !== data.userId
+        );
+        this.emit('connectionStateChanged', this.connectionState);
+        this.emit('userLeft', data);
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans workspace:user:left:', error);
+      }
     });
 
     // === SYNCHRONISATION AGENTS ===
     this.socket.on('agent:position:updated', (data) => {
-      this.emit('agentPositionUpdated', data);
+      try {
+        this.emit('agentPositionUpdated', data);
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans agent:position:updated:', error);
+      }
     });
 
     this.socket.on('agent:message:added', (data) => {
-      this.emit('agentMessageAdded', data);
+      try {
+        this.emit('agentMessageAdded', data);
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans agent:message:added:', error);
+      }
     });
 
     this.socket.on('agent:toggle:minimized', (data) => {
-      this.emit('agentToggleMinimized', data);
+      try {
+        this.emit('agentToggleMinimized', data);
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans agent:toggle:minimized:', error);
+      }
     });
 
     // === CURSEUR COLLABORATIF ===
     this.socket.on('user:cursor:updated', (data) => {
-      this.emit('userCursorUpdated', data);
+      try {
+        this.emit('userCursorUpdated', data);
+      } catch (error) {
+        console.warn('[WebSocket] Erreur dans user:cursor:updated:', error);
+      }
     });
   }
 
@@ -245,9 +290,19 @@ class WebSocketService {
   }
 
   private emit(event: string, ...args: any[]) {
-    const listeners = this.eventListeners.get(event);
-    if (listeners) {
-      listeners.forEach(callback => callback(...args));
+    try {
+      const listeners = this.eventListeners.get(event);
+      if (listeners) {
+        listeners.forEach(callback => {
+          try {
+            callback(...args);
+          } catch (error) {
+            console.warn(`[WebSocket] Erreur dans callback '${event}':`, error);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn(`[WebSocket] Erreur lors de l'émission '${event}':`, error);
     }
   }
 

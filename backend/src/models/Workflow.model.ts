@@ -15,8 +15,8 @@ const WorkflowSchema = new Schema<IWorkflow>({
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
+        // Removed: index: true (conflicts with composite indexes below)
     },
     name: {
         type: String,

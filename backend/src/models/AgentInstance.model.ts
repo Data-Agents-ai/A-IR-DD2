@@ -36,8 +36,8 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
+        // Removed: index: true (conflicts with composite index below)
     },
     prototypeId: {
         type: Schema.Types.ObjectId,

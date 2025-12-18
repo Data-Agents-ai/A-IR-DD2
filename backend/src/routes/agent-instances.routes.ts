@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { AgentInstance } from '../models/AgentInstance.model';
 import { AgentPrototype } from '../models/AgentPrototype.model';
 import { Workflow } from '../models/Workflow.model';
@@ -7,7 +8,8 @@ import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middlewar
 import { validateRequest } from '../middleware/validation.middleware';
 import { IUser } from '../models/User.model';
 
-const router = Router();
+// CORRECTION SOLID: mergeParams: true pour hériter des paramètres du parent (:workflowId)
+const router = Router({ mergeParams: true });
 
 // Schema validation
 const createAgentInstanceSchema = z.object({
@@ -38,14 +40,14 @@ const createAgentInstanceSchema = z.object({
 
 const updateAgentInstanceSchema = createAgentInstanceSchema.partial();
 
-// GET /api/agent-instances - Liste des instances (filtrées par workflowId)
+// GET /api/workflows/:workflowId/instances - Liste des instances
 router.get('/', requireAuth, async (req, res) => {
     try {
         const user = req.user as IUser;
-        const { workflowId } = req.query;
+        const { workflowId } = req.params;
 
-        if (!workflowId) {
-            return res.status(400).json({ error: 'workflowId requis' });
+        if (!workflowId || !mongoose.Types.ObjectId.isValid(workflowId)) {
+            return res.status(400).json({ error: 'workflowId invalide' });
         }
 
         // Vérifier que workflow appartient à user
@@ -85,14 +87,19 @@ router.get('/:id',
     }
 );
 
-// POST /api/agent-instances - Créer instance sur workflow
+// POST /api/workflows/:workflowId/instances - Créer instance sur workflow
 router.post('/',
     requireAuth,
     validateRequest(createAgentInstanceSchema),
     async (req, res) => {
         try {
             const user = req.user as IUser;
-            const { workflowId, prototypeId, ...instanceData } = req.body;
+            const { workflowId } = req.params;
+            const { prototypeId, ...instanceData } = req.body;
+            
+            if (!workflowId || !mongoose.Types.ObjectId.isValid(workflowId)) {
+                return res.status(400).json({ error: 'workflowId invalide' });
+            }
 
             // Vérifier que workflow appartient à user
             const workflow = await Workflow.findOne({ _id: workflowId, userId: user.id });
@@ -129,15 +136,20 @@ router.post('/',
     }
 );
 
-// POST /api/agent-instances/from-prototype - Créer instance depuis prototype
+// POST /api/workflows/:workflowId/instances/from-prototype - Créer instance depuis prototype
 router.post('/from-prototype', requireAuth, async (req, res) => {
     try {
         const user = req.user as IUser;
-        const { prototypeId, workflowId, position } = req.body;
+        const { workflowId } = req.params;
+        const { prototypeId, position } = req.body;
 
-        if (!prototypeId || !workflowId || !position) {
+        if (!workflowId || !mongoose.Types.ObjectId.isValid(workflowId)) {
+            return res.status(400).json({ error: 'workflowId invalide' });
+        }
+        
+        if (!prototypeId || !position) {
             return res.status(400).json({
-                error: 'prototypeId, workflowId et position requis'
+                error: 'prototypeId et position requis'
             });
         }
 

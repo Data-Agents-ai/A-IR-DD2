@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcrypt';
+import config from '../config/environment';
 
 export interface IUser extends Document {
     email: string;
@@ -37,14 +38,16 @@ const UserSchema = new Schema<IUser>({
     },
     lastLogin: Date
 }, {
-    timestamps: true
+    timestamps: true,
+    strict: false // Permettre les champs additionnels
 });
 
 // Middleware: Hash password avant sauvegarde
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password')) return next();
 
-    const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_ROUNDS || '10'));
+    // SOLID: Utiliser bcrypt.rounds depuis config centralisée
+    const salt = await bcrypt.genSalt(config.bcrypt.rounds);
     this.password = await bcrypt.hash(this.password, salt);
     next();
 });

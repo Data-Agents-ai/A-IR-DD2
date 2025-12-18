@@ -587,7 +587,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                             {cap === LLMCapability.Embedding && '🧮 Embeddings'}
                             {cap === LLMCapability.ImageGeneration && '🎨 Images'}
                             {cap === LLMCapability.OCR && '🎵 Audio'}
-                            {cap === LLMCapability.LocalDeployment && '🔌 Local'}
                             {cap === LLMCapability.CodeSpecialization && '💻 Code'}
                             {cap === LLMCapability.ExtendedThinking && '💭 Extended Thinking'}
                             {cap === LLMCapability.PDFSupport && '📄 PDF Support'}

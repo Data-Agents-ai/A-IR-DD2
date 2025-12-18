@@ -18,14 +18,14 @@ const WorkflowEdgeSchema = new Schema<IWorkflowEdge>({
     workflowId: {
         type: Schema.Types.ObjectId,
         ref: 'Workflow',
-        required: true,
-        index: true
+        required: true
+        // Removed: index: true (conflicts with composite indexes below)
     },
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
+        // Removed: index: true (if not needed for direct queries)
     },
     sourceInstanceId: {
         type: Schema.Types.ObjectId,

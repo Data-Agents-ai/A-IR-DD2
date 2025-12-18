@@ -58,9 +58,9 @@ npm run dev
 
 ```bash
 # Test MongoDB connection
-docker exec a-ir-dd2-mongodb mongosh \
-  --username admin \
-  --password SecurePassword123! \
+docker exec -it a-ir-dd2-mongodb mongosh \
+  --username ${MONGO_USER} \
+  --password ${MONGO_PASSWORD} \
   --authenticationDatabase admin \
   a-ir-dd2-dev \
   --eval "show collections"
@@ -77,9 +77,9 @@ docker exec a-ir-dd2-mongodb mongosh \
 # workflows
 
 # Verify test user was created
-docker exec a-ir-dd2-mongodb mongosh \
-  --username admin \
-  --password SecurePassword123! \
+docker exec -it a-ir-dd2-mongodb mongosh \
+  --username ${MONGO_USER} \
+  --password ${MONGO_PASSWORD} \
   --authenticationDatabase admin \
   a-ir-dd2-dev \
   --eval "db.users.find()"
@@ -163,10 +163,10 @@ docker-compose down -v
 
 ### Connect to MongoDB Directly
 ```bash
-# Interactive shell
+# Interactive shell (assurez-vous que vos variables d'environnement MONGO_USER/MONGO_PASSWORD sont définies)
 docker exec -it a-ir-dd2-mongodb mongosh \
-  --username admin \
-  --password SecurePassword123! \
+  --username ${MONGO_USER} \
+  --password ${MONGO_PASSWORD} \
   --authenticationDatabase admin
 
 # In mongosh:

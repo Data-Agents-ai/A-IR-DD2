@@ -6,10 +6,11 @@ import { spawn } from 'child_process';
 import path from 'path';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
-import dotenv from 'dotenv';
 import passport from './middleware/auth.middleware';
 import { connectDatabase } from './config/database';
+import config, { validateConfig } from './config/environment';
 import lmstudioRoutes from './routes/lmstudio.routes';
+import localLLMRoutes from './routes/local-llm.routes';
 import authRoutes from './routes/auth.routes';
 import workflowsRoutes from './routes/workflows.routes';
 import agentPrototypesRoutes from './routes/agent-prototypes.routes';
@@ -18,11 +19,11 @@ import llmConfigsRoutes from './routes/llm-configs.routes';
 import llmProxyRoutes from './routes/llm-proxy.routes';
 import userSettingsRoutes from './routes/user-settings.routes';
 
-// Charger variables d'environnement
-dotenv.config();
+// SOLID: Valider la configuration au démarrage (fail-fast pattern)
+validateConfig();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
 // ===== SECURITY MIDDLEWARE =====
 // Helmet: Sécurise les headers HTTP
@@ -52,13 +53,17 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 
 // Workflow routes (Jalon 3 - Phase 1)
+// CORRECTION SOLID: agent-instances imbriquées SOUS workflows pour héritage des params
 app.use('/api/workflows', workflowsRoutes);
+workflowsRoutes.use('/:workflowId/instances', agentInstancesRoutes);
 app.use('/api/agent-prototypes', agentPrototypesRoutes);
-app.use('/api/agent-instances', agentInstancesRoutes);
 
 // LLM routes (Jalon 3 - Phase 2)
 app.use('/api/llm-configs', llmConfigsRoutes);
 app.use('/api/llm', llmProxyRoutes);
+
+// Local LLM detection routes (new architecture - Option C Hybrid)
+app.use('/api/local-llm', localLLMRoutes);
 
 // User settings routes (Jalon 4 - Phase 3)
 app.use(userSettingsRoutes);

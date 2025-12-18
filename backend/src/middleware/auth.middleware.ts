@@ -108,6 +108,13 @@ export const requireOwnershipAsync = (
                 return res.status(401).json({ error: 'Non authentifié' });
             }
 
+            // CORRECTION SOLID: Validation ObjectId AVANT query DB
+            // Cela prévient CastError → 500 et retourne 400 Bad Request
+            const resourceId = req.params.id || req.params.instanceId || req.params.workflowId;
+            if (resourceId && !mongoose.Types.ObjectId.isValid(resourceId)) {
+                return res.status(400).json({ error: 'Format d\'ID invalide.' });
+            }
+
             const user = req.user as IUser;
             const resourceUserId = await getResourceUserId(req);
 

@@ -11,7 +11,7 @@ export enum LLMProvider {
   Qwen = 'Qwen',
   Kimi = 'Kimi K2',
   DeepSeek = 'DeepSeek',
-  LMStudio = 'LMStudio',
+  LMStudio = 'LLM local (on premise)',
   ArcLLM = 'Arc-LLM', // Arc-LLM provider for Video, Maps, Web Grounding
 }
 
@@ -28,7 +28,6 @@ export enum LLMCapability {
   OCR = 'OCR',
   Reasoning = 'Reasoning Mode',
   CacheOptimization = 'Cache Optimization',
-  LocalDeployment = 'Local Deployment',
   CodeSpecialization = 'Code Specialization',
   // Arc-LLM specific capabilities
   VideoGeneration = 'Video Generation',
@@ -431,3 +430,61 @@ export interface WebSearchGroundingResponse {
   text: string;
   webSources: WebSearchSource[];
 }
+
+// ============================================
+// LLM Config UI Types (Phase 2 - Jalon 3)
+// ============================================
+
+/**
+ * Interface UI pour les configurations LLM
+ * Utilisée par le hook useLLMConfigs et les composants React
+ * 
+ * NOTE: En mode authentifié, les API keys sont chiffrées côté backend
+ * En mode guest (localStorage), aucun chiffrement (mode de développement)
+ */
+export interface ILLMConfigUI {
+  id: string;
+  provider: string; // 'OpenAI', 'Anthropic', 'Gemini', etc.
+  enabled: boolean;
+  capabilities: Record<string, boolean>;
+  hasApiKey: boolean; // Indicateur (jamais l'API key elle-même)
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+  // ⚠️ ONLY in localStorage mode (guest):
+  apiKeyPlaintext?: string; // Non-sécurisé, développement uniquement
+}
+
+/**
+ * Configuration LLM enrichie avec métadonnées utilisateur
+ */
+export interface LLMConfigWithUser extends ILLMConfigUI {
+  userId: string; // Propriétaire de la config
+  lastUsedAt?: string; // Tracking usage
+}
+
+
+// ============================================
+// BACKWARD COMPATIBILITY ALIASES
+// Mapping ancien code vers V2 types
+// ============================================
+
+/** @deprecated Utiliser V2WorkflowEdge */
+export type WorkflowEdge = V2WorkflowEdge;
+
+/** Alias pour WorkflowNode ancien vers V2WorkflowNode moderne */
+export type V2_WorkflowNodeAlias = V2WorkflowNode;
+
+/**
+ * @deprecated Utiliser V2WorkflowNode[]
+ * Alias pour backward compatibility avec workflowService.ts
+ */
+export interface Workflow {
+  _id?: string;
+  name?: string;
+  description?: string;
+  nodes: V2WorkflowNode[];
+  edges: V2WorkflowEdge[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+

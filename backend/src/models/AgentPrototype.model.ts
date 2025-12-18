@@ -21,8 +21,8 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
+        // Removed: index: true (conflicts with composite indexes below)
     },
     name: {
         type: String,
@@ -62,8 +62,8 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
         enum: {
             values: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'],
             message: 'RobotId invalide. Seuls AR_001, BOS_001, COM_001, PHIL_001, TIM_001 sont autorisés'
-        },
-        index: true
+        }
+        // Removed: index: true (used in composite index with userId)
     },
     isPrototype: {
         type: Boolean,

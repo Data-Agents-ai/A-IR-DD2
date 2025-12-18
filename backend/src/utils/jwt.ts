@@ -1,12 +1,14 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
+import config from '../config/environment';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '24h';
-const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET!;
-const REFRESH_EXPIRATION = process.env.REFRESH_TOKEN_EXPIRATION || '7d';
+// SOLID: Dependency Injection - récupérer les secrets depuis config centralisée
+const JWT_SECRET = config.jwt.secret;
+const JWT_EXPIRATION = config.jwt.expiration;
+const REFRESH_SECRET = config.jwt.refreshSecret;
+const REFRESH_EXPIRATION = config.jwt.refreshExpiration;
 
 if (!JWT_SECRET || !REFRESH_SECRET) {
-    throw new Error('JWT secrets not configured in .env');
+    throw new Error('JWT secrets not configured - check your .env file');
 }
 
 export interface JWTPayload {

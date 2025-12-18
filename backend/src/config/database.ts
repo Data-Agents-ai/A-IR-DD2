@@ -1,10 +1,12 @@
 import mongoose from 'mongoose';
+import config from './environment';
 
 /**
  * Configuration et connexion à MongoDB avec retry logic
+ * SOLID Pattern: Dependency Injection - config injectée depuis environment.ts
  */
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/a-ir-dd2-dev';
+const MONGODB_URI = config.mongodbUri;
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 5000; // 5 secondes
 

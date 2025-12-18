@@ -736,7 +736,6 @@ const ConfigurationTab: React.FC<{
                                         {cap === LLMCapability.Embedding && '🧮 Embed'}
                                         {cap === LLMCapability.ImageGeneration && '🎨 Images'}
                                         {cap === LLMCapability.OCR && '🎵 Audio'}
-                                        {cap === LLMCapability.LocalDeployment && '🔌 Local'}
                                         {!Object.values(LLMCapability).includes(cap) && cap}
                                     </span>
                                 </div>

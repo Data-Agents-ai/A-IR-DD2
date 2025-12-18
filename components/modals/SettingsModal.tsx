@@ -51,7 +51,7 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
   const handleDetectLMStudio = async () => {
     const lmStudioConfig = currentLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
     if (!lmStudioConfig?.apiKey) {
-      setDetectionError('Veuillez configurer l\'endpoint LMStudio');
+      setDetectionError('Veuillez configurer l\'endpoint LLM local');
       return;
     }
 
@@ -65,21 +65,43 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
         setDetectionProgress(prev => Math.min(prev + 15, 90));
       }, 200);
 
-      // Jalon 5: Invalider cache avant détection pour forcer refresh
-      invalidateLMStudioCache();
+      // JALON 5: Appel unique au backend proxy (Option C Hybride)
+      // URL endpoint est passée en query param
+      console.log(`[SettingsModal] Testing endpoint: ${lmStudioConfig.apiKey}`);
 
-      const detection = await detectLMStudioModel(lmStudioConfig.apiKey);
+      const apiUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:3001'}/api/local-llm/detect-capabilities?endpoint=${encodeURIComponent(lmStudioConfig.apiKey)}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000)
+      });
+
+      const result = await response.json();
 
       clearInterval(progressInterval);
       setDetectionProgress(100);
-      setLmStudioDetection(detection);
+
+      if (!result.healthy) {
+        setDetectionError(result.error || 'Endpoint non accessible');
+        setDetectionProgress(0);
+        return;
+      }
+
+      // Stocker la détection
+      setLmStudioDetection({
+        modelId: result.modelId,
+        routes: {},
+        capabilities: result.capabilities,
+        detectedAt: result.detectedAt
+      });
 
       // Mettre à jour les capacités automatiquement
       setCurrentLLMConfigs(prev =>
         prev.map(c => {
           if (c.provider === LLMProvider.LMStudio) {
             const newCapabilities = { ...c.capabilities };
-            detection.capabilities.forEach(cap => {
+            result.capabilities.forEach((cap: LLMCapability) => {
               newCapabilities[cap] = true;
             });
             return { ...c, capabilities: newCapabilities };
@@ -88,10 +110,17 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
         })
       );
 
+      console.log('[SettingsModal] Detection successful:', {
+        endpoint: result.endpoint,
+        modelId: result.modelId,
+        capabilitiesCount: result.capabilities.length
+      });
+
       setTimeout(() => setDetectionProgress(0), 1000);
     } catch (error: any) {
       setDetectionError(error.message || 'Erreur lors de la détection');
       setDetectionProgress(0);
+      console.error('[SettingsModal] Detection error:', error);
     } finally {
       setIsDetecting(false);
     }
@@ -360,9 +389,6 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                                   )}
                                   {cap === LLMCapability.CacheOptimization && provider === LLMProvider.DeepSeek && (
                                     <span className="ml-2 text-xs text-blue-500">0.014¢/1K tokens</span>
-                                  )}
-                                  {cap === LLMCapability.LocalDeployment && provider === LLMProvider.LMStudio && (
-                                    <span className="ml-2 text-xs text-purple-500">Sovereignty</span>
                                   )}
                                   {cap === LLMCapability.CodeSpecialization && provider === LLMProvider.LMStudio && (
                                     <span className="ml-2 text-xs text-orange-500">Qwen2.5 Coder</span>
