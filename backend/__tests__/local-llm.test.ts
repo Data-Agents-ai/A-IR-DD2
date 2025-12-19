@@ -6,7 +6,6 @@
  */
 
 import { detectLocalLLMCapabilities } from '../src/services/localLLMService';
-import { LLMCapability } from '../src/types/lmstudio.types';
 
 /**
  * TEST 1: Endpoint invalide retourne structure conforme (healthy: false)
@@ -59,7 +58,7 @@ describe('localLLMService - TNR', () => {
             endpoint: mockEndpoint,
             modelId: 'llama2',
             modelName: 'llama2:7b',
-            capabilities: [LLMCapability.Chat, LLMCapability.Embedding],
+            capabilities: ['Chat', 'Embedding'],
             detectedAt: new Date().toISOString()
         };
 
@@ -90,10 +89,10 @@ describe('localLLMService - TNR', () => {
     });
 
     /**
-     * TEST 6: LLMCapability enum values respect types
+     * TEST 6: Capabilities contain only valid string values
      */
-    test('capabilities should only contain valid LLMCapability enum values', async () => {
-        const validCapabilities = Object.values(LLMCapability);
+    test('capabilities should only contain valid capability strings', async () => {
+        const validCapabilities = ['Chat', 'FunctionCalling', 'Vision', 'Embedding', 'JSONMode'];
         const result = await detectLocalLLMCapabilities('http://localhost:9999');
 
         result.capabilities.forEach(cap => {

@@ -139,7 +139,7 @@ export async function detectLocalLLMCapabilities(endpoint: string): Promise<Dete
  */
 export async function detectLMStudioModel(endpoint: string): Promise<DetectionResult | null> {
     const result = await detectLocalLLMCapabilities(endpoint);
-    return result.healthy ? result : null;
+    return result;
 }
 
 /**

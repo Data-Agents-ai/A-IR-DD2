@@ -2,7 +2,7 @@
 // Jalon 3: Hook personnalisé pour détection LMStudio avec auto-refresh
 
 import { useState, useEffect } from 'react';
-import { LMStudioModelDetection } from '../types';
+import { LMStudioModelDetection, LLMCapability } from '../types';
 import { detectLMStudioModel } from '../services/routeDetectionService';
 
 interface UseLMStudioDetectionOptions {
@@ -46,8 +46,41 @@ export const useLMStudioDetection = (
 
         try {
             const result = await detectLMStudioModel(endpoint);
-            setDetection(result);
-            onSuccess?.(result);
+            
+            if (!result || !result.healthy) {
+                setError(result?.error || 'Endpoint non accessible');
+                setDetection(null);
+                onError?.(result?.error || 'Endpoint non accessible');
+                return;
+            }
+
+            // Convertir DetectionResult en LMStudioModelDetection
+            // result.capabilities est string[], on doit le convertir en LLMCapability[]
+            const detectionCapabilities: LLMCapability[] = (result.capabilities as string[])
+              .filter(cap => cap)
+              .map(cap => {
+                // Chercher la valeur d'enum correspondante
+                const enumValue = Object.values(LLMCapability).find(v => v === cap);
+                return enumValue as LLMCapability;
+              })
+              .filter((cap): cap is LLMCapability => cap !== undefined);
+
+            const detection: LMStudioModelDetection = {
+                modelId: result.modelId || 'unknown',
+                routes: {
+                  models: true,
+                  chatCompletions: true,
+                  completions: false,
+                  embeddings: false,
+                  images: false,
+                  audio: false
+                },
+                capabilities: detectionCapabilities,
+                detectedAt: result.detectedAt
+            };
+
+            setDetection(detection);
+            onSuccess?.(detection);
         } catch (err: any) {
             const errorMessage = err.message || 'Erreur lors de la détection LMStudio';
             setError(errorMessage);

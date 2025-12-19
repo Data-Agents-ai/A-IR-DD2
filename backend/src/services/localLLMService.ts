@@ -6,8 +6,6 @@
  * Principes SOLID: SRP (validation de config seulement, pas de proxy runtime)
  */
 
-import { LLMProvider, LLMCapability } from '../types/lmstudio.types';
-
 interface LocalLLMCapabilities {
     chat: boolean;
     functionCalling: boolean;
@@ -21,7 +19,7 @@ interface DetectionResult {
     endpoint: string;
     modelId?: string;
     modelName?: string;
-    capabilities: LLMCapability[];
+    capabilities: string[];  // Capability names as strings (e.g., 'Chat', 'Embedding')
     detectedAt: string;
     error?: string;
 }
@@ -263,13 +261,13 @@ async function testJsonMode(endpoint: string, modelId: string): Promise<void> {
 /**
  * Convertir capacités locales en LLMCapability enum
  */
-function capabilitiesToEnum(caps: LocalLLMCapabilities): LLMCapability[] {
-    const result: LLMCapability[] = [];
+function capabilitiesToStringArray(caps: LocalLLMCapabilities): string[] {
+    const result: string[] = [];
 
-    if (caps.chat) result.push(LLMCapability.Chat);
-    if (caps.functionCalling) result.push(LLMCapability.FunctionCalling);
-    if (caps.embedding) result.push(LLMCapability.Embedding);
-    if (caps.jsonMode) result.push(LLMCapability.OutputFormatting);
+    if (caps.chat) result.push('Chat');
+    if (caps.functionCalling) result.push('Function Calling');
+    if (caps.embedding) result.push('Embedding');
+    if (caps.jsonMode) result.push('Output Formatting');
 
     return result;
 }
@@ -305,7 +303,10 @@ export async function detectLocalLLMCapabilities(endpoint: string): Promise<Dete
             return {
                 healthy: true,
                 endpoint,
-                capabilities: [],
+                // Capacités par défaut pour LLM local (on premise)
+                // Tous les LLM locaux supportent au minimum Chat et Function Calling
+                // NOTE: Les valeurs doivent correspondre aux valeurs de l'enum LLMCapability
+                capabilities: ['Chat', 'Function Calling'],
                 detectedAt: new Date().toISOString(),
                 error: 'No models available'
             };
@@ -313,11 +314,16 @@ export async function detectLocalLLMCapabilities(endpoint: string): Promise<Dete
 
         // Étape 3: Probe des capacités
         const localCaps = await probeCapabilities(endpoint, model.id);
-        const capabilities = capabilitiesToEnum(localCaps);
+        const capabilities = capabilitiesToStringArray(localCaps);
+
+        // Assurer que Chat et FunctionCalling sont toujours présents (minimum pour tout LLM local)
+        // NOTE: Les valeurs doivent correspondre aux valeurs de l'enum LLMCapability (avec espaces)
+        const finalCapabilities = [...new Set(['Chat', 'Function Calling', ...capabilities])];
 
         console.log(`[LocalLLM] Detection complete for ${endpoint}:`, {
             modelId: model.id,
-            capabilitiesCount: capabilities.length
+            capabilitiesCount: finalCapabilities.length,
+            capabilities: finalCapabilities
         });
 
         return {
@@ -325,7 +331,7 @@ export async function detectLocalLLMCapabilities(endpoint: string): Promise<Dete
             endpoint,
             modelId: model.id,
             modelName: model.name,
-            capabilities,
+            capabilities: finalCapabilities,
             detectedAt: new Date().toISOString()
         };
 

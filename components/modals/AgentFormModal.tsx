@@ -179,6 +179,25 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     }
   }, [llmProvider, lmStudioEndpoint, lmStudioDetection]);
 
+  // Helper function to convert capability strings to LLMCapability enum
+  const stringToCapability = (str: string): LLMCapability | null => {
+    const enumValue = Object.values(LLMCapability).find(v => v === str);
+    return enumValue as LLMCapability || null;
+  };
+
+  // Helper function to get label from capability string
+  const getCapabilityLabel = (str: string): string => {
+    const capMap: Record<string, string> = {
+      'Chat': 'Chat',
+      'Function Calling': 'Appel de Fonction',
+      'Embedding': 'Embedding',
+      'Output Formatting': 'Output Formatting',
+      'Vision': 'Vision',
+      'Thinking': 'Thinking (Réflexion)'
+    };
+    return capMap[str] || str;
+  };
+
   // Helper function to get available capabilities for a provider (must be after lmStudioDetection)
   // Wrapped in useCallback to prevent infinite loops in useEffect dependencies
   const getAvailableCapabilities = React.useCallback((provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
@@ -190,8 +209,9 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
 
     // PRIORITÉ 1: Pour LMStudio, utiliser les capacités détectées dynamiquement si disponibles
     if (provider === LLMProvider.LMStudio && lmStudioDetection?.capabilities) {
-      console.log('[AgentFormModal] Using dynamically detected capabilities for LMStudio:', lmStudioDetection.capabilities);
-      return lmStudioDetection.capabilities;
+      const detectedCaps = lmStudioDetection.capabilities.filter((cap): cap is LLMCapability => cap !== undefined && cap !== null);
+      console.log('[AgentFormModal] Using dynamically detected capabilities for LMStudio:', detectedCaps);
+      return detectedCaps;
     }
 
     // PRIORITÉ 2: If a specific model is selected, use its capabilities from LLM_MODELS_DETAILED
@@ -482,7 +502,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                                 llmProvider === LLMProvider.Anthropic ? 'bg-orange-500/20 text-orange-200 border-orange-400/30' :
                                   'bg-gray-500/20 text-gray-200 border-gray-400/30'
                             }`}>
-                            {cap}
+                            {typeof cap === 'string' ? getCapabilityLabel(cap) : LLMCapability[cap]}
                           </span>
                         ))}
                       </div>
@@ -689,7 +709,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                           className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
                         />
                         <span className="ml-3 text-sm text-gray-300">
-                          {cap}
+                          {typeof cap === 'string' ? getCapabilityLabel(cap) : LLMCapability[cap]}
                         </span>
                       </label>
                     ))}

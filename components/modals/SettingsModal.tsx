@@ -26,6 +26,19 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [detectionProgress, setDetectionProgress] = useState(0);
 
+  // Helper function to get label from capability string
+  const getCapabilityLabel = (str: string): string => {
+    const capMap: Record<string, string> = {
+      'Chat': 'Chat',
+      'Function Calling': 'Appel de Fonction',
+      'Embedding': 'Embedding',
+      'Output Formatting': 'Output Formatting',
+      'Vision': 'Vision',
+      'Thinking': 'Thinking (Réflexion)'
+    };
+    return capMap[str] || str;
+  };
+
   const handleProviderToggle = (provider: LLMProvider, enabled: boolean) => {
     setCurrentLLMConfigs(prev =>
       prev.map(c => (c.provider === provider ? { ...c, enabled } : c))
@@ -92,7 +105,13 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
       setLmStudioDetection({
         modelId: result.modelId,
         routes: {},
-        capabilities: result.capabilities,
+        capabilities: (result.capabilities as string[])
+          .filter(cap => cap)
+          .map(cap => {
+            const enumValue = Object.values(LLMCapability).find(v => v === cap);
+            return enumValue as LLMCapability;
+          })
+          .filter((cap): cap is LLMCapability => cap !== undefined),
         detectedAt: result.detectedAt
       });
 
@@ -101,7 +120,7 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
         prev.map(c => {
           if (c.provider === LLMProvider.LMStudio) {
             const newCapabilities = { ...c.capabilities };
-            result.capabilities.forEach((cap: LLMCapability) => {
+            result.capabilities.forEach((cap: string) => {
               newCapabilities[cap] = true;
             });
             return { ...c, capabilities: newCapabilities };
@@ -332,7 +351,7 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                                             animation: `badge-appear 0.3s ease-out ${index * 0.05}s both`
                                           }}
                                         >
-                                          {cap}
+                                          {getCapabilityLabel(cap)}
                                         </span>
                                       ))}
                                     </div>
