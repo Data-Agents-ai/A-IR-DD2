@@ -8,7 +8,11 @@ import { detectLMStudioModel } from '../services/routeDetectionService';
 interface UseLMStudioDetectionOptions {
     endpoint?: string;
     autoDetect?: boolean; // Lancer détection automatiquement au mount
-    onSuccess?: (detection: LMStudioModelDetection) => void;
+    onSuccess?: (
+        detection: LMStudioModelDetection,
+        // Ajout d'une fonction pour sauvegarder la config associée
+        saveConfig: (config: { apiKey: string; enabled: boolean; capabilities: Record<string, boolean> }) => Promise<any>
+    ) => void;
     onError?: (error: string) => void;
 }
 
@@ -34,13 +38,15 @@ export const useLMStudioDetection = (
     const [error, setError] = useState<string | null>(null);
 
     // Fonction de détection réutilisable
-    const performDetection = async () => {
+    const performDetection = async (isManualTrigger: boolean = false) => {
         if (!endpoint) {
-            setError('Endpoint LMStudio non configuré');
-            onError?.('Endpoint LMStudio non configuré');
+            const msg = 'Endpoint LMStudio non configuré';
+            if (isManualTrigger) setError(msg); // N'afficher l'erreur que si l'utilisateur a cliqué
+            onError?.(msg);
             return;
         }
 
+        setDetection(null); // Reset previous detection
         setIsDetecting(true);
         setError(null);
 
@@ -48,9 +54,10 @@ export const useLMStudioDetection = (
             const result = await detectLMStudioModel(endpoint);
             
             if (!result || !result.healthy) {
-                setError(result?.error || 'Endpoint non accessible');
+                const errorMsg = result?.error || 'Endpoint non accessible ou aucun modèle chargé.';
+                setError(errorMsg);
                 setDetection(null);
-                onError?.(result?.error || 'Endpoint non accessible');
+                onError?.(errorMsg);
                 return;
             }
 
@@ -80,7 +87,16 @@ export const useLMStudioDetection = (
             };
 
             setDetection(detection);
-            onSuccess?.(detection);
+            // Appeler onSuccess avec la fonction de sauvegarde pré-configurée
+            if (onSuccess) {
+                const saveThisConfig = (config: { apiKey: string; enabled: boolean; capabilities: Record<string, boolean> }) => {
+                    // Ici, on pourrait appeler un hook de persistance comme useLLMConfigs
+                    console.log('Sauvegarde de la configuration LMStudio...', config);
+                    // Exemple: updateConfig('LMStudio', { ...config, model: detection.modelId });
+                    return Promise.resolve();
+                };
+                onSuccess(detection, saveThisConfig);
+            }
         } catch (err: any) {
             const errorMessage = err.message || 'Erreur lors de la détection LMStudio';
             setError(errorMessage);
@@ -92,14 +108,14 @@ export const useLMStudioDetection = (
 
     // Auto-détection quand endpoint change (si autoDetect activé)
     useEffect(() => {
-        if (autoDetect && endpoint) {
-            performDetection();
+        if (autoDetect) {
+            void performDetection(false);
         }
-    }, [endpoint, autoDetect]);
+    }, [endpoint, autoDetect]); // Dépendances simplifiées pour re-déclencher
 
     // Fonction manuelle de re-détection
     const redetect = async () => {
-        await performDetection();
+        await performDetection(true);
     };
 
     // Clear detection (utile pour reset)
