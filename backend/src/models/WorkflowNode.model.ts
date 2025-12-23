@@ -35,7 +35,8 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>({
     },
     metadata: Schema.Types.Mixed
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'workflow_nodes'
 });
 
 // Index pour queries utilisateur

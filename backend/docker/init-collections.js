@@ -9,7 +9,7 @@ db.createCollection('users', {
   validator: {
     $jsonSchema: {
       bsonType: 'object',
-      required: ['email', 'passwordHash', 'createdAt'],
+      required: ['email', 'password', 'createdAt'],
       properties: {
         _id: { bsonType: 'objectId' },
         email: {
@@ -17,9 +17,14 @@ db.createCollection('users', {
           pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
           description: 'User email address (unique)'
         },
-        passwordHash: {
+        password: {
           bsonType: 'string',
           description: 'Bcrypt hashed password'
+        },
+        role: {
+          bsonType: 'string',
+          enum: ['admin', 'user', 'viewer'],
+          description: 'User role'
         },
         createdAt: {
           bsonType: 'date',
@@ -32,6 +37,10 @@ db.createCollection('users', {
         isActive: {
           bsonType: 'bool',
           description: 'Account status'
+        },
+        lastLogin: {
+          bsonType: 'date',
+          description: 'Last login timestamp'
         }
       }
     }
@@ -134,13 +143,33 @@ db.createCollection('workflows', {
   validator: {
     $jsonSchema: {
       bsonType: 'object',
-      required: ['name', 'creator_id', 'createdAt'],
+      required: ['name', 'userId', 'createdAt'],
       properties: {
         _id: { bsonType: 'objectId' },
-        name: { bsonType: 'string' },
-        description: { bsonType: 'string' },
-        creator_id: { bsonType: 'string', description: 'Robot creator ID' },
-        status: { bsonType: 'string' },
+        userId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
+        name: {
+          bsonType: 'string',
+          description: 'Workflow name'
+        },
+        description: {
+          bsonType: 'string',
+          description: 'Workflow description'
+        },
+        isActive: {
+          bsonType: 'bool',
+          description: 'Whether this workflow is currently active'
+        },
+        lastSavedAt: {
+          bsonType: 'date',
+          description: 'Last manual save timestamp'
+        },
+        isDirty: {
+          bsonType: 'bool',
+          description: 'Has unsaved changes'
+        },
         createdAt: { bsonType: 'date' },
         updatedAt: { bsonType: 'date' }
       }
@@ -148,20 +177,24 @@ db.createCollection('workflows', {
   }
 });
 
-db.workflows.createIndex({ creator_id: 1 });
+db.workflows.createIndex({ userId: 1, isActive: 1 });
+db.workflows.createIndex({ userId: 1, updatedAt: -1 });
 console.log('✓ Created workflows collection');
 
-// Create agents collection
+// Create agents collection (legacy - kept for backward compatibility)
 db.createCollection('agents', {
   validator: {
     $jsonSchema: {
       bsonType: 'object',
-      required: ['name', 'creator_id', 'createdAt'],
+      required: ['name', 'userId', 'createdAt'],
       properties: {
         _id: { bsonType: 'objectId' },
+        userId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
         name: { bsonType: 'string' },
         description: { bsonType: 'string' },
-        creator_id: { bsonType: 'string', description: 'Robot creator ID (Archi for agents)' },
         tools: { bsonType: 'array' },
         createdAt: { bsonType: 'date' },
         updatedAt: { bsonType: 'date' }
@@ -170,27 +203,182 @@ db.createCollection('agents', {
   }
 });
 
-db.agents.createIndex({ creator_id: 1 });
-console.log('✓ Created agents collection');
+db.agents.createIndex({ userId: 1 });
+console.log('✓ Created agents collection (legacy)');
 
 // Create workflow_nodes collection
-db.createCollection('workflow_nodes');
-db.workflow_nodes.createIndex({ workflowId: 1 });
+db.createCollection('workflow_nodes', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['ownerId', 'nodeType', 'nodeData', 'position', 'createdAt'],
+      properties: {
+        _id: { bsonType: 'objectId' },
+        ownerId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
+        nodeType: {
+          bsonType: 'string',
+          enum: ['agent', 'connection', 'event', 'file'],
+          description: 'Type of workflow node'
+        },
+        nodeData: {
+          bsonType: 'object',
+          description: 'Node-specific data'
+        },
+        position: {
+          bsonType: 'object',
+          required: ['x', 'y'],
+          properties: {
+            x: { bsonType: 'number' },
+            y: { bsonType: 'number' }
+          }
+        },
+        metadata: { bsonType: 'object' },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: 'date' }
+      }
+    }
+  }
+});
+db.workflow_nodes.createIndex({ ownerId: 1, nodeType: 1 });
+db.workflow_nodes.createIndex({ ownerId: 1, createdAt: -1 });
 console.log('✓ Created workflow_nodes collection');
 
 // Create workflow_edges collection
-db.createCollection('workflow_edges');
+db.createCollection('workflow_edges', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['workflowId', 'userId', 'sourceInstanceId', 'targetInstanceId', 'createdAt'],
+      properties: {
+        _id: { bsonType: 'objectId' },
+        workflowId: {
+          bsonType: 'objectId',
+          description: 'Reference to parent workflow'
+        },
+        userId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
+        sourceInstanceId: {
+          bsonType: 'objectId',
+          description: 'Source agent instance'
+        },
+        targetInstanceId: {
+          bsonType: 'objectId',
+          description: 'Target agent instance'
+        },
+        sourceHandle: { bsonType: 'string' },
+        targetHandle: { bsonType: 'string' },
+        edgeType: {
+          bsonType: 'string',
+          enum: ['default', 'step', 'smoothstep', 'straight']
+        },
+        animated: { bsonType: 'bool' },
+        label: { bsonType: 'string' },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: 'date' }
+      }
+    }
+  }
+});
 db.workflow_edges.createIndex({ workflowId: 1 });
+db.workflow_edges.createIndex({ sourceInstanceId: 1 });
+db.workflow_edges.createIndex({ targetInstanceId: 1 });
 console.log('✓ Created workflow_edges collection');
 
 // Create agent_prototypes collection
-db.createCollection('agent_prototypes');
-db.agent_prototypes.createIndex({ creator_id: 1 });
+db.createCollection('agent_prototypes', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['userId', 'name', 'role', 'systemPrompt', 'llmProvider', 'llmModel', 'robotId', 'createdAt'],
+      properties: {
+        _id: { bsonType: 'objectId' },
+        userId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
+        name: { bsonType: 'string' },
+        role: { bsonType: 'string' },
+        systemPrompt: { bsonType: 'string' },
+        llmProvider: { bsonType: 'string' },
+        llmModel: { bsonType: 'string' },
+        capabilities: { bsonType: 'array' },
+        historyConfig: { bsonType: 'object' },
+        tools: { bsonType: 'array' },
+        outputConfig: { bsonType: 'object' },
+        robotId: {
+          bsonType: 'string',
+          enum: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'],
+          description: 'Robot creator ID'
+        },
+        isPrototype: { bsonType: 'bool' },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: 'date' }
+      }
+    }
+  }
+});
+db.agent_prototypes.createIndex({ userId: 1, createdAt: -1 });
+db.agent_prototypes.createIndex({ userId: 1, robotId: 1 });
 console.log('✓ Created agent_prototypes collection');
 
-// Create agent_instances collection (for runtime tracking)
-db.createCollection('agent_instances');
-db.agent_instances.createIndex({ agentId: 1, createdAt: 1 });
+// Create agent_instances collection (runtime instances in workflows)
+db.createCollection('agent_instances', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['workflowId', 'userId', 'name', 'role', 'systemPrompt', 'llmProvider', 'llmModel', 'robotId', 'position', 'createdAt'],
+      properties: {
+        _id: { bsonType: 'objectId' },
+        workflowId: {
+          bsonType: 'objectId',
+          description: 'Reference to parent workflow'
+        },
+        userId: {
+          bsonType: 'objectId',
+          description: 'Reference to user owner'
+        },
+        prototypeId: {
+          bsonType: 'objectId',
+          description: 'Optional reference to source prototype'
+        },
+        name: { bsonType: 'string' },
+        role: { bsonType: 'string' },
+        systemPrompt: { bsonType: 'string' },
+        llmProvider: { bsonType: 'string' },
+        llmModel: { bsonType: 'string' },
+        capabilities: { bsonType: 'array' },
+        historyConfig: { bsonType: 'object' },
+        tools: { bsonType: 'array' },
+        outputConfig: { bsonType: 'object' },
+        robotId: {
+          bsonType: 'string',
+          enum: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001']
+        },
+        position: {
+          bsonType: 'object',
+          required: ['x', 'y'],
+          properties: {
+            x: { bsonType: 'number' },
+            y: { bsonType: 'number' }
+          }
+        },
+        isMinimized: { bsonType: 'bool' },
+        isMaximized: { bsonType: 'bool' },
+        zIndex: { bsonType: 'number' },
+        createdAt: { bsonType: 'date' },
+        updatedAt: { bsonType: 'date' }
+      }
+    }
+  }
+});
+db.agent_instances.createIndex({ workflowId: 1, createdAt: -1 });
+db.agent_instances.createIndex({ userId: 1, workflowId: 1 });
+db.agent_instances.createIndex({ prototypeId: 1 });
 console.log('✓ Created agent_instances collection');
 
 console.log('\n✅ All collections created successfully!');

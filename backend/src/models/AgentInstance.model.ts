@@ -99,7 +99,8 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
         default: 0
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'agent_instances'
 });
 
 // Index composés pour queries optimisées

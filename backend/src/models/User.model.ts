@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import config from '../config/environment';
 
 export interface IUser extends Document {
+    id: string; // Mongoose virtual getter for _id.toString()
     email: string;
     password: string; // Hash uniquement
     role: 'admin' | 'user' | 'viewer';
@@ -39,6 +40,7 @@ const UserSchema = new Schema<IUser>({
     lastLogin: Date
 }, {
     timestamps: true,
+    collection: 'users',
     strict: false // Permettre les champs additionnels
 });
 

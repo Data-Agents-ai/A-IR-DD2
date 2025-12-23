@@ -30,23 +30,25 @@
 ### Quick Start (5 minutes)
 
 ```bash
-# 1. Start MongoDB with automatic initialization
+# 1. Configure backend
+cp backend/docker/.env.docker backend/.env
+
+# 2. Generate security keys
+node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('JWT_REFRESH_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
+
+# → Copy outputs to backend/.env
+
+# 3. Start MongoDB with automatic initialization
 cd backend/docker
 docker-compose up -d
 
-# 2. Verify container is running
+# 4. Verify container is running
 docker ps | grep a-ir-dd2-mongodb
 
-# 3. Return to project root
+# 5. Return to project root
 cd ../..
-
-# 4. Configure backend
-cp backend/docker/.env.docker backend/.env
-
-# 5. Generate security keys
-node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
-# → Copy outputs to backend/.env
 
 # 6. Start backend (Terminal 1)
 cd backend && npm run dev
@@ -169,7 +171,7 @@ docker-compose -f backend/docker/docker-compose.yml restart mongodb
 
 ### For More Details
 
-See `backend/docker/README.md` for:
+See `backend/README.md` for:
 - Backup and restore procedures
 - Security recommendations
 - Production deployment guide

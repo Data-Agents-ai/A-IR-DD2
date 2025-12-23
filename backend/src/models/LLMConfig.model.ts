@@ -50,7 +50,8 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
         default: {}
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'llm_configs'
 });
 
 // Unique constraint: 1 config par provider par user

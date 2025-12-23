@@ -39,7 +39,8 @@ const WorkflowSchema = new Schema<IWorkflow>({
         default: false
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'workflows'
 });
 
 // Index: Un seul workflow actif par user

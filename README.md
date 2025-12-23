@@ -60,47 +60,6 @@ A-IR-DD2 is a next-generation AI orchestration platform implementing a specializ
 
 ---
 
-## 🚀 Quick Start (5 minutes with Docker)
-
-### ⚡ Using Docker (Recommended)
-
-```bash
-# 1. Start MongoDB with automatic setup
-cd backend/docker
-docker-compose up -d
-
-# 2. Configure backend
-cp .env.docker ../../backend/.env
-
-# 3. Generate security keys (from root)
-node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
-# → Copy outputs to backend/.env
-
-# 4. Start services (2 terminals from root)
-# Terminal 1: cd backend && npm run dev
-# Terminal 2: npm run dev
-
-# 5. Login at http://localhost:5173
-# Email: test@example.com
-# Password: TestPassword123
-
-⚠️ **IMPORTANT**: Make sure MongoDB is fully initialized before attempting login:
-- Check: `mongosh "mongodb://localhost:27017/a-ir-dd2-dev"`
-- Should see collections: users, llm_configs, user_settings, etc.
-- If missing collections, restart Docker: `docker-compose restart` or `docker-compose down && docker-compose up -d`
-```
-
-✅ **What happens automatically:**
-- MongoDB container starts with persistent storage
-- All 9 collections created with schema validation
-- Test user account (test@example.com) automatically created
-- Indexes optimized for performance
-
-### 📖 Full Installation Guide
-
-For detailed instructions including manual MongoDB setup, see [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md).
-
 ---
 
 ## 🔧 Installation
@@ -133,16 +92,27 @@ GEMINI_API_KEY=your_gemini_key
 
 If using Docker (recommended):
 ```bash
+# 1. Configure backend
 cp backend/docker/.env.docker backend/.env
-```
 
-Then generate and add security keys:
-```bash
-# Generate JWT_SECRET
+# 2. Generate security keys
 node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
-
-# Generate ENCRYPTION_KEY
 node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('JWT_REFRESH_SECRET=' + require('crypto').randomBytes(32).toString('hex'))"
+
+# → Copy outputs to backend/.env
+
+# 3. Start MongoDB with automatic initialization
+cd backend/docker
+docker-compose up -d
+
+# 4. Start services (2 terminals from root)
+# Terminal 1: cd backend && npm run dev
+# Terminal 2: npm run dev
+
+# 5. Login at http://localhost:5173
+# Email: test@example.com
+# Password: TestPassword123
 ```
 
 Add the outputs to `backend/.env` along with your LLM API keys.

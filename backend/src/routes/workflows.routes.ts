@@ -82,9 +82,11 @@ router.get('/:id',
 router.post('/', requireAuth, validateRequest(createWorkflowSchema), async (req, res) => {
     try {
         const user = req.user as IUser;
+        console.log('[Workflows] POST - user:', { id: user.id, _id: user._id, email: user.email });
 
         // Si c'est le premier workflow, le marquer comme actif
         const existingCount = await Workflow.countDocuments({ userId: user.id });
+        console.log('[Workflows] POST - existingCount:', existingCount);
 
         const workflow = new Workflow({
             userId: user.id,
@@ -93,13 +95,19 @@ router.post('/', requireAuth, validateRequest(createWorkflowSchema), async (req,
             isActive: existingCount === 0,
             isDirty: false
         });
+        console.log('[Workflows] POST - workflow before save:', workflow.toObject());
 
         await workflow.save();
+        console.log('[Workflows] POST - workflow saved:', workflow._id);
 
         res.status(201).json(workflow);
     } catch (error) {
         console.error('[Workflows] POST error:', error);
-        res.status(500).json({ error: 'Erreur création workflow' });
+        if (error instanceof Error) {
+            console.error('[Workflows] POST error stack:', error.stack);
+            console.error('[Workflows] POST error message:', error.message);
+        }
+        res.status(500).json({ error: 'Erreur création workflow', details: error instanceof Error ? error.message : String(error) });
     }
 });
 

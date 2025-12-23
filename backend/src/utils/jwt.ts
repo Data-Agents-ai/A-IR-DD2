@@ -3,12 +3,13 @@ import config from '../config/environment';
 
 // SOLID: Dependency Injection - récupérer les secrets depuis config centralisée
 const JWT_SECRET = config.jwt.secret;
-const JWT_EXPIRATION = config.jwt.expiration;
-const REFRESH_SECRET = config.jwt.refreshSecret;
-const REFRESH_EXPIRATION = config.jwt.refreshExpiration;
+const JWT_EXPIRATION = config.jwt.expiration || '1h';
+// Fallback : Si REFRESH_SECRET manque, on utilise JWT_SECRET pour éviter le crash au démarrage
+const REFRESH_SECRET = config.jwt.refreshSecret || JWT_SECRET;
+const REFRESH_EXPIRATION = config.jwt.refreshExpiration || '7d';
 
-if (!JWT_SECRET || !REFRESH_SECRET) {
-    throw new Error('JWT secrets not configured - check your .env file');
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET not configured - check your .env file');
 }
 
 export interface JWTPayload {

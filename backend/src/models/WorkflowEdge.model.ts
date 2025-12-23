@@ -50,7 +50,8 @@ const WorkflowEdgeSchema = new Schema<IWorkflowEdge>({
     },
     label: String
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'workflow_edges'
 });
 
 // Index pour queries optimisées

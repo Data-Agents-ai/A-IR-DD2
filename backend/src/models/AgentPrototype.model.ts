@@ -71,7 +71,8 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
         immutable: true
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'agent_prototypes'
 });
 
 // Index pour queries optimisées
