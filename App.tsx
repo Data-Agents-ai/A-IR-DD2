@@ -48,33 +48,23 @@ const initialLLMConfigs: LLMConfig[] = [
 const loadLLMConfigs = (isAuthenticated: boolean = false, accessToken: string | null = null): LLMConfig[] => {
   try {
     // ⭐ J4.4 CRITICAL: Guest-only fallback
-    // Authenticated users get configs from /api/llm-configs via useLLMConfigs hook
+    // Authenticated users get configs from AuthContext.llmApiKeys (fetched at login)
     // This localStorage ONLY for guest mode
     
     if (isAuthenticated && accessToken) {
-      // Authenticated mode: IGNORE localStorage, use API via useLLMConfigs hook
-      // Return defaults here, real configs loaded via useLLMConfigs in SettingsModal
-      console.log('[App] Authenticated user - not loading from localStorage');
+      // Authenticated mode: IGNORE localStorage, use llmApiKeys from AuthContext
+      // Return defaults here, real configs merged via useEffect when llmApiKeys loads
       return initialLLMConfigs;
     }
     
     // Guest mode: Load from localStorage
     const storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
     if (!storedConfigsJSON) {
-      console.log('[App] No stored configs (guest), using defaults');
       return initialLLMConfigs;
     }
 
-    const storedConfigs = JSON.parse(storedConfigsJSON) as LLMConfig[];
+    const storedConfigs = JSON.parse(storedConfigsJSON) as any[];
     const storedProviders = new Map(storedConfigs.map(c => [c.provider, c]));
-
-    // DEBUG: Log LMStudio config loaded from localStorage
-    const lmStudioStored = storedConfigs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[App] LMStudio config loaded from localStorage (guest mode):', {
-      enabled: lmStudioStored?.enabled,
-      endpoint: lmStudioStored?.apiKey,
-      capabilities: lmStudioStored?.capabilities
-    });
 
     const syncedConfigs = initialLLMConfigs.map(initialConfig => {
       const storedConfig = storedProviders.get(initialConfig.provider);
@@ -87,18 +77,23 @@ const loadLLMConfigs = (isAuthenticated: boolean = false, accessToken: string | 
       const syncedCapabilities: { [key in LLMCapability]?: boolean } = {};
       for (const capKey in initialConfig.capabilities) {
         const cap = capKey as LLMCapability;
-        if (storedConfig.capabilities[cap] !== undefined) {
+        if (storedConfig.capabilities && storedConfig.capabilities[cap] !== undefined) {
           syncedCapabilities[cap] = storedConfig.capabilities[cap];
         } else {
           syncedCapabilities[cap] = initialConfig.capabilities[cap];
         }
       }
 
+      // ⭐ J4.4.3 FIX: Support both LLMConfig format (apiKey) and ILLMConfigUI format (apiKeyPlaintext)
+      // llmConfigService stores as ILLMConfigUI with apiKeyPlaintext for guest mode
+      // Legacy code stored as LLMConfig with apiKey
+      const apiKey = storedConfig.apiKey || storedConfig.apiKeyPlaintext || '';
+
       // Merge
       return {
         ...initialConfig,
         enabled: storedConfig.enabled,
-        apiKey: storedConfig.apiKey,
+        apiKey: apiKey,
         capabilities: syncedCapabilities,
       };
     });
@@ -129,7 +124,7 @@ interface UpdateConfirmationState {
  * Must be wrapped by AuthProvider to access useAuth()
  */
 function AppContent() {
-  const { isAuthenticated, accessToken } = useAuth();
+  const { isAuthenticated, accessToken, llmApiKeys } = useAuth();
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isAgentModalOpen, setAgentModalOpen] = useState(false);
   const [isImagePanelOpen, setImagePanelOpen] = useState(false);
@@ -162,32 +157,71 @@ function AppContent() {
   const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode } = useDesignStore();
 
   /**
-   * ⭐ CRITICAL J4.4: Reload LLM configs when auth state changes
+   * ⭐ CRITICAL J4.4: Reload LLM configs + WIPE STATE when auth state changes
    * Prevents guest and authenticated sessions from contaminating each other
-   * This is the MAIN FIX for the session isolation bug
    * 
    * When user logs in/out or changes auth status:
-   * 1. Guest → Auth: configs cleared, defaults returned, real configs via API
+   * 1. Guest → Auth: configs cleared, defaults set, then real configs via llmApiKeys
    * 2. Auth → Guest: configs cleared, guest configs from localStorage
    * 3. Guest → Guest (new session): configs cleared
+   * 
+   * ⚠️ SECURITY: ALWAYS reload from scratch on auth change
+   * ⚠️ CRITICAL FIX: workflowNodes is React state NOT in Zustand stores
+   *    Must be explicitly cleared here to prevent agent leaks on canvas
+   * ⚠️ CRITICAL FIX J4.4.2: agents is ALSO React state NOT in Zustand
+   *    Must be cleared to prevent prototype leaks in sidebar/navigation
    */
   useEffect(() => {
-    console.log('[App] Auth state changed, reloading LLM configs:', {
-      isAuthenticated,
-      hasAccessToken: !!accessToken
-    });
-    
-    // Reload configs respecting new auth state
+    // Reload LLM configs respecting new auth state
     const freshConfigs = loadLLMConfigs(isAuthenticated, accessToken);
-    console.log('[App] Loaded fresh LLM configs:', freshConfigs.length, 'providers');
-    
     setLlmConfigs(freshConfigs);
-  }, [isAuthenticated, accessToken]);
+    updateLLMConfigs(freshConfigs);
+    
+    // ⭐ CRITICAL J4.4: Clear React state on auth change to prevent data leaks
+    setWorkflowNodes([]);
+    setAgents([]);
+  }, [isAuthenticated, accessToken, updateLLMConfigs]);
 
-  // Sync LLM configs with runtime store
+  /**
+   * ⭐ J4.4.3 FIX: Sync LLM configs from AuthContext's llmApiKeys for authenticated users
+   * 
+   * Root Cause: The previous fix used useLLMConfigs() which returns ILLMConfigUI[]
+   * without the actual apiKey. AuthContext.llmApiKeys contains the decrypted keys
+   * from the backend endpoint /api/llm/get-all-api-keys.
+   * 
+   * Architecture:
+   * - Guest mode: loadLLMConfigs() reads from localStorage (LLMConfig[] format)
+   * - Auth mode: llmApiKeys from AuthContext (fetched at login with decrypted keys)
+   * 
+   * This effect runs AFTER auth change effect, merging real API keys with defaults.
+   */
   useEffect(() => {
-    updateLLMConfigs(llmConfigs);
-  }, [llmConfigs, updateLLMConfigs]);
+    if (isAuthenticated && llmApiKeys && llmApiKeys.length > 0) {
+      // Convert LLMApiKey[] to LLMConfig[]
+      const apiConfigs: LLMConfig[] = llmApiKeys.map(key => ({
+        provider: key.provider as LLMProvider,
+        apiKey: key.apiKey,
+        enabled: key.enabled,
+        capabilities: (key.capabilities || {}) as { [k in LLMCapability]?: boolean }
+      }));
+      
+      // Merge with initial configs to keep capabilities defaults for providers not in API
+      const mergedConfigs = initialLLMConfigs.map(initial => {
+        const apiConfig = apiConfigs.find(c => c.provider === initial.provider);
+        if (apiConfig) {
+          return {
+            ...initial,
+            ...apiConfig,
+            capabilities: { ...initial.capabilities, ...apiConfig.capabilities }
+          };
+        }
+        return initial;
+      });
+      
+      setLlmConfigs(mergedConfigs);
+      updateLLMConfigs(mergedConfigs);
+    }
+  }, [isAuthenticated, llmApiKeys, updateLLMConfigs]);
 
   // Configure navigation handler for agent nodes
   useEffect(() => {

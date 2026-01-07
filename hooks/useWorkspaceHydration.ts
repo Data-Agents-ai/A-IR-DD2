@@ -8,6 +8,8 @@
  * - Dual-mode: API for authenticated, localStorage for guest
  * - Non-blocking with loading states
  * 
+ * ⭐ ÉTAPE 2.2-2.3: Ajout Wipe stores + Hydratation avec canvasState, content, metrics
+ * 
  * SOLID PRINCIPLES:
  * - S: Single responsibility (workspace hydration only)
  * - O: Open for extension (add new domains easily)
@@ -23,11 +25,42 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import { GUEST_STORAGE_KEYS } from '../utils/guestDataUtils';
+import { useDesignStore } from '../stores/useDesignStore';
+import { useRuntimeStore } from '../stores/useRuntimeStore';
+import type { AgentInstance, V2WorkflowNode, V2WorkflowEdge } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 /**
+ * Canvas state for visual reconstruction (ÉTAPE 1.6)
+ */
+interface CanvasState {
+    zoom: number;
+    panX: number;
+    panY: number;
+}
+
+/**
+ * Agent instance content types (ÉTAPE 1.6 - polymorphic)
+ */
+interface AgentInstanceContent {
+    type: 'chat' | 'image' | 'video' | 'error';
+    [key: string]: any;
+}
+
+/**
+ * Agent instance metrics (ÉTAPE 1.6)
+ */
+interface AgentInstanceMetrics {
+    totalTokens: number;
+    totalErrors: number;
+    totalMediaGenerated: number;
+    callCount: number;
+}
+
+/**
  * Workspace data structure (mirrors backend response)
+ * ⭐ UPDATED ÉTAPE 1.6: Added canvasState, isDefault, content, metrics
  */
 export interface WorkspaceData {
     workflow: {
@@ -35,9 +68,12 @@ export interface WorkspaceData {
         name: string;
         description?: string;
         isActive: boolean;
+        isDefault: boolean; // ⭐ NOUVEAU
         isDirty: boolean;
+        canvasState: CanvasState; // ⭐ NOUVEAU
         createdAt: Date;
         updatedAt: Date;
+        lastSavedAt?: Date;
     } | null;
     nodes: Array<{
         id: string;
@@ -60,6 +96,11 @@ export interface WorkspaceData {
         model: string;
         position: { x: number; y: number };
         systemInstruction?: string;
+        // ⭐ NOUVEAU ÉTAPE 1.6
+        executionId?: string;
+        status?: string;
+        content?: AgentInstanceContent[];
+        metrics?: AgentInstanceMetrics;
     }>;
     llmConfigs: Array<{
         id: string;
@@ -201,6 +242,8 @@ const loadWorkspaceFromLocalStorage = (): WorkspaceData => {
  * - Authenticated: Fetches from /api/user/workspace
  * - Guest: Loads from localStorage
  * 
+ * ⭐ ÉTAPE 2.2: Wipe stores before hydration to prevent data leak
+ * 
  * Triggers on:
  * - Initial mount
  * - isAuthenticated change (login/logout)
@@ -211,13 +254,20 @@ const loadWorkspaceFromLocalStorage = (): WorkspaceData => {
 export const useWorkspaceHydration = (): UseWorkspaceHydrationResult => {
     const { isAuthenticated, accessToken, isLoading: authLoading } = useAuth();
     
+    // ⭐ ÉTAPE 2.2: Access stores for reset & hydration
+    const designStoreReset = useDesignStore((state) => state.resetAll);
+    const runtimeStoreReset = useRuntimeStore((state) => state.resetAll);
+    const designStoreHydrate = useDesignStore((state) => state.hydrateFromServer);
+    
     const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [source, setSource] = useState<'api' | 'localStorage' | 'none'>('none');
+    const [previousAuthState, setPreviousAuthState] = useState<boolean | null>(null);
 
     /**
      * Hydrate workspace based on auth state
+     * ⭐ ÉTAPE 2.2: Wipe stores on auth state change
      */
     const hydrate = useCallback(async () => {
         // Wait for auth to finish loading
@@ -228,6 +278,15 @@ export const useWorkspaceHydration = (): UseWorkspaceHydrationResult => {
         setIsLoading(true);
         setError(null);
 
+        // ⭐ ÉTAPE 2.2: Wipe stores if auth state changed (login or logout)
+        const authStateChanged = previousAuthState !== null && previousAuthState !== isAuthenticated;
+        if (authStateChanged) {
+            console.log('[useWorkspaceHydration] ⭐ Auth state changed - Wiping stores to prevent data leak');
+            designStoreReset();
+            runtimeStoreReset();
+        }
+        setPreviousAuthState(isAuthenticated);
+
         try {
             if (isAuthenticated && accessToken) {
                 // Authenticated mode: fetch from API
@@ -235,10 +294,58 @@ export const useWorkspaceHydration = (): UseWorkspaceHydrationResult => {
                 const data = await fetchWorkspaceFromAPI(accessToken);
                 setWorkspace(data);
                 setSource('api');
+                
+                // ⭐ ÉTAPE 2.3: Hydrate design store with server data
+                // Note: We map the response format to store format
+                designStoreHydrate({
+                    // Agents instances deviennent les nodes du store
+                    agentInstances: data.agentInstances.map((inst: any) => ({
+                        id: inst.id,
+                        prototypeId: inst.agentId || inst.id,
+                        name: inst.name,
+                        position: inst.position,
+                        // Propriétés UI obligatoires
+                        isMinimized: inst.isMinimized ?? false,
+                        isMaximized: inst.isMaximized ?? false,
+                        configuration_json: inst.configuration_json ?? {
+                            role: '',
+                            model: inst.model || '',
+                            llmProvider: inst.provider,
+                            systemPrompt: inst.systemInstruction || '',
+                            tools: [],
+                            position: inst.position
+                        },
+                        // ⭐ NOUVEAU ÉTAPE 1.6 (champs optionnels pour le runtime)
+                        executionId: inst.executionId,
+                        status: inst.status,
+                        content: inst.content || [],
+                        metrics: inst.metrics
+                    })) as AgentInstance[],
+                    nodes: data.nodes.map((n: any) => ({
+                        id: n.id,
+                        type: (n.type || 'agent') as 'agent' | 'connection' | 'event' | 'file',
+                        position: n.position,
+                        data: { 
+                            robotId: n.robotId || n.data?.robotId,
+                            label: n.agentName || n.data?.label || '',
+                            agentInstance: n.agentInstance,
+                            isMinimized: n.isMinimized ?? false,
+                            isMaximized: n.isMaximized ?? false
+                        }
+                    })) as V2WorkflowNode[],
+                    edges: data.edges.map((e: any) => ({
+                        id: e.id,
+                        source: e.sourceId || e.source,
+                        target: e.targetId || e.target,
+                        type: e.type
+                    })) as V2WorkflowEdge[]
+                });
+                
                 console.log('[useWorkspaceHydration] API hydration complete:', {
                     hasWorkflow: !!data.workflow,
                     nodesCount: data.nodes.length,
-                    llmConfigsCount: data.llmConfigs.length
+                    llmConfigsCount: data.llmConfigs.length,
+                    canvasState: data.workflow?.canvasState
                 });
             } else {
                 // Guest mode: load from localStorage
@@ -274,7 +381,7 @@ export const useWorkspaceHydration = (): UseWorkspaceHydrationResult => {
         } finally {
             setIsLoading(false);
         }
-    }, [isAuthenticated, accessToken, authLoading]);
+    }, [isAuthenticated, accessToken, authLoading, previousAuthState, designStoreReset, runtimeStoreReset, designStoreHydrate]);
 
     /**
      * Auto-hydrate on mount and auth changes

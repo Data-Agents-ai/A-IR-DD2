@@ -5,7 +5,7 @@
  * 
  * ARCHITECTURE:
  * - Centralized guest localStorage key management
- * - Wipe function for login transition
+ * - Wipe function for login transition (localStorage + Zustand stores)
  * - Safe operations with error handling
  * 
  * SOLID PRINCIPLES:
@@ -17,7 +17,15 @@
  * - Guest mode still works (keys untouched until login)
  * - Only clears guest-specific keys
  * - Auth keys preserved
+ * 
+ * ⚠️ CRITICAL SECURITY:
+ * - wipeGuestData() MUST clear both localStorage AND Zustand stores
+ * - Prevents data leak from guest session to authenticated session
  */
+
+import { useDesignStore } from '../stores/useDesignStore';
+import { useWorkflowStore } from '../stores/useWorkflowStore';
+import { useRuntimeStore } from '../stores/useRuntimeStore';
 
 /**
  * Guest mode localStorage keys
@@ -25,21 +33,33 @@
  */
 export const GUEST_STORAGE_KEYS = {
     // Workflow data
+    workflow: 'guest_workflow_v1',
+    workflowNodes: 'guest_workflow_nodes_v1',
+    workflowEdges: 'guest_workflow_edges_v1',
+    canvasState: 'guest_canvas_state_v1', // ⭐ ÉTAPE 2: Canvas zoom/pan state
+    
+    // Agent data
+    agentInstances: 'guest_agent_instances_v1',
+    
+    // LLM configs (API keys in plain text for guest)
+    llmConfigs: 'llm_configs_guest',
+    llmConfigsLegacy: 'llmAgentWorkflow_configs', // ← J4.4: Old key from App.tsx - must also be wiped!
+    
+    // User settings
+    userSettings: 'user_settings_guest',
+    
+    // Legacy keys (for backward compatibility cleanup)
+    legacySettings: 'settings',
+    legacyWorkflow: 'workflow',
+    
+    // ⭐ Uppercase aliases for backward compatibility
     WORKFLOW: 'guest_workflow_v1',
     WORKFLOW_NODES: 'guest_workflow_nodes_v1',
     WORKFLOW_EDGES: 'guest_workflow_edges_v1',
-    
-    // Agent data
     AGENT_INSTANCES: 'guest_agent_instances_v1',
-    
-    // LLM configs (API keys in plain text for guest)
     LLM_CONFIGS: 'llm_configs_guest',
-    LLM_CONFIGS_LEGACY: 'llmAgentWorkflow_configs', // ← J4.4: Old key from App.tsx - must also be wiped!
-    
-    // User settings
+    LLM_CONFIGS_LEGACY: 'llmAgentWorkflow_configs',
     USER_SETTINGS: 'user_settings_guest',
-    
-    // Legacy keys (for backward compatibility cleanup)
     LEGACY_SETTINGS: 'settings',
     LEGACY_WORKFLOW: 'workflow',
 } as const;
@@ -52,46 +72,85 @@ export const getAllGuestKeys = (): string[] => {
 };
 
 /**
- * Wipe all guest mode volatile data from localStorage
+ * Wipe all guest mode volatile data from localStorage AND Zustand stores
  * Called on login to prevent data leak from guest to auth session
+ * 
+ * ⚠️ CRITICAL SECURITY FIX:
+ * - Clears localStorage (persistent data)
+ * - Resets Zustand stores (in-memory state)
+ * - Prevents guest agents/workflows from appearing in auth session
  * 
  * @returns Object with cleanup statistics
  */
 export const wipeGuestData = (): { 
     keysCleared: string[]; 
+    storesReset: string[];
     errors: string[];
     success: boolean;
 } => {
     const keysCleared: string[] = [];
+    const storesReset: string[] = [];
     const errors: string[] = [];
 
     const keysToWipe = getAllGuestKeys();
 
-    console.log('[GuestDataUtils] Starting guest data wipe...');
-
+    // 1. Wipe localStorage
     for (const key of keysToWipe) {
         try {
             if (localStorage.getItem(key) !== null) {
                 localStorage.removeItem(key);
                 keysCleared.push(key);
-                console.log(`[GuestDataUtils] Cleared: ${key}`);
             }
         } catch (err) {
             const errorMsg = `Failed to clear ${key}: ${err instanceof Error ? err.message : 'Unknown error'}`;
             errors.push(errorMsg);
-            console.error(`[GuestDataUtils] ${errorMsg}`);
+            console.error(`[GuestDataUtils] ❌ ${errorMsg}`);
         }
+    }
+
+    // 2. ⭐ CRITICAL: Reset Zustand stores (in-memory state)
+    try {
+        // Reset Design Store (agents, instances, nodes, edges)
+        const designStore = useDesignStore.getState();
+        if (typeof designStore.resetAll === 'function') {
+            designStore.resetAll();
+            storesReset.push('useDesignStore');
+        }
+    } catch (err) {
+        const errorMsg = `Failed to reset useDesignStore: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        errors.push(errorMsg);
+        console.error(`[GuestDataUtils] ❌ ${errorMsg}`);
+    }
+
+    try {
+        // Reset Workflow Store (workflow metadata, execution state)
+        const workflowStore = useWorkflowStore.getState();
+        if (typeof workflowStore.resetAll === 'function') {
+            workflowStore.resetAll();
+            storesReset.push('useWorkflowStore');
+        }
+    } catch (err) {
+        const errorMsg = `Failed to reset useWorkflowStore: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        errors.push(errorMsg);
+        console.error(`[GuestDataUtils] ❌ ${errorMsg}`);
+    }
+
+    try {
+        // Reset Runtime Store (chat sessions, streaming state)
+        const runtimeStore = useRuntimeStore.getState();
+        if (typeof runtimeStore.resetAll === 'function') {
+            runtimeStore.resetAll();
+            storesReset.push('useRuntimeStore');
+        }
+    } catch (err) {
+        const errorMsg = `Failed to reset useRuntimeStore: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        errors.push(errorMsg);
+        console.error(`[GuestDataUtils] ❌ ${errorMsg}`);
     }
 
     const success = errors.length === 0;
 
-    console.log('[GuestDataUtils] Wipe complete:', {
-        keysCleared: keysCleared.length,
-        errors: errors.length,
-        success
-    });
-
-    return { keysCleared, errors, success };
+    return { keysCleared, storesReset, errors, success };
 };
 
 /**

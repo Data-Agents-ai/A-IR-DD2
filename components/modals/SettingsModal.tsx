@@ -5,6 +5,7 @@ import { CloseIcon } from '../Icons';
 import { useLocalization } from '../../hooks/useLocalization';
 import { useAuth } from '../../hooks/useAuth';
 import { useLLMConfigs } from '../../hooks/useLLMConfigs';
+import { useSaveMode } from '../../hooks/useSaveMode';
 import { locales, Locale } from '../../i18n/locales';
 import { detectLMStudioModel } from '../../services/routeDetectionService';
 import { invalidateLMStudioCache } from '../../llmModels';
@@ -24,7 +25,8 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
   const { t, locale, setLocale } = useLocalization();
   const { user, isAuthenticated } = useAuth();
   const { configs: hookConfigs, loading: hookLoading, updateConfig } = useLLMConfigs();
-  const [activeTab, setActiveTab] = useState<'llms' | 'apikeys' | 'language'>('llms');
+  const { saveMode, setSaveMode, isLoading: saveModeLoading } = useSaveMode();
+  const [activeTab, setActiveTab] = useState<'llms' | 'save' | 'language'>('llms');
   const [isSaving, setIsSaving] = useState(false);
 
   // 🔴 J4.4 CRITICAL: Load authenticated user's configs from hook on auth state change
@@ -193,40 +195,32 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
   };
 
   const handleSave = async () => {
-    console.log('[SettingsModal] handleSave called');
-    const lmStudioConfig = currentLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[SettingsModal] LMStudio config to save:', {
-      enabled: lmStudioConfig?.enabled,
-      endpoint: lmStudioConfig?.apiKey
-    });
+    setIsSaving(true);
+    
+    try {
+      // Save only configs that have non-empty API keys via the hook
+      // ⭐ J4.4.3 FIX: Save for BOTH auth and guest modes
+      // - Auth mode: updateConfig → llmConfigService → API backend
+      // - Guest mode: updateConfig → llmConfigService → localStorage
+      const configsToSave = currentLLMConfigs.filter(
+        config => config.apiKey && config.apiKey.trim().length > 0
+      );
 
-    // NOTE J4.4: Save LLMConfigs to API if authenticated
-    if (isAuthenticated) {
-      setIsSaving(true);
-      try {
-        // Save only configs that have non-empty API keys via the hook
-        const configsToSave = currentLLMConfigs.filter(
-          config => config.apiKey && config.apiKey.trim().length > 0
-        );
-
-        for (const config of configsToSave) {
-          console.log(`[SettingsModal] Saving config for ${config.provider} to API`);
-          await updateConfig(config.provider, {
-            apiKey: config.apiKey,
-            enabled: config.enabled,
-            capabilities: config.capabilities
-          });
-        }
-        console.log(`[SettingsModal] Saved ${configsToSave.length} configs to API successfully`);
-      } catch (err) {
-        console.error('[SettingsModal] Failed to save configs to API:', err);
-        alert(`Erreur: ${err instanceof Error ? err.message : 'Impossible de sauvegarder les configurations'}`);
-        setIsSaving(false);
-        return;
+      for (const config of configsToSave) {
+        await updateConfig(config.provider, {
+          apiKey: config.apiKey,
+          enabled: config.enabled,
+          capabilities: config.capabilities
+        });
       }
+    } catch (err) {
+      console.error('[SettingsModal] Failed to save configs:', err);
+      alert(`Erreur: ${err instanceof Error ? err.message : 'Impossible de sauvegarder les configurations'}`);
+      setIsSaving(false);
+      return;
     }
 
-    // Also update local state and parent (for guest mode)
+    // Also update local state and parent
     onSave(currentLLMConfigs);
     setIsSaving(false);
     onClose();
@@ -260,7 +254,7 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
               <button type="button" onClick={() => setActiveTab('llms')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'llms' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_llms_tab')}</button>
               {isAuthenticated && (
-                <button type="button" onClick={() => setActiveTab('apikeys')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'apikeys' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>Clés API</button>
+                <button type="button" onClick={() => setActiveTab('save')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'save' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>Enregistrement</button>
               )}
               <button type="button" onClick={() => setActiveTab('language')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'language' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('settings_language_tab')}</button>
             </nav>
@@ -281,26 +275,81 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
                 </div>
               </div>
             )}
-            {activeTab === 'apikeys' && (
-              <div className="space-y-4">
+            {activeTab === 'save' && (
+              <div className="space-y-6">
                 <div className="bg-indigo-900/20 border border-indigo-600/30 rounded-lg p-4">
-                  <p className="text-sm text-gray-300 mb-3">
-                    {t('settings_apikeys_info') || 'Les clés API sont chiffrées et stockées de façon sécurisée.'}
+                  <h4 className="text-sm font-semibold text-indigo-400 mb-3">Mode d'enregistrement</h4>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Choisissez comment sauvegarder votre travail sur le workflow.
                   </p>
+                  
                   <div className="space-y-3">
-                    {currentLLMConfigs.map(({ provider, enabled, apiKey, hasApiKey }) => (
-                      <div key={provider} className="flex items-center justify-between p-3 bg-gray-800 rounded-md">
-                        <div className="flex items-center gap-3">
-                          {/* hasApiKey takes precedence for auth users (shows if config exists in DB) */}
-                          <div className={`w-2 h-2 rounded-full ${enabled && (apiKey || hasApiKey) ? 'bg-green-500' : 'bg-gray-600'}`} />
-                          <span className="text-sm font-medium text-gray-300">{provider}</span>
-                        </div>
-                        <span className="text-xs text-gray-500">
-                          {enabled && (apiKey || hasApiKey) ? '✓ Configurée' : enabled ? '⚠ Clé manquante' : '✗ Désactivée'}
+                    {/* Option Manuel */}
+                    <label 
+                      className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+                        saveMode === 'manual' 
+                          ? 'bg-indigo-900/40 border-2 border-indigo-500' 
+                          : 'bg-gray-800 border-2 border-transparent hover:border-gray-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        value="manual"
+                        checked={saveMode === 'manual'}
+                        onChange={() => setSaveMode('manual')}
+                        className="mt-1 w-4 h-4 accent-indigo-500"
+                        disabled={saveModeLoading}
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-200 block">Manuel</span>
+                        <span className="text-xs text-gray-400 mt-1 block">
+                          Un bouton de sauvegarde apparaît sur le workflow. Cliquez dessus ou utilisez Ctrl+S pour enregistrer vos modifications.
                         </span>
                       </div>
-                    ))}
+                      {saveMode === 'manual' && (
+                        <span className="text-xs bg-indigo-500/30 text-indigo-300 px-2 py-1 rounded">Actif</span>
+                      )}
+                    </label>
+
+                    {/* Option Automatique */}
+                    <label 
+                      className={`flex items-start gap-3 p-4 rounded-lg cursor-pointer transition-all ${
+                        saveMode === 'auto' 
+                          ? 'bg-indigo-900/40 border-2 border-indigo-500' 
+                          : 'bg-gray-800 border-2 border-transparent hover:border-gray-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        value="auto"
+                        checked={saveMode === 'auto'}
+                        onChange={() => setSaveMode('auto')}
+                        className="mt-1 w-4 h-4 accent-indigo-500"
+                        disabled={saveModeLoading}
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-200 block">Automatique</span>
+                        <span className="text-xs text-gray-400 mt-1 block">
+                          Vos modifications sont enregistrées automatiquement après chaque action. Le bouton de sauvegarde n'apparaît pas.
+                        </span>
+                      </div>
+                      {saveMode === 'auto' && (
+                        <span className="text-xs bg-indigo-500/30 text-indigo-300 px-2 py-1 rounded">Actif</span>
+                      )}
+                    </label>
                   </div>
+
+                  {saveModeLoading && (
+                    <p className="text-xs text-gray-500 mt-3 animate-pulse">Chargement du mode...</p>
+                  )}
+                </div>
+
+                {/* Info supplémentaire */}
+                <div className="text-xs text-gray-500 bg-gray-800/50 rounded-lg p-3">
+                  💡 <strong>Conseil :</strong> Le mode manuel est recommandé pour les workflows complexes. 
+                  Il vous permet de contrôler précisément quand vos modifications sont persistées.
                 </div>
               </div>
             )}

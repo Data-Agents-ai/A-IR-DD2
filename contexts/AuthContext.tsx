@@ -22,6 +22,9 @@ import React, {
 } from 'react';
 import { User, AuthContextType, StoredAuthData, AuthResponse, AuthLoadingState, LLMApiKey } from './types/auth.types';
 import { wipeGuestData, checkGuestDataExists } from '../utils/guestDataUtils';
+import { useDesignStore } from '../stores/useDesignStore';
+import { useWorkflowStore } from '../stores/useWorkflowStore';
+import { useRuntimeStore } from '../stores/useRuntimeStore';
 
 const AUTH_STORAGE_KEY = 'auth_data_v1';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -294,26 +297,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, [saveAuthData, fetchLLMApiKeys]);
 
     /**
-     * Logout - Clear all auth data and guest data
-     * ⭐ CRITICAL: Also wipes guest data to ensure clean state
-     * Prevents authenticated user data from leaking to guest mode
+     * Logout - Clear all auth data and RESET ALL STORES
+     * ⚠️ CRITICAL SECURITY FIX J4.4:
+     * - Clears authenticated user state
+     * - Wipes ALL stores (prevents auth data leak to guest session)
+     * - Does NOT wipe guest localStorage (user may want to continue as guest)
+     * 
+     * ANTI-REGRESSION: This must ALWAYS reset stores, not wipe guest data!
+     * Auth data must NOT persist into guest mode.
      */
     const logout = useCallback(() => {
-        // ⭐ CRITICAL: Wipe guest data on logout
-        // Prevents authenticated user state from contaminating guest mode
-        const guestCheck = checkGuestDataExists();
-        if (guestCheck.totalKeys > 0) {
-            console.log('[AuthContext] Wiping guest data on logout:', guestCheck);
-            const wipeResult = wipeGuestData();
-            console.log('[AuthContext] Guest data wipe result:', wipeResult);
-        }
-
+        // 1. Clear auth state
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
         setError(null);
-        setLlmApiKeys(null); // J4.2: Clear LLM API keys on logout
+        setLlmApiKeys(null);
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        
+        // 2. ⭐ CRITICAL J4.4: Wipe ALL stores to prevent auth data leak to guest
+        try {
+            useDesignStore.getState().resetAll();
+            useWorkflowStore.getState().resetAll();
+            useRuntimeStore.getState().resetAll();
+        } catch (err) {
+            // Silent fail - stores may not be initialized
+        }
     }, []);
 
     /**

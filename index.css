@@ -173,6 +173,15 @@ body {
   pointer-events: auto !important;
 }
 
+/* SaveButton position fixe - Au-dessus des Controls, aligné verticalement */
+.workflow-save-button-fixed {
+  position: fixed !important;
+  bottom: 148px !important;
+  right: 250px !important;
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+
 /* MiniMap nodes - Motif rayé léger pour meilleure identification visuelle */
 .minimap-node-striped {
   background-image: repeating-linear-gradient(45deg,

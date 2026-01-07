@@ -16,9 +16,11 @@ export interface User {
 
 /**
  * LLM API Key data structure (J4.2)
+ * ⚠️ J4.4.3 FIX: Added apiKey field - backend returns decrypted key
  */
 export interface LLMApiKey {
     provider: string;
+    apiKey: string;  // ⭐ Decrypted API key from backend
     enabled: boolean;
     capabilities?: Record<string, boolean>;
     hasApiKey?: boolean;

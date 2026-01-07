@@ -70,6 +70,20 @@ interface DesignStore {
   // Utility
   getAgentsByRobot: (robotId: RobotId) => Agent[];
   clearWorkflow: () => void;
+  
+  // ⭐ ÉTAPE 2.2-2.3: Reset & Hydration
+  resetAll: () => void;
+  hydrateFromServer: (data: {
+    agents?: Agent[];
+    agentInstances?: AgentInstance[];
+    nodes?: V2WorkflowNode[];
+    edges?: V2WorkflowEdge[];
+  }) => void;
+  
+  // ⭐ Direct setters for testing and hydration
+  setAgentInstances: (instances: AgentInstance[]) => void;
+  setNodes: (nodes: V2WorkflowNode[]) => void;
+  setEdges: (edges: V2WorkflowEdge[]) => void;
 }
 
 export const useDesignStore = create<DesignStore>((set, get) => ({
@@ -469,7 +483,43 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   clearWorkflow: () => set({
     nodes: [],
     edges: []
-  })
+  }),
+
+  /**
+   * ⭐ ÉTAPE 2.2: Reset complet du store pour wipe à la connexion
+   * Appelé lors du login/logout pour éviter la fuite de données guest → auth
+   */
+  resetAll: () => set({
+    currentRobotId: RobotId.Archi,
+    agents: [],
+    selectedAgentId: null,
+    agentInstances: [],
+    nodes: [],
+    edges: []
+  }),
+
+  /**
+   * ⭐ ÉTAPE 2.3: Hydratation du store depuis les données serveur
+   * Appelé après fetch /api/user/workspace
+   */
+  hydrateFromServer: (data: {
+    agents?: Agent[];
+    agentInstances?: AgentInstance[];
+    nodes?: V2WorkflowNode[];
+    edges?: V2WorkflowEdge[];
+  }) => set({
+    agents: data.agents || [],
+    agentInstances: data.agentInstances || [],
+    nodes: data.nodes || [],
+    edges: data.edges || []
+  }),
+
+  /**
+   * ⭐ Direct setters for testing and hydration
+   */
+  setAgentInstances: (instances) => set({ agentInstances: instances }),
+  setNodes: (nodes) => set({ nodes }),
+  setEdges: (edges) => set({ edges })
 }));
 
 // PHASE 1B: Development debugging exposure

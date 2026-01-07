@@ -29,7 +29,15 @@ const STORAGE_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
 function getLocalConfigs(): ILLMConfigUI[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    
+    const configs = JSON.parse(data) as ILLMConfigUI[];
+    
+    // ⭐ J4.4.3: Ensure apiKey is populated from apiKeyPlaintext for backward compatibility
+    return configs.map(config => ({
+      ...config,
+      apiKey: config.apiKey || config.apiKeyPlaintext || ''
+    }));
   } catch (error) {
     console.error('[LLMConfigService] localStorage.getItem failed:', error);
     return [];
@@ -177,7 +185,9 @@ export async function upsertLLMConfig(
       updatedAt: new Date().toISOString(),
       // ⚠️ IMPORTANT: localStorage ne chiffre PAS les API keys
       // C'est un mode "guest" non-sécurisé. Les vrais utilisateurs utilisent l'API.
-      apiKeyPlaintext: data.apiKey
+      apiKeyPlaintext: data.apiKey,
+      // ⭐ J4.4.3: Also set apiKey for SettingsModal compatibility
+      apiKey: data.apiKey
     };
 
     if (index >= 0) {

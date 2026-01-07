@@ -452,6 +452,10 @@ export interface ILLMConfigUI {
   updatedAt: string; // ISO timestamp
   // ⚠️ ONLY in localStorage mode (guest):
   apiKeyPlaintext?: string; // Non-sécurisé, développement uniquement
+  // ⭐ J4.4.3: Optional apiKey field for compatibility with SettingsModal state
+  // In guest mode: contains actual API key
+  // In auth mode: empty string (key stored server-side)
+  apiKey?: string;
 }
 
 /**

@@ -40,6 +40,8 @@ const router = Router();
 /**
  * Response interface for workspace endpoint
  * Defines contract between backend and frontend hydration
+ * 
+ * ⭐ UPDATED ÉTAPE 1.6: Added canvasState, isDefault, content support
  */
 interface WorkspaceResponse {
     workflow: {
@@ -47,7 +49,13 @@ interface WorkspaceResponse {
         name: string;
         description?: string;
         isActive: boolean;
+        isDefault: boolean; // ⭐ NOUVEAU ÉTAPE 1.6
         isDirty: boolean;
+        canvasState: { // ⭐ NOUVEAU ÉTAPE 1.6
+            zoom: number;
+            panX: number;
+            panY: number;
+        };
         createdAt: Date;
         updatedAt: Date;
         lastSavedAt?: Date;
@@ -74,6 +82,19 @@ interface WorkspaceResponse {
         model: string;
         position: { x: number; y: number };
         systemInstruction?: string;
+        // ⭐ NOUVEAU ÉTAPE 1.6: Ajout des propriétés polymorphes
+        executionId?: string;
+        status?: string;
+        content?: Array<{
+            type: 'chat' | 'image' | 'video' | 'error';
+            [key: string]: any;
+        }>;
+        metrics?: {
+            totalTokens: number;
+            totalErrors: number;
+            totalMediaGenerated: number;
+            callCount: number;
+        };
         createdAt: Date;
     }>;
     agentPrototypes: Array<{
@@ -161,7 +182,14 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
                 name: workflow.name,
                 description: workflow.description,
                 isActive: workflow.isActive,
+                isDefault: (workflow as any).isDefault || false, // ⭐ NOUVEAU ÉTAPE 1.6
                 isDirty: workflow.isDirty,
+                // ⭐ NOUVEAU ÉTAPE 1.6: Canvas state pour reconstruction visuelle
+                canvasState: (workflow as any).canvasState || {
+                    zoom: 1,
+                    panX: 0,
+                    panY: 0
+                },
                 createdAt: workflow.createdAt,
                 updatedAt: workflow.updatedAt,
                 lastSavedAt: workflow.lastSavedAt
@@ -172,8 +200,8 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
                 agentId: agent.id,
                 agentName: agent.name,
                 position: agent.position || { x: 0, y: 0 },
-                provider: agent.provider,
-                model: agent.model,
+                provider: agent.llmProvider || agent.provider,
+                model: agent.llmModel || agent.model,
                 createdAt: agent.createdAt
             })),
 
@@ -184,13 +212,23 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
                 type: edge.type || 'default'
             })),
 
+            // ⭐ ÉTAPE 1.6: Ajout des propriétés polymorphes (content, metrics, status)
             agentInstances: agentInstances.map(agent => ({
                 id: agent.id,
                 name: agent.name,
-                provider: agent.provider,
-                model: agent.model,
+                provider: agent.llmProvider || agent.provider,
+                model: agent.llmModel || agent.model,
                 position: agent.position || { x: 0, y: 0 },
-                systemInstruction: agent.systemInstruction,
+                systemInstruction: agent.systemPrompt || agent.systemInstruction,
+                executionId: agent.executionId,
+                status: agent.status,
+                content: agent.content || [],
+                metrics: agent.metrics || {
+                    totalTokens: 0,
+                    totalErrors: 0,
+                    totalMediaGenerated: 0,
+                    callCount: 0
+                },
                 createdAt: agent.createdAt
             })),
 
@@ -257,8 +295,13 @@ router.get('/workspace/default', requireAuth, async (req: Request, res: Response
         const user = req.user as IUser;
         const userId = user.id || user._id;
 
-        // Check for existing workflow
-        let workflow = await Workflow.findOne({ userId, isActive: true });
+        // ⭐ ÉTAPE 1.6: Chercher d'abord le workflow par défaut (isDefault: true)
+        let workflow = await Workflow.findOne({ userId, isDefault: true });
+
+        if (!workflow) {
+            // Fallback: Check for active workflow
+            workflow = await Workflow.findOne({ userId, isActive: true });
+        }
 
         if (!workflow) {
             // Check for any workflow
@@ -269,12 +312,19 @@ router.get('/workspace/default', requireAuth, async (req: Request, res: Response
 
         if (!workflow) {
             // Create default workflow for new user
+            // ⭐ ÉTAPE 1.6: Inclure isDefault et canvasState
             workflow = new Workflow({
                 userId,
                 name: 'Mon Workflow',
                 description: 'Workflow par défaut',
                 isActive: true,
-                isDirty: false
+                isDefault: true, // ⭐ NOUVEAU
+                isDirty: false,
+                canvasState: { // ⭐ NOUVEAU
+                    zoom: 1,
+                    panX: 0,
+                    panY: 0
+                }
             });
             await workflow.save();
             isNewlyCreated = true;
@@ -288,7 +338,9 @@ router.get('/workspace/default', requireAuth, async (req: Request, res: Response
                 name: workflow.name,
                 description: workflow.description,
                 isActive: workflow.isActive,
+                isDefault: (workflow as any).isDefault || false, // ⭐ NOUVEAU
                 isDirty: workflow.isDirty,
+                canvasState: (workflow as any).canvasState || { zoom: 1, panX: 0, panY: 0 }, // ⭐ NOUVEAU
                 createdAt: workflow.createdAt,
                 updatedAt: workflow.updatedAt
             },

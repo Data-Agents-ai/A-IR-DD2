@@ -90,6 +90,9 @@ interface WorkflowStore {
   // Persistence
   loadFromLocalStorage: () => void;
   saveToLocalStorage: () => void;
+  
+  // ⭐ ÉTAPE 2.2: Reset complet pour wipe à la connexion
+  resetAll: () => void;
 }
 
 const generateId = () => `wf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -391,5 +394,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to save workflow data:', error);
     }
-  }
+  },
+  
+  // ⭐ CRITICAL SECURITY: Reset ALL workflow state
+  resetAll: () => set({
+    currentWorkflow: null,
+    workflows: [],
+    execution: null,
+    selectedNodeId: null,
+    isPaletteOpen: true,
+    isConfigPanelOpen: false
+  })
 }));

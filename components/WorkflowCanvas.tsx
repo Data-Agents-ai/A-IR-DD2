@@ -18,6 +18,7 @@ import { useDayNightTheme } from '../hooks/useDayNightTheme';
 import { WorkflowCanvasProvider } from '../contexts/WorkflowCanvasContext';
 import { PrototypeEditConfirmationModal } from './modals/PrototypeEditConfirmationModal';
 import { AgentFormModal } from './modals/AgentFormModal';
+import { SavePrototypeButton } from './SavePrototypeButton';
 import { Agent, WorkflowNode, LLMConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
 
@@ -45,6 +46,10 @@ interface WorkflowCanvasProps {
   isImageModificationPanelOpen?: boolean;
   isVideoPanelOpen?: boolean;
   isMapsPanelOpen?: boolean;
+  // ⭐ ÉTAPE 2: Persistence props
+  workflowId?: string;
+  workflowName?: string;
+  onSaveComplete?: (success: boolean) => void;
 }
 
 // nodeTypes défini GLOBALEMENT pour éviter les re-créations (React Flow best practice)
@@ -77,7 +82,11 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     isImagePanelOpen = false,
     isImageModificationPanelOpen = false,
     isVideoPanelOpen = false,
-    isMapsPanelOpen = false
+    isMapsPanelOpen = false,
+    // ⭐ ÉTAPE 2: Persistence props
+    workflowId = 'default-workflow',
+    workflowName,
+    onSaveComplete
   } = props;
 
   // Hook de thème jour/nuit
@@ -476,6 +485,21 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
               }}
             />
           )}
+
+          {/* ⭐ ÉTAPE 2: Bouton de sauvegarde manuelle - Au-dessus des Controls, aligné verticalement */}
+          {/* Le bouton gère lui-même sa visibilité via useSaveMode (isManualSave && isAuthenticated) */}
+          <div className="workflow-save-button-fixed">
+            <SavePrototypeButton
+              workflowId={workflowId}
+              workflowName={workflowName}
+              canvasState={{
+                zoom: reactFlowInstance.getZoom(),
+                panX: reactFlowInstance.getViewport().x,
+                panY: reactFlowInstance.getViewport().y
+              }}
+              onSaveComplete={onSaveComplete}
+            />
+          </div>
         </ReactFlow>
 
         {/* Bouton flottant redirection vers prototypage Archi - Style Blur futuriste */}
