@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LLMConfig, LLMCapability, LLMProvider, LMStudioModelDetection } from '../../types';
 import { Button, Modal, ToggleSwitch } from '../UI';
 import { CloseIcon } from '../Icons';
 import { useLocalization } from '../../hooks/useLocalization';
 import { useAuth } from '../../hooks/useAuth';
+import { useLLMConfigs } from '../../hooks/useLLMConfigs';
 import { locales, Locale } from '../../i18n/locales';
 import { detectLMStudioModel } from '../../services/routeDetectionService';
 import { invalidateLMStudioCache } from '../../llmModels';
@@ -14,11 +15,57 @@ interface SettingsModalProps {
   onSave: (llmConfigs: LLMConfig[]) => void;
 }
 
-export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProps) => {
-  const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfig[]>(JSON.parse(JSON.stringify(llmConfigs)));
+interface LLMConfigWithHasKey extends LLMConfig {
+  hasApiKey?: boolean; // For authenticated mode - indicates if key exists without showing it
+}
+
+export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: SettingsModalProps) => {
+  const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfigWithHasKey[]>(JSON.parse(JSON.stringify(propConfigs)));
   const { t, locale, setLocale } = useLocalization();
   const { user, isAuthenticated } = useAuth();
+  const { configs: hookConfigs, loading: hookLoading, updateConfig } = useLLMConfigs();
   const [activeTab, setActiveTab] = useState<'llms' | 'apikeys' | 'language'>('llms');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 🔴 J4.4 CRITICAL: Load authenticated user's configs from hook on auth state change
+  // When user logs in, hookConfigs will have their saved configs from API
+  // IMPORTANT: Must merge with defaults for missing providers!
+  useEffect(() => {
+    if (isAuthenticated && !hookLoading) {
+      console.log('[SettingsModal] Loading user configs from hook:', hookConfigs.length);
+      
+      // ⭐ MERGE: Combine API configs with defaults to show all 10 providers
+      // Map API configs by provider for quick lookup
+      const apiConfigsMap = new Map(hookConfigs.map(hc => [hc.provider, hc]));
+      
+      // Start with defaults, then override with user's saved configs
+      const mergedConfigs: LLMConfigWithHasKey[] = propConfigs.map(defaultConfig => {
+        const userConfig = apiConfigsMap.get(defaultConfig.provider);
+        
+        if (!userConfig) {
+          // Provider not in API response - use default as-is
+          return defaultConfig;
+        }
+        
+        // Provider in API - merge with user's settings
+        return {
+          provider: defaultConfig.provider,
+          enabled: userConfig.enabled, // User's enabled state
+          apiKey: userConfig.apiKey || '', // ⭐ J4.4: Backend returns masked apiKey (•••) if key exists
+          capabilities: userConfig.capabilities || defaultConfig.capabilities, // User's capabilities (or defaults)
+          hasApiKey: userConfig.hasApiKey // Indicator that a key exists in DB
+        } as LLMConfigWithHasKey;
+      });
+      
+      console.log('[SettingsModal] Merged configs:', {
+        propConfigsCount: propConfigs.length,
+        apiConfigsCount: hookConfigs.length,
+        mergedCount: mergedConfigs.length
+      });
+      
+      setCurrentLLMConfigs(mergedConfigs);
+    }
+  }, [isAuthenticated, hookConfigs, hookLoading, propConfigs]);
 
   // LMStudio Detection State
   const [lmStudioDetection, setLmStudioDetection] = useState<LMStudioModelDetection | null>(null);
@@ -145,14 +192,43 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     console.log('[SettingsModal] handleSave called');
     const lmStudioConfig = currentLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
     console.log('[SettingsModal] LMStudio config to save:', {
       enabled: lmStudioConfig?.enabled,
       endpoint: lmStudioConfig?.apiKey
     });
+
+    // NOTE J4.4: Save LLMConfigs to API if authenticated
+    if (isAuthenticated) {
+      setIsSaving(true);
+      try {
+        // Save only configs that have non-empty API keys via the hook
+        const configsToSave = currentLLMConfigs.filter(
+          config => config.apiKey && config.apiKey.trim().length > 0
+        );
+
+        for (const config of configsToSave) {
+          console.log(`[SettingsModal] Saving config for ${config.provider} to API`);
+          await updateConfig(config.provider, {
+            apiKey: config.apiKey,
+            enabled: config.enabled,
+            capabilities: config.capabilities
+          });
+        }
+        console.log(`[SettingsModal] Saved ${configsToSave.length} configs to API successfully`);
+      } catch (err) {
+        console.error('[SettingsModal] Failed to save configs to API:', err);
+        alert(`Erreur: ${err instanceof Error ? err.message : 'Impossible de sauvegarder les configurations'}`);
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    // Also update local state and parent (for guest mode)
     onSave(currentLLMConfigs);
+    setIsSaving(false);
     onClose();
   };
 
@@ -212,14 +288,15 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                     {t('settings_apikeys_info') || 'Les clés API sont chiffrées et stockées de façon sécurisée.'}
                   </p>
                   <div className="space-y-3">
-                    {currentLLMConfigs.map(({ provider, enabled, apiKey }) => (
+                    {currentLLMConfigs.map(({ provider, enabled, apiKey, hasApiKey }) => (
                       <div key={provider} className="flex items-center justify-between p-3 bg-gray-800 rounded-md">
                         <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${enabled && apiKey ? 'bg-green-500' : 'bg-gray-600'}`} />
+                          {/* hasApiKey takes precedence for auth users (shows if config exists in DB) */}
+                          <div className={`w-2 h-2 rounded-full ${enabled && (apiKey || hasApiKey) ? 'bg-green-500' : 'bg-gray-600'}`} />
                           <span className="text-sm font-medium text-gray-300">{provider}</span>
                         </div>
                         <span className="text-xs text-gray-500">
-                          {enabled && apiKey ? '✓ Configurée' : enabled ? '⚠ Clé manquante' : '✗ Désactivée'}
+                          {enabled && (apiKey || hasApiKey) ? '✓ Configurée' : enabled ? '⚠ Clé manquante' : '✗ Désactivée'}
                         </span>
                       </div>
                     ))}
@@ -236,7 +313,7 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                     </p>
                   </div>
                 )}
-                {currentLLMConfigs.map(({ provider, enabled, capabilities, apiKey }) => (
+                {currentLLMConfigs.map(({ provider, enabled, capabilities, apiKey, hasApiKey }) => (
                   <div key={provider}>
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-gray-200">{provider}</h3>
@@ -248,6 +325,11 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
                           <label htmlFor={`${provider}-apikey`} className="block text-sm font-medium text-gray-400 mb-1">
                             {provider === LLMProvider.LMStudio ? t('settings_endpoint') : t('settings_apiKey')}
                           </label>
+                          {/* ⭐ J4.4: apiKey can be:
+                              - Empty string (no key configured)
+                              - Points (••••••••) masked key from authenticated user
+                              - User input (being typed)
+                          */}
                           <input
                             id={`${provider}-apikey`}
                             type={provider === LLMProvider.LMStudio ? "url" : "password"}
@@ -429,11 +511,11 @@ export const SettingsModal = ({ llmConfigs, onClose, onSave }: SettingsModalProp
             )}
           </div>
           <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-gray-700">
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
               {t('cancel')}
             </Button>
-            <Button type="button" variant="primary" onClick={handleSave}>
-              {t('save')}
+            <Button type="button" variant="primary" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Enregistrement...' : t('save')}
             </Button>
           </div>
         </div>

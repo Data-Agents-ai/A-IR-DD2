@@ -1,10 +1,15 @@
 /**
  * @file hooks/useUserSettingsAPI.ts
- * @description User Settings API hook for authenticated users
+ * @description User Settings API hook for authenticated users (J4.4 - Simplified)
  * @domain Design Domain - Settings Management / Persistence
  *
- * PURPOSE: Fetch and save user settings from/to API endpoint
+ * PURPOSE: Fetch and save user PREFERENCES from/to API endpoint
  * REQUIRES: User must be authenticated (JWT token)
+ * 
+ * MIGRATION NOTE (J4.4):
+ * - llmConfigs handling REMOVED from this hook
+ * - This hook now handles ONLY preferences (language, theme)
+ * - For LLM configs, use useLLMConfigs hook with /api/llm-configs
  * 
  * USAGE in Auth mode:
  *   const { settings, isLoading, error, saveSettings } = useUserSettingsAPI();
@@ -15,14 +20,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
-import { LLMConfig } from '../types';
+
+interface UserPreferences {
+  language: string;
+  theme: string;
+}
 
 interface UserSettings {
-  llmConfigs: Record<string, any>;
-  preferences: {
-    language: string;
-    theme: string;
-  };
+  preferences: UserPreferences;
+  lastSync?: string;
   updatedAt: string;
 }
 
@@ -30,7 +36,7 @@ interface UseUserSettingsAPIResult {
   settings: UserSettings | null;
   isLoading: boolean;
   error: string | null;
-  saveSettings: (llmConfigs: LLMConfig[], preferences?: any) => Promise<void>;
+  savePreferences: (preferences: Partial<UserPreferences>) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -78,10 +84,10 @@ export const useUserSettingsAPI = (): UseUserSettingsAPIResult => {
   }, [isAuthenticated, accessToken]);
 
   /**
-   * Save settings to API (convert LLMConfig[] to API format)
+   * Save preferences to API (J4.4: only preferences, not llmConfigs)
    */
-  const saveSettings = useCallback(
-    async (llmConfigs: LLMConfig[], preferences?: any) => {
+  const savePreferences = useCallback(
+    async (preferences: Partial<UserPreferences>) => {
       if (!isAuthenticated) {
         throw new Error('User must be authenticated to save settings to API');
       }
@@ -90,16 +96,6 @@ export const useUserSettingsAPI = (): UseUserSettingsAPIResult => {
       setError(null);
 
       try {
-        // Convert LLMConfig[] array to record format expected by API
-        const llmConfigsRecord: Record<string, any> = {};
-        llmConfigs.forEach(config => {
-          llmConfigsRecord[config.provider] = {
-            enabled: config.enabled,
-            apiKey: config.apiKey || undefined,
-            capabilities: config.capabilities
-          };
-        });
-
         const response = await fetch('/api/user-settings', {
           method: 'PUT',
           headers: {
@@ -107,8 +103,7 @@ export const useUserSettingsAPI = (): UseUserSettingsAPIResult => {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            llmConfigs: llmConfigsRecord,
-            preferences: preferences || {}
+            preferences
           })
         });
 
@@ -151,7 +146,7 @@ export const useUserSettingsAPI = (): UseUserSettingsAPIResult => {
     settings,
     isLoading,
     error,
-    saveSettings,
+    savePreferences,
     refresh
   };
 };

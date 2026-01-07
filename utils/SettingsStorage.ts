@@ -1,48 +1,41 @@
 /**
  * @file SettingsStorage.ts
- * @description Storage abstraction layer for user settings (J4.3)
+ * @description Storage abstraction layer for user PREFERENCES (J4.4 - Simplified)
  * @architecture SOLID - Dependency Inversion Pattern
  * 
  * PATTERN: Strategy Pattern with Adapter
  * - Guest Mode: localStorage (JSON)
  * - Authenticated Mode: /api/user-settings (MongoDB)
  * 
+ * MIGRATION NOTE (J4.4):
+ * - llmConfigs handling REMOVED from this module
+ * - This storage handles ONLY preferences (language, theme)
+ * - For LLM configs, use llmConfigService.ts with /api/llm-configs
+ * 
  * INTERFACE: Single API for both storage backends
  * - getSettings(): Promise<UserSettingsData>
  * - saveSettings(data): Promise<UserSettingsData>
- * 
- * BENEFITS:
- * - Transparent switching between storage backends
- * - No changes needed in UI components
- * - Testable with mock implementations
  */
 
 import { AuthContextType } from '../contexts/AuthContext';
-
-export interface LLMConfigData {
-    enabled: boolean;
-    capabilities: Record<string, boolean>;
-    lastUpdated: Date;
-}
+import { BACKEND_URL } from '../config/api.config';
 
 export interface UserSettingsData {
-    llmConfigs: Record<string, LLMConfigData>;
     preferences: {
         language: 'fr' | 'en' | 'de' | 'es' | 'pt';
         theme?: 'dark' | 'light';
     };
+    lastSync?: Date;
     updatedAt?: Date;
 }
 
 export interface ISettingsStorage {
     getSettings(): Promise<UserSettingsData>;
     saveSettings(data: {
-        llmConfigs?: Partial<Record<string, LLMConfigData>>;
         preferences?: {
             language?: 'fr' | 'en' | 'de' | 'es' | 'pt';
             theme?: 'dark' | 'light';
         };
-        updatedAt?: Date;
     }): Promise<UserSettingsData>;
 }
 
@@ -62,7 +55,6 @@ class GuestSettingsStorage implements ISettingsStorage {
 
             const parsed = JSON.parse(stored);
             return {
-                llmConfigs: parsed.llmConfigs || {},
                 preferences: {
                     language: parsed.preferences?.language || 'fr',
                     theme: parsed.preferences?.theme || 'dark'
@@ -79,7 +71,6 @@ class GuestSettingsStorage implements ISettingsStorage {
         try {
             const current = await this.getSettings();
             const updated: UserSettingsData = {
-                llmConfigs: { ...current.llmConfigs, ...data.llmConfigs },
                 preferences: {
                     ...current.preferences,
                     ...data.preferences
@@ -97,7 +88,6 @@ class GuestSettingsStorage implements ISettingsStorage {
 
     private getDefaults(): UserSettingsData {
         return {
-            llmConfigs: {},
             preferences: {
                 language: 'fr',
                 theme: 'dark'
@@ -110,6 +100,7 @@ class GuestSettingsStorage implements ISettingsStorage {
 /**
  * Authenticated Storage (/api/user-settings)
  * MongoDB backend via REST API
+ * NOTE (J4.4): Only handles preferences, not llmConfigs
  */
 class AuthenticatedSettingsStorage implements ISettingsStorage {
     private accessToken: string;
@@ -120,7 +111,7 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
     async getSettings(): Promise<UserSettingsData> {
         try {
-            const response = await fetch('/api/user-settings', {
+            const response = await fetch(`${BACKEND_URL}/api/user-settings`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -134,11 +125,11 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
             const data = await response.json();
             return {
-                llmConfigs: data.llmConfigs || {},
                 preferences: {
                     language: data.preferences?.language || 'fr',
                     theme: data.preferences?.theme || 'dark'
                 },
+                lastSync: data.lastSync ? new Date(data.lastSync) : undefined,
                 updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date()
             };
         } catch (error) {
@@ -149,13 +140,13 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
     async saveSettings(data: Partial<UserSettingsData>): Promise<UserSettingsData> {
         try {
-            const response = await fetch('/api/user-settings', {
+            const response = await fetch(`${BACKEND_URL}/api/user-settings`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify({ preferences: data.preferences })
             });
 
             if (!response.ok) {
@@ -164,11 +155,11 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
             const saved = await response.json();
             return {
-                llmConfigs: saved.llmConfigs || {},
                 preferences: {
                     language: saved.preferences?.language || 'fr',
                     theme: saved.preferences?.theme || 'dark'
                 },
+                lastSync: saved.lastSync ? new Date(saved.lastSync) : undefined,
                 updatedAt: saved.updatedAt ? new Date(saved.updatedAt) : new Date()
             };
         } catch (error) {
@@ -199,7 +190,6 @@ export class MockSettingsStorage implements ISettingsStorage {
 
     constructor(initialData?: UserSettingsData) {
         this.data = initialData || {
-            llmConfigs: {},
             preferences: { language: 'fr', theme: 'dark' },
             updatedAt: new Date()
         };
@@ -211,7 +201,6 @@ export class MockSettingsStorage implements ISettingsStorage {
 
     async saveSettings(data: Partial<UserSettingsData>): Promise<UserSettingsData> {
         this.data = {
-            llmConfigs: { ...this.data.llmConfigs, ...data.llmConfigs },
             preferences: {
                 ...this.data.preferences,
                 ...data.preferences

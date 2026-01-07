@@ -5,6 +5,7 @@ import { RobotPageRouter } from './components/RobotPageRouter';
 import { AgentFormModal } from './components/modals/AgentFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { Header } from './components/Header';
+import { GUEST_STORAGE_KEYS } from './utils/guestDataUtils';
 import { ImageGenerationPanel } from './components/panels/ImageGenerationPanel';
 import { ImageModificationPanel } from './components/panels/ImageModificationPanel';
 import { VideoGenerationConfigPanel } from './components/panels/VideoGenerationConfigPanel';
@@ -22,8 +23,8 @@ import { NotificationDisplay } from './components/NotificationDisplay';
 import { QueryProvider } from './providers';
 import { getSettingsStorage } from './utils/SettingsStorage';
 
-
-const LLM_CONFIGS_KEY = 'llmAgentWorkflow_configs';
+// ⭐ J4.4: Use the key from guestDataUtils to ensure consistency with wipeGuestData()
+const LLM_CONFIGS_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
 
 interface EditingImageInfo {
   nodeId: string;
@@ -44,11 +45,23 @@ const initialLLMConfigs: LLMConfig[] = [
   { provider: LLMProvider.LMStudio, enabled: false, apiKey: 'http://localhost:3928', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Embedding]: false, [LLMCapability.CodeSpecialization]: false } },
 ];
 
-const loadLLMConfigs = (): LLMConfig[] => {
+const loadLLMConfigs = (isAuthenticated: boolean = false, accessToken: string | null = null): LLMConfig[] => {
   try {
+    // ⭐ J4.4 CRITICAL: Guest-only fallback
+    // Authenticated users get configs from /api/llm-configs via useLLMConfigs hook
+    // This localStorage ONLY for guest mode
+    
+    if (isAuthenticated && accessToken) {
+      // Authenticated mode: IGNORE localStorage, use API via useLLMConfigs hook
+      // Return defaults here, real configs loaded via useLLMConfigs in SettingsModal
+      console.log('[App] Authenticated user - not loading from localStorage');
+      return initialLLMConfigs;
+    }
+    
+    // Guest mode: Load from localStorage
     const storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
     if (!storedConfigsJSON) {
-      console.log('[App] No stored configs, using defaults');
+      console.log('[App] No stored configs (guest), using defaults');
       return initialLLMConfigs;
     }
 
@@ -57,7 +70,7 @@ const loadLLMConfigs = (): LLMConfig[] => {
 
     // DEBUG: Log LMStudio config loaded from localStorage
     const lmStudioStored = storedConfigs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[App] LMStudio config loaded from localStorage:', {
+    console.log('[App] LMStudio config loaded from localStorage (guest mode):', {
       enabled: lmStudioStored?.enabled,
       endpoint: lmStudioStored?.apiKey,
       capabilities: lmStudioStored?.capabilities
@@ -70,12 +83,10 @@ const loadLLMConfigs = (): LLMConfig[] => {
         return initialConfig; // No user settings for this provider, use default.
       }
 
-      // Sync capabilities: Use initialConfig as the source of truth for which capabilities exist.
-      // Use storedConfig for the user's enabled/disabled preference.
+      // Sync capabilities
       const syncedCapabilities: { [key in LLMCapability]?: boolean } = {};
       for (const capKey in initialConfig.capabilities) {
         const cap = capKey as LLMCapability;
-        // If the user has a stored preference for this valid capability, use it. Otherwise, use the default.
         if (storedConfig.capabilities[cap] !== undefined) {
           syncedCapabilities[cap] = storedConfig.capabilities[cap];
         } else {
@@ -83,7 +94,7 @@ const loadLLMConfigs = (): LLMConfig[] => {
         }
       }
 
-      // Merge: Start with the default, override with stored general settings, then add the synced capabilities.
+      // Merge
       return {
         ...initialConfig,
         enabled: storedConfig.enabled,
@@ -95,8 +106,7 @@ const loadLLMConfigs = (): LLMConfig[] => {
     return syncedConfigs;
 
   } catch (error) {
-    console.error("Failed to load or sync LLM configs from localStorage", error);
-    // On failure, return the default to prevent a crash.
+    console.error("Failed to load LLM configs from localStorage", error);
     return initialLLMConfigs;
   }
 };
@@ -130,7 +140,8 @@ function AppContent() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [workflowNodes, setWorkflowNodes] = useState<WorkflowNode[]>([]);
-  const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>(loadLLMConfigs);
+  // ⭐ J4.4: Start with defaults - will be reloaded on first auth change
+  const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>(initialLLMConfigs);
   const [currentImageNodeId, setCurrentImageNodeId] = useState<string | null>(null);
   const [currentVideoNodeId, setCurrentVideoNodeId] = useState<string | null>(null);
   const [currentMapsNodeId, setCurrentMapsNodeId] = useState<string | null>(null);
@@ -149,6 +160,29 @@ function AppContent() {
 
   // Design Store access for integrity validation  
   const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode } = useDesignStore();
+
+  /**
+   * ⭐ CRITICAL J4.4: Reload LLM configs when auth state changes
+   * Prevents guest and authenticated sessions from contaminating each other
+   * This is the MAIN FIX for the session isolation bug
+   * 
+   * When user logs in/out or changes auth status:
+   * 1. Guest → Auth: configs cleared, defaults returned, real configs via API
+   * 2. Auth → Guest: configs cleared, guest configs from localStorage
+   * 3. Guest → Guest (new session): configs cleared
+   */
+  useEffect(() => {
+    console.log('[App] Auth state changed, reloading LLM configs:', {
+      isAuthenticated,
+      hasAccessToken: !!accessToken
+    });
+    
+    // Reload configs respecting new auth state
+    const freshConfigs = loadLLMConfigs(isAuthenticated, accessToken);
+    console.log('[App] Loaded fresh LLM configs:', freshConfigs.length, 'providers');
+    
+    setLlmConfigs(freshConfigs);
+  }, [isAuthenticated, accessToken]);
 
   // Sync LLM configs with runtime store
   useEffect(() => {
@@ -225,24 +259,16 @@ function AppContent() {
         error: null
       });
 
-      // Transform LLMConfig to UserSettingsData format
-      const llmConfigsData: Record<string, any> = {};
-      newLLMConfigs.forEach(config => {
-        llmConfigsData[config.provider] = {
-          enabled: config.enabled,
-          apiKey: config.apiKey,
-          capabilities: config.capabilities,
-          lastUpdated: new Date()
-        };
-      });
-
-      // Save using abstraction (localStorage for guest, DB for auth)
+      // NOTE J4.4: LLMConfigs are now managed separately via useLLMConfigs hook
+      // We only save PREFERENCES here (language, theme)
+      // LLMConfigs should be saved via LLMConfigModal -> useLLMConfigs -> updateConfig()
+      
+      // Save preferences only
       await storage.saveSettings({
-        llmConfigs: llmConfigsData,
         preferences: { language: 'fr' }
       });
 
-      console.log('[App] Configs saved to storage successfully');
+      console.log('[App] Preferences saved to storage successfully');
       setLlmConfigs(newLLMConfigs);
       console.log('[App] React state updated with new configs');
     } catch (error) {

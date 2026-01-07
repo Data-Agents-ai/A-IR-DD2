@@ -468,34 +468,20 @@ du -sh backend/node_modules
 
 ## Environment Configuration
 
-### Frontend Configuration
+## Frontend Configuration
 
-**File**: `.env.local` (project root)
+> **📍 Where are LLM API Keys stored?**
+> - **Guest Mode**: Browser localStorage (plain text, device-specific)
+> - **Authenticated Mode**: MongoDB `llm_configs` collection (AES-256-GCM encrypted)
+> - **Settings UI**: All API keys are entered through the application Settings modal
 
-Create the file:
-```bash
-# macOS/Linux
-touch .env.local
+**Important**: No `.env.local` file needed for API keys. Simply:
+1. Start the application
+2. Go to Settings (gear icon)
+3. Enter your API keys directly in the UI
+4. Keys are stored securely based on your authentication status
 
-# Windows PowerShell
-New-Item -Path .env.local -ItemType File
-```
-
-**Content** (minimum):
-```env
-# REQUIRED: At least one LLM provider
-GEMINI_API_KEY=YOUR_GEMINI_KEY_HERE
-
-# OPTIONAL: Additional providers
-# OPENAI_API_KEY=YOUR_OPENAI_KEY
-# ANTHROPIC_API_KEY=YOUR_ANTHROPIC_KEY
-
-# OPTIONAL: Server URLs
-REACT_APP_API_URL=http://localhost:3001
-REACT_APP_LMSTUDIO_URL=http://localhost:1234
-```
-
-**Get API Keys**:
+**Get LLM API Keys**:
 - **Gemini** (free tier): https://aistudio.google.com/app/apikey
 - **OpenAI**: https://platform.openai.com/api-keys
 - **Anthropic**: https://console.anthropic.com/keys
@@ -543,14 +529,14 @@ ENCRYPTION_KEY=your_random_64_char_hex_string_here
 
 JWT_EXPIRY=3600000
 
-# ========== LLM PROVIDERS ==========
-# Must match frontend keys
-GEMINI_API_KEY=YOUR_GEMINI_KEY_HERE
-# OPENAI_API_KEY=YOUR_OPENAI_KEY
-
 # ========== LOGGING ==========
 LOG_LEVEL=debug
 DEBUG=*
+
+# NOTE: LLM API keys (GEMINI_API_KEY, etc.) are NOT stored here.
+# They are entered through the Settings UI and stored:
+# - Guest mode: browser localStorage (plain text)
+# - Auth mode: MongoDB llm_configs collection (AES-256-GCM encrypted)
 ```
 
 ### Generate Secure Keys

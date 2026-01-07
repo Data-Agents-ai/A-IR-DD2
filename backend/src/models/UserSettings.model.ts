@@ -1,35 +1,24 @@
 /**
  * @file UserSettings.model.ts
- * @description User settings persistence (J4.3)
+ * @description User settings persistence (J4.4 - Simplified)
  * @domain Design Domain - User Preferences
  * 
  * ARCHITECTURE:
  * - One document per user (userId is unique key)
- * - Stores LLM configurations + user preferences
- * - Encrypted API keys (inherited from LLMConfig)
- * - Extensible for future preference fields
+ * - Stores ONLY user preferences (language, theme)
+ * - LLM API keys are stored ONLY in LLMConfig collection
+ * 
+ * MIGRATION NOTE (J4.4):
+ * - llmConfigs field REMOVED - was causing duplicate storage
+ * - All API key operations now go through /api/llm-configs
+ * - This model is preferences-only
  * 
  * SOLID PRINCIPLES:
- * - S: Single Responsibility (only user settings)
+ * - S: Single Responsibility (only user preferences)
  * - O: Open/Closed (easy to add new preference fields)
- * - L: Liskov Substitution (swappable storage backends)
- * - D: Dependency Inversion (abstraction layer in frontend)
  */
 
 import mongoose, { Schema, Document } from 'mongoose';
-import { encrypt, decrypt } from '../utils/encryption';
-
-/**
- * LLM Provider Configuration (per provider per user)
- */
-export interface LLMProviderConfig {
-    enabled: boolean;
-    apiKeyEncrypted?: string; // AES-256-GCM encrypted
-    capabilities: {
-        [capability: string]: boolean;
-    };
-    lastUpdated: Date;
-}
 
 /**
  * User Preferences (language, theme, etc.)
@@ -40,27 +29,22 @@ export interface UserPreferences {
 }
 
 /**
- * Complete UserSettings document
+ * Complete UserSettings document (J4.4 - Simplified)
+ * NOTE: llmConfigs removed - use LLMConfig collection instead
  */
 export interface IUserSettings extends Document {
     userId: mongoose.Types.ObjectId;
 
-    // LLM Configurations (J4.2+J4.3)
-    llmConfigs: {
-        [provider: string]: LLMProviderConfig;
-    };
-
-    // User Preferences (J4.3)
+    // User Preferences only
     preferences: UserPreferences;
+
+    // Sync tracking
+    lastSync?: Date;
 
     // Metadata
     createdAt: Date;
     updatedAt: Date;
     version: number;
-
-    // Methods
-    getDecryptedConfig(provider: string): LLMProviderConfig & { apiKey?: string };
-    setEncryptedApiKey(provider: string, plainApiKey: string): void;
 }
 
 const userSettingsSchema = new Schema(
@@ -73,23 +57,7 @@ const userSettingsSchema = new Schema(
             index: true
         },
 
-        // LLM Configurations: flexible object with provider names as keys
-        llmConfigs: {
-            type: Schema.Types.Mixed,
-            default: {},
-            validate: {
-                validator: function (v: any) {
-                    // Basic validation: all values should have enabled flag
-                    if (typeof v !== 'object') return false;
-                    return Object.values(v).every((cfg: any) =>
-                        'enabled' in cfg && 'capabilities' in cfg
-                    );
-                },
-                message: 'Invalid LLM config structure'
-            }
-        },
-
-        // User Preferences
+        // User Preferences only (J4.4: llmConfigs removed)
         preferences: {
             language: {
                 type: String,
@@ -103,6 +71,12 @@ const userSettingsSchema = new Schema(
             }
         },
 
+        // Last sync timestamp
+        lastSync: {
+            type: Date,
+            default: null
+        },
+
         // Versioning for conflict resolution
         version: {
             type: Number,
@@ -114,61 +88,6 @@ const userSettingsSchema = new Schema(
         collection: 'user_settings'
     }
 );
-
-/**
- * Get decrypted configuration for a provider
- * Server-side decryption only
- */
-userSettingsSchema.methods.getDecryptedConfig = function (
-    provider: string
-): LLMProviderConfig & { apiKey?: string } {
-    const config = this.llmConfigs[provider];
-
-    if (!config || !config.apiKeyEncrypted) {
-        return {
-            enabled: config?.enabled ?? false,
-            capabilities: config?.capabilities ?? {},
-            lastUpdated: config?.lastUpdated ?? new Date()
-        };
-    }
-
-    try {
-        const decrypted = decrypt(config.apiKeyEncrypted, this.userId.toString());
-        return {
-            ...config,
-            apiKey: decrypted
-        };
-    } catch (err) {
-        console.error('[UserSettings] Failed to decrypt API key:', err);
-        return {
-            enabled: config.enabled,
-            capabilities: config.capabilities,
-            lastUpdated: config.lastUpdated
-        };
-    }
-};
-
-/**
- * Set encrypted API key for a provider
- * Automatically encrypts before storing
- */
-userSettingsSchema.methods.setEncryptedApiKey = function (
-    provider: string,
-    plainApiKey: string
-): void {
-    const encrypted = encrypt(plainApiKey, this.userId.toString());
-
-    if (!this.llmConfigs[provider]) {
-        this.llmConfigs[provider] = {
-            enabled: false,
-            capabilities: {},
-            lastUpdated: new Date()
-        };
-    }
-
-    this.llmConfigs[provider].apiKeyEncrypted = encrypted;
-    this.llmConfigs[provider].lastUpdated = new Date();
-};
 
 /**
  * Indices for performance

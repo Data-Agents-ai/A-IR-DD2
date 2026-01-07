@@ -68,6 +68,27 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
     token: accessToken || undefined
   };
 
+  // DEBUG: Log auth state changes
+  useEffect(() => {
+    console.log('[useLLMConfigs] Auth state changed:', {
+      isAuthenticated,
+      hasAccessToken: !!accessToken,
+      willUseApi: isAuthenticated && !!accessToken
+    });
+  }, [isAuthenticated, accessToken]);
+
+  /**
+   * ⭐ CRITICAL: Clear configs from memory when logout happens
+   * Prevents authenticated user configs from bleeding into guest mode
+   * This must happen BEFORE loadConfigs() is called with guest options
+   */
+  useEffect(() => {
+    if (!isAuthenticated && configs.length > 0) {
+      console.log('[useLLMConfigs] Clearing configs from memory on logout');
+      setConfigs([]);
+    }
+  }, [isAuthenticated]);
+
   /**
    * Charge toutes les configs au montage et quand l'auth change
    */
@@ -124,6 +145,13 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
     ): Promise<ILLMConfigUI> => {
       setLoading(true);
       setError(null);
+      console.log('[useLLMConfigs] updateConfig called:', {
+        provider,
+        useApi: serviceOptions.useApi,
+        hasToken: !!serviceOptions.token,
+        apiKeyLength: data.apiKey.length
+      });
+      
       try {
         const result = await llmConfigService.upsertLLMConfig(
           provider,
@@ -143,6 +171,7 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
           }
         });
 
+        console.log('[useLLMConfigs] updateConfig success:', result);
         return result;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';

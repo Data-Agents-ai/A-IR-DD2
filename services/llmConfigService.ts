@@ -11,8 +11,8 @@
  */
 
 import { ILLMConfigUI } from '../types';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+import { BACKEND_URL } from '../config/api.config';
+import { GUEST_STORAGE_KEYS } from '../utils/guestDataUtils';
 
 export interface LLMConfigServiceOptions {
   useApi?: boolean; // true = backend, false = localStorage
@@ -23,7 +23,8 @@ export interface LLMConfigServiceOptions {
 // PARTIE 1: STOCKAGE LOCALSTORAGE (Guest)
 // ============================================================================
 
-const STORAGE_KEY = 'llm_configs_guest';
+// ⭐ J4.4: Use centralized key from guestDataUtils to ensure consistency
+const STORAGE_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
 
 function getLocalConfigs(): ILLMConfigUI[] {
   try {
@@ -66,7 +67,7 @@ async function apiRequest(
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+  const response = await fetch(`${BACKEND_URL}${endpoint}`, options);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

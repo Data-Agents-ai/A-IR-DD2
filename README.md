@@ -80,13 +80,10 @@ cd backend && npm install && cd ..
 
 ### 3. Environment Configuration
 
-**Frontend (`.env.local`):**
-```env
-# At least one LLM API key required
-GEMINI_API_KEY=your_gemini_key
-# OPENAI_API_KEY=your_openai_key
-# ANTHROPIC_API_KEY=your_anthropic_key
-```
+> **📍 Where are LLM API Keys stored?**
+> - **Guest Mode (no login)**: Browser localStorage only (not encrypted, device-specific)
+> - **Authenticated Mode (logged in)**: MongoDB `llm_configs` collection (AES-256-GCM encrypted)
+> - **Never in `.env` files**: API keys are entered through the Settings UI
 
 **Backend (`backend/.env`):**
 
@@ -181,9 +178,12 @@ When using the Docker setup, a test account is automatically created:
 
 ### Guest Mode (No Account)
 - Works without authentication
+- LLM API keys stored in browser localStorage (not encrypted)
 - Settings stored in browser localStorage only
 - No persistence across devices
 - Perfect for quick testing without login
+
+> **⚠️ Security Note**: Guest mode API keys are stored in plain text in localStorage. For production use, create an account to benefit from AES-256-GCM encrypted storage.
 
 ### Authentication Flow
 1. **Registration**: Click "Inscription" → Create account with email + password

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { LLMConfig } from '../models/LLMConfig.model';
-import UserSettings from '../models/UserSettings.model';
+// NOTE J4.4: UserSettings import REMOVED - llmConfigs field no longer exists
 import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 
@@ -12,16 +12,17 @@ const router = Router();
  */
 const upsertConfigSchema = z.object({
     provider: z.enum([
-        'OpenAI',
-        'Anthropic',
         'Gemini',
+        'OpenAI',
         'Mistral',
-        'DeepSeek',
+        'Anthropic',
         'Grok',
         'Perplexity',
         'Qwen',
-        'Kimi',
-        'LMStudio'
+        'Kimi K2',
+        'DeepSeek',
+        'LLM local (on premise)',
+        'Arc-LLM'
     ]),
     enabled: z.boolean(),
     apiKey: z.string().min(1, 'API key requise'), // En clair, sera chiffrée
@@ -61,15 +62,33 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
         const configs = await LLMConfig.find(query).sort({ provider: 1 });
 
         // SÉCURITÉ CRITIQUE: Ne JAMAIS retourner les API keys
-        const safeConfigs = configs.map(c => ({
-            id: c._id.toString(),
-            provider: c.provider,
-            enabled: c.enabled,
-            capabilities: c.capabilities,
-            hasApiKey: !!c.apiKeyEncrypted,
-            createdAt: c.createdAt,
-            updatedAt: c.updatedAt
-        }));
+        // ⭐ J4.4: Return masked apiKey string (points) if key exists, to preserve length info
+        const safeConfigs = configs.map(c => {
+            // If encrypted key exists, create a masked string of same length
+            // This allows frontend to show password field with correct visual length
+            let maskedApiKey = '';
+            if (c.apiKeyEncrypted) {
+                // Decrypt to get real length, then mask
+                try {
+                    const decrypted = c.getDecryptedApiKey();
+                    maskedApiKey = '•'.repeat(decrypted.length);
+                } catch (err) {
+                    // Fallback if decryption fails
+                    maskedApiKey = '••••••••••••••••••••'; // 20 points default
+                }
+            }
+
+            return {
+                id: c._id.toString(),
+                provider: c.provider,
+                enabled: c.enabled,
+                apiKey: maskedApiKey, // ⭐ J4.4: Empty if no key, masked if key exists
+                capabilities: c.capabilities,
+                hasApiKey: !!c.apiKeyEncrypted,
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt
+            };
+        });
 
         res.json(safeConfigs);
     } catch (error) {
@@ -172,32 +191,9 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
             console.log(`[LLMConfig] Created config for user ${userId}, provider ${provider}`);
         }
 
-        // SYNC J4.3: Also update UserSettings
-        try {
-            let userSettings = await UserSettings.findOne({ userId });
-
-            if (!userSettings) {
-                userSettings = new UserSettings({
-                    userId,
-                    llmConfigs: {},
-                    preferences: { language: 'fr', theme: 'dark' }
-                });
-            }
-
-            // Update UserSettings.llmConfigs for this provider
-            userSettings.llmConfigs[provider] = {
-                enabled,
-                apiKeyEncrypted: config.apiKeyEncrypted,
-                capabilities,
-                lastUpdated: new Date()
-            };
-
-            await userSettings.save();
-            console.log(`[LLMConfig] Synced to UserSettings for provider ${provider}`);
-        } catch (syncError) {
-            // Log but don't fail - UserSettings is secondary
-            console.warn('[LLMConfig] UserSettings sync warning:', syncError);
-        }
+        // NOTE J4.4: UserSettings.llmConfigs sync REMOVED 
+        // llm_configs collection is now the SINGLE source of truth
+        // UserSettings only contains preferences (language, theme)
 
         // Response sécurisée (sans API key)
         res.json({
@@ -242,18 +238,8 @@ router.delete('/:provider', requireAuth, async (req: Request, res: Response) => 
             return res.status(404).json({ error: 'Config LLM introuvable' });
         }
 
-        // SYNC J4.3: Also remove from UserSettings
-        try {
-            const userSettings = await UserSettings.findOne({ userId });
-            if (userSettings && userSettings.llmConfigs[provider]) {
-                delete userSettings.llmConfigs[provider];
-                await userSettings.save();
-                console.log(`[LLMConfig] Removed from UserSettings for provider ${provider}`);
-            }
-        } catch (syncError) {
-            // Log but don't fail - UserSettings is secondary
-            console.warn('[LLMConfig] UserSettings sync warning on delete:', syncError);
-        }
+        // NOTE J4.4: UserSettings.llmConfigs sync REMOVED
+        // llm_configs collection is now the SINGLE source of truth
 
         console.log(`[LLMConfig] Deleted config for user ${userId}, provider ${provider}`);
         res.json({ message: 'Config LLM supprimée' });

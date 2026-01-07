@@ -1,16 +1,20 @@
 /**
  * @file user-settings.routes.ts
- * @description User settings persistence endpoints (J4.3)
+ * @description User settings persistence endpoints (J4.4 - Simplified)
  * @domain Design Domain - Bounded Context: Settings Management
  * 
  * ENDPOINTS:
- * - GET /api/user-settings (fetch user settings)
- * - POST /api/user-settings (save user settings atomically)
+ * - GET /api/user-settings (fetch user preferences)
+ * - POST /api/user-settings (save user preferences)
+ * 
+ * MIGRATION NOTE (J4.4):
+ * - llmConfigs handling REMOVED from this route
+ * - All API key operations now go through /api/llm-configs
+ * - This route handles ONLY preferences (language, theme)
  * 
  * SECURITY:
  * - Requires Bearer token (JWT)
  * - userId from token validated
- * - API keys encrypted server-side
  */
 
 import express, { Router, Request, Response, NextFunction } from 'express';
@@ -22,11 +26,13 @@ const router = Router();
 
 /**
  * GET /api/user-settings
- * Fetch user settings (llmConfigs + preferences)
+ * Fetch user preferences only
+ * 
+ * NOTE (J4.4): llmConfigs removed - use GET /api/llm-configs instead
  * 
  * Response: {
- *   llmConfigs: { [provider]: { enabled, capabilities, lastUpdated } },
  *   preferences: { language, theme },
+ *   lastSync: Date,
  *   updatedAt: Date
  * }
  */
@@ -41,7 +47,6 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
         if (!settings) {
             settings = new UserSettings({
                 userId,
-                llmConfigs: {},
                 preferences: {
                     language: 'fr',
                     theme: 'dark'
@@ -50,20 +55,9 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
             await settings.save();
         }
 
-        // Return public view (no encrypted keys)
         res.json({
-            llmConfigs: Object.entries(settings.llmConfigs).reduce(
-                (acc, [provider, config]: [string, any]) => {
-                    acc[provider] = {
-                        enabled: config.enabled,
-                        capabilities: config.capabilities,
-                        lastUpdated: config.lastUpdated
-                    };
-                    return acc;
-                },
-                {} as Record<string, any>
-            ),
             preferences: settings.preferences,
+            lastSync: settings.lastSync,
             updatedAt: settings.updatedAt
         });
     } catch (error) {
@@ -76,22 +70,28 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
 });
 
 /**
- * POST /api/user-settings (alias for PUT for compatibility)
+ * POST /api/user-settings (alias for PUT)
  * PUT /api/user-settings
- * Save user settings atomically
+ * Save user preferences only
+ * 
+ * NOTE (J4.4): llmConfigs handling REMOVED
+ * For LLM configs, use POST /api/llm-configs instead
  * 
  * Request body: {
- *   llmConfigs?: { [provider]: { enabled, apiKey?, capabilities } },
  *   preferences?: { language?, theme? }
  * }
  * 
- * Note: If apiKey provided, it will be encrypted before storage
+ * Response: {
+ *   preferences: { language, theme },
+ *   lastSync: Date,
+ *   updatedAt: Date
+ * }
  */
 const saveSettingsHandler = async (req: Request, res: Response) => {
     try {
         const user = req.user as any;
         const userId = user.id || user._id;
-        const { llmConfigs, preferences } = req.body;
+        const { preferences } = req.body;
 
         let settings = await UserSettings.findOne({ userId });
 
@@ -99,44 +99,9 @@ const saveSettingsHandler = async (req: Request, res: Response) => {
         if (!settings) {
             settings = new UserSettings({
                 userId,
-                llmConfigs: {},
                 preferences: {
                     language: 'fr',
                     theme: 'dark'
-                }
-            });
-        }
-
-        // Update LLM configs if provided
-        if (llmConfigs && typeof llmConfigs === 'object') {
-            Object.entries(llmConfigs).forEach(([provider, config]: [string, any]) => {
-                if (config && typeof config === 'object') {
-                    // Initialize provider config if new
-                    if (!settings!.llmConfigs[provider]) {
-                        settings!.llmConfigs[provider] = {
-                            enabled: false,
-                            capabilities: {},
-                            lastUpdated: new Date()
-                        };
-                    }
-
-                    // Update enabled flag
-                    if ('enabled' in config) {
-                        settings!.llmConfigs[provider].enabled = config.enabled;
-                    }
-
-                    // Handle API key encryption
-                    if (config.apiKey) {
-                        settings!.setEncryptedApiKey(provider, config.apiKey);
-                    }
-
-                    // Update capabilities
-                    if (config.capabilities && typeof config.capabilities === 'object') {
-                        settings!.llmConfigs[provider].capabilities = config.capabilities;
-                    }
-
-                    // Update timestamp
-                    settings!.llmConfigs[provider].lastUpdated = new Date();
                 }
             });
         }
@@ -151,26 +116,18 @@ const saveSettingsHandler = async (req: Request, res: Response) => {
             }
         }
 
+        // Update sync timestamp
+        settings.lastSync = new Date();
+
         // Increment version for conflict detection
         settings.version = (settings.version || 0) + 1;
 
         // Save atomically
         await settings.save();
 
-        // Return public view (no encrypted keys)
         res.json({
-            llmConfigs: Object.entries(settings.llmConfigs).reduce(
-                (acc, [provider, config]: [string, any]) => {
-                    acc[provider] = {
-                        enabled: config.enabled,
-                        capabilities: config.capabilities,
-                        lastUpdated: config.lastUpdated
-                    };
-                    return acc;
-                },
-                {} as Record<string, any>
-            ),
             preferences: settings.preferences,
+            lastSync: settings.lastSync,
             updatedAt: settings.updatedAt
         });
     } catch (error) {

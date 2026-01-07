@@ -21,6 +21,7 @@ import React, {
     useCallback
 } from 'react';
 import { User, AuthContextType, StoredAuthData, AuthResponse, AuthLoadingState, LLMApiKey } from './types/auth.types';
+import { wipeGuestData, checkGuestDataExists } from '../utils/guestDataUtils';
 
 const AUTH_STORAGE_KEY = 'auth_data_v1';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -51,6 +52,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true); // Start true to avoid FOUC
     const [error, setError] = useState<string | null>(null);
     const [llmApiKeys, setLlmApiKeys] = useState<LLMApiKey[] | null>(null); // J4.2: Session-only storage
+    const [isMounted, setIsMounted] = useState(false); // ⭐ J4.4: Prevent async cleanup errors
+
+    /**
+     * ⭐ J4.4: Track mount state to prevent async state updates after unmount
+     * This prevents the "message channel closed before response" error
+     */
+    useEffect(() => {
+        setIsMounted(true);
+        return () => {
+            setIsMounted(false);
+        };
+    }, []);
 
     /**
      * Hydrate auth from localStorage on mount
@@ -65,9 +78,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
                     // Validate structure
                     if (user && user.id && user.email && accessToken && refreshToken) {
-                        setUser(user);
-                        setAccessToken(accessToken);
-                        setRefreshToken(refreshToken);
+                        if (isMounted) {
+                            setUser(user);
+                            setAccessToken(accessToken);
+                            setRefreshToken(refreshToken);
+                        }
                     } else {
                         // Malformed data - clear
                         localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -78,12 +93,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 localStorage.removeItem(AUTH_STORAGE_KEY);
             } finally {
                 // Always finish loading (fallback to guest mode)
-                setIsLoading(false);
+                if (isMounted) {
+                    setIsLoading(false);
+                }
             }
         };
 
         hydrateFromStorage();
-    }, []);
+    }, [isMounted]);
 
     /**
      * Listen for logout event from API interceptor (e.g., 401 response)
@@ -125,8 +142,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      * POST /api/llm/get-all-api-keys
      * Called after successful login/register
      * Keys stored ONLY in memory (session), NOT in localStorage
+     * 
+     * ⭐ J4.4: Added timeout & mount check to prevent async errors
      */
     const fetchLLMApiKeys = useCallback(async (token: string) => {
+        // ⭐ J4.4: Check mount state before async operation
+        if (!isMounted) {
+            console.warn('[AuthContext] fetchLLMApiKeys: Component not mounted, skipping');
+            return;
+        }
+
+        // ⭐ J4.4: Add 5-second timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
         try {
             const response = await fetch(`${API_BASE_URL}/api/llm/get-all-api-keys`, {
                 method: 'POST',
@@ -134,29 +163,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({})
+                body: JSON.stringify({}),
+                signal: controller.signal // ⭐ J4.4: Allow timeout to abort
             });
 
             if (!response.ok) {
                 console.warn('[AuthContext] Failed to fetch LLM API keys:', response.status);
                 // Non-blocking: continue without keys
-                setLlmApiKeys([]);
+                if (isMounted) {
+                    setLlmApiKeys([]);
+                }
                 return;
             }
 
             const keys: LLMApiKey[] = await response.json();
-            setLlmApiKeys(keys);
-            console.log('[AuthContext] LLM API keys fetched successfully:', keys.length, 'keys');
+            
+            // ⭐ J4.4: Only update state if component still mounted
+            if (isMounted) {
+                setLlmApiKeys(keys);
+                console.log('[AuthContext] LLM API keys fetched successfully:', keys.length, 'keys');
+            }
         } catch (err: any) {
-            console.warn('[AuthContext] Error fetching LLM API keys:', err.message);
-            // Non-blocking: continue without keys
-            setLlmApiKeys([]);
+            // ⭐ J4.4: Ignore abort errors (timeout) and unmount errors
+            if (err.name === 'AbortError') {
+                console.warn('[AuthContext] fetchLLMApiKeys: Timeout (5s) reached');
+            } else {
+                console.warn('[AuthContext] Error fetching LLM API keys:', err.message);
+            }
+            
+            // Only update state if component still mounted
+            if (isMounted) {
+                setLlmApiKeys([]);
+            }
+        } finally {
+            clearTimeout(timeoutId);
         }
-    }, []);
+    }, [isMounted]);
 
     /**
      * Login with email & password
      * POST /api/auth/login
+     * 
+     * CRITICAL: Wipes guest data before setting auth state
+     * This prevents data leak from guest session to authenticated session
      */
     const login = useCallback(async (email: string, password: string) => {
         setError(null);
@@ -176,6 +225,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const { user: userData, accessToken, refreshToken }: AuthResponse = await response.json();
+
+            // ⭐ CRITICAL: Wipe guest data BEFORE setting auth state
+            // This prevents guest session data from bleeding into auth session
+            const guestCheck = checkGuestDataExists();
+            if (guestCheck.totalKeys > 0) {
+                console.log('[AuthContext] Wiping guest data before login:', guestCheck);
+                const wipeResult = wipeGuestData();
+                console.log('[AuthContext] Guest data wipe result:', wipeResult);
+            }
+
             saveAuthData(userData, accessToken, refreshToken);
 
             // J4.2: Fetch LLM API keys after successful login
@@ -192,6 +251,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     /**
      * Register with email & password
      * POST /api/auth/register
+     * 
+     * CRITICAL: Wipes guest data before setting auth state
      */
     const register = useCallback(async (email: string, password: string) => {
         setError(null);
@@ -210,6 +271,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const { user: userData, accessToken, refreshToken }: AuthResponse = await response.json();
+
+            // ⭐ CRITICAL: Wipe guest data BEFORE setting auth state
+            const guestCheck = checkGuestDataExists();
+            if (guestCheck.totalKeys > 0) {
+                console.log('[AuthContext] Wiping guest data before register:', guestCheck);
+                const wipeResult = wipeGuestData();
+                console.log('[AuthContext] Guest data wipe result:', wipeResult);
+            }
+
             saveAuthData(userData, accessToken, refreshToken);
 
             // J4.2: Fetch LLM API keys after successful registration
@@ -224,9 +294,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, [saveAuthData, fetchLLMApiKeys]);
 
     /**
-     * Logout - Clear all auth data
+     * Logout - Clear all auth data and guest data
+     * ⭐ CRITICAL: Also wipes guest data to ensure clean state
+     * Prevents authenticated user data from leaking to guest mode
      */
     const logout = useCallback(() => {
+        // ⭐ CRITICAL: Wipe guest data on logout
+        // Prevents authenticated user state from contaminating guest mode
+        const guestCheck = checkGuestDataExists();
+        if (guestCheck.totalKeys > 0) {
+            console.log('[AuthContext] Wiping guest data on logout:', guestCheck);
+            const wipeResult = wipeGuestData();
+            console.log('[AuthContext] Guest data wipe result:', wipeResult);
+        }
+
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);

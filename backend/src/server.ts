@@ -18,6 +18,7 @@ import agentInstancesRoutes from './routes/agent-instances.routes';
 import llmConfigsRoutes from './routes/llm-configs.routes';
 import llmProxyRoutes from './routes/llm-proxy.routes';
 import userSettingsRoutes from './routes/user-settings.routes';
+import userWorkspaceRoutes from './routes/user-workspace.routes';
 
 // SOLID: Valider la configuration au démarrage (fail-fast pattern)
 validateConfig();
@@ -67,6 +68,9 @@ app.use('/api/local-llm', localLLMRoutes);
 
 // User settings routes (Jalon 4 - Phase 3)
 app.use(userSettingsRoutes);
+
+// User workspace composite routes (Jalon 4 - Phase 4: Hydration)
+app.use('/api/user', userWorkspaceRoutes);
 
 // Routes proxy LMStudio (legacy)
 app.use('/api/lmstudio', lmstudioRoutes);

@@ -5,7 +5,7 @@
  * Architecture: Direct fetch to backend proxy + error handling
  */
 
-import { LLMProvider, LLMCapability } from '../types';
+import { LLMProvider, LLMCapability } from '../../types';
 
 /**
  * Mock de la réponse du backend proxy

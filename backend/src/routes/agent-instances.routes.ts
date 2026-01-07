@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import { AgentInstance } from '../models/AgentInstance.model';
@@ -7,6 +7,12 @@ import { Workflow } from '../models/Workflow.model';
 import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 import { IUser } from '../models/User.model';
+
+// Type pour les paramètres de route hérités (via mergeParams)
+interface WorkflowParams {
+    workflowId: string;
+    id?: string;
+}
 
 // CORRECTION SOLID: mergeParams: true pour hériter des paramètres du parent (:workflowId)
 const router = Router({ mergeParams: true });
@@ -41,7 +47,7 @@ const createAgentInstanceSchema = z.object({
 const updateAgentInstanceSchema = createAgentInstanceSchema.partial();
 
 // GET /api/workflows/:workflowId/instances - Liste des instances
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, async (req: Request<WorkflowParams>, res: Response) => {
     try {
         const user = req.user as IUser;
         const { workflowId } = req.params;
@@ -137,7 +143,7 @@ router.post('/',
 );
 
 // POST /api/workflows/:workflowId/instances/from-prototype - Créer instance depuis prototype
-router.post('/from-prototype', requireAuth, async (req, res) => {
+router.post('/from-prototype', requireAuth, async (req: Request<WorkflowParams>, res: Response) => {
     try {
         const user = req.user as IUser;
         const { workflowId } = req.params;

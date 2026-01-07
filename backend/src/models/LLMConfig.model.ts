@@ -25,16 +25,17 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
         required: true,
         trim: true,
         enum: [
-            'OpenAI',
-            'Anthropic',
             'Gemini',
+            'OpenAI',
             'Mistral',
-            'DeepSeek',
+            'Anthropic',
             'Grok',
             'Perplexity',
             'Qwen',
-            'Kimi',
-            'LMStudio'
+            'Kimi K2',
+            'DeepSeek',
+            'LLM local (on premise)',
+            'Arc-LLM'
         ]
     },
     enabled: {
