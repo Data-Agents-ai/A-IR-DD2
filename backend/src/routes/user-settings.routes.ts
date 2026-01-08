@@ -7,10 +7,15 @@
  * - GET /api/user-settings (fetch user preferences)
  * - POST /api/user-settings (save user preferences)
  * 
+ * PREFERENCES SUPPORTED:
+ * - language: 'fr' | 'en' | 'de' | 'es' | 'pt'
+ * - theme: 'dark' | 'light'
+ * - saveMode: 'auto' | 'manual'
+ * 
  * MIGRATION NOTE (J4.4):
  * - llmConfigs handling REMOVED from this route
  * - All API key operations now go through /api/llm-configs
- * - This route handles ONLY preferences (language, theme)
+ * - This route handles ONLY preferences (language, theme, saveMode)
  * 
  * SECURITY:
  * - Requires Bearer token (JWT)
@@ -31,7 +36,7 @@ const router = Router();
  * NOTE (J4.4): llmConfigs removed - use GET /api/llm-configs instead
  * 
  * Response: {
- *   preferences: { language, theme },
+ *   preferences: { language, theme, saveMode },
  *   lastSync: Date,
  *   updatedAt: Date
  * }
@@ -49,7 +54,8 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
                 userId,
                 preferences: {
                     language: 'fr',
-                    theme: 'dark'
+                    theme: 'dark',
+                    saveMode: 'manual'
                 }
             });
             await settings.save();
@@ -78,11 +84,11 @@ router.get('/api/user-settings', requireAuth, async (req: Request, res: Response
  * For LLM configs, use POST /api/llm-configs instead
  * 
  * Request body: {
- *   preferences?: { language?, theme? }
+ *   preferences?: { language?, theme?, saveMode? }
  * }
  * 
  * Response: {
- *   preferences: { language, theme },
+ *   preferences: { language, theme, saveMode },
  *   lastSync: Date,
  *   updatedAt: Date
  * }
@@ -101,7 +107,8 @@ const saveSettingsHandler = async (req: Request, res: Response) => {
                 userId,
                 preferences: {
                     language: 'fr',
-                    theme: 'dark'
+                    theme: 'dark',
+                    saveMode: 'manual'
                 }
             });
         }
@@ -113,6 +120,9 @@ const saveSettingsHandler = async (req: Request, res: Response) => {
             }
             if ('theme' in preferences && preferences.theme) {
                 settings.preferences.theme = preferences.theme;
+            }
+            if ('saveMode' in preferences && preferences.saveMode) {
+                settings.preferences.saveMode = preferences.saveMode;
             }
         }
 

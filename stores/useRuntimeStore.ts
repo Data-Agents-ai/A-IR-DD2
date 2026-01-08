@@ -112,12 +112,6 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
 
   // LLM Config
   updateLLMConfigs: (configs) => {
-    // DEBUG: Log LMStudio config being set in store
-    const lmStudioConfig = configs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[RuntimeStore] updateLLMConfigs - LMStudio:', {
-      enabled: lmStudioConfig?.enabled,
-      endpoint: lmStudioConfig?.apiKey
-    });
     set({ llmConfigs: configs });
   },
 

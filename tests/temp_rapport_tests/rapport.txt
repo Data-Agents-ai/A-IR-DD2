@@ -1,0 +1,6 @@
+[useSaveModeStore] Initialized with: manual
+useSaveMode.ts:86 [useSaveMode] Loaded from localStorage: manual
+useRuntimeStore.ts:117 [RuntimeStore] updateLLMConfigs - LMStudio: {enabled: false, endpoint: 'http://localhost:3928'}
+installHook.js:1 [useSaveModeStore] Initialized with: manual
+installHook.js:1 [useSaveMode] Loaded from localStorage: manual
+installHook.js:1 [RuntimeStore] updateLLMConfigs - LMStudio: {enabled: false, endpoint: 'http://localhost:3928'}

@@ -69,7 +69,6 @@ export function useSaveMode(): UseSaveModeReturn {
                         const data = await response.json();
                         const mode = data.preferences?.saveMode || DEFAULT_SAVE_MODE;
                         initialize(mode);
-                        console.log('[useSaveMode] Loaded from API:', mode);
                     } else {
                         initialize(DEFAULT_SAVE_MODE);
                     }
@@ -83,7 +82,6 @@ export function useSaveMode(): UseSaveModeReturn {
                 // Mode invité: charger depuis localStorage
                 const mode = loadGuestSaveMode();
                 initialize(mode);
-                console.log('[useSaveMode] Loaded from localStorage:', mode);
             }
         };
 
@@ -116,7 +114,6 @@ export function useSaveMode(): UseSaveModeReturn {
 
                 // ⭐ IMPORTANT: Met à jour le store GLOBAL
                 setStoreSaveMode(mode);
-                console.log('[useSaveMode] Saved to API:', mode);
             } catch (err) {
                 console.error('[useSaveMode] Failed to save to API:', err);
                 throw err;
@@ -127,7 +124,6 @@ export function useSaveMode(): UseSaveModeReturn {
             // Mode invité: sauvegarder dans localStorage
             saveGuestSaveMode(mode);
             setStoreSaveMode(mode);
-            console.log('[useSaveMode] Saved to localStorage:', mode);
         }
     }, [isAuthenticated, accessToken, setStoreSaveMode, setLoading]);
 

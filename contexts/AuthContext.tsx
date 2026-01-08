@@ -25,6 +25,7 @@ import { wipeGuestData, checkGuestDataExists } from '../utils/guestDataUtils';
 import { useDesignStore } from '../stores/useDesignStore';
 import { useWorkflowStore } from '../stores/useWorkflowStore';
 import { useRuntimeStore } from '../stores/useRuntimeStore';
+import { useLocalizationStore } from '../stores/useLocalizationStore';
 
 const AUTH_STORAGE_KEY = 'auth_data_v1';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -233,10 +234,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // This prevents guest session data from bleeding into auth session
             const guestCheck = checkGuestDataExists();
             if (guestCheck.totalKeys > 0) {
-                console.log('[AuthContext] Wiping guest data before login:', guestCheck);
                 const wipeResult = wipeGuestData();
-                console.log('[AuthContext] Guest data wipe result:', wipeResult);
             }
+            
+            // ⭐ NEW: Reset localization store on login to prevent data leak
+            const localizationStore = useLocalizationStore.getState();
+            localizationStore.resetAll();
 
             saveAuthData(userData, accessToken, refreshToken);
 
@@ -278,9 +281,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // ⭐ CRITICAL: Wipe guest data BEFORE setting auth state
             const guestCheck = checkGuestDataExists();
             if (guestCheck.totalKeys > 0) {
-                console.log('[AuthContext] Wiping guest data before register:', guestCheck);
                 const wipeResult = wipeGuestData();
-                console.log('[AuthContext] Guest data wipe result:', wipeResult);
             }
 
             saveAuthData(userData, accessToken, refreshToken);
@@ -320,6 +321,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             useDesignStore.getState().resetAll();
             useWorkflowStore.getState().resetAll();
             useRuntimeStore.getState().resetAll();
+            useLocalizationStore.getState().resetAll(); // ⭐ NEW: Reset localization too
         } catch (err) {
             // Silent fail - stores may not be initialized
         }

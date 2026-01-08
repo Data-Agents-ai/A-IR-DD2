@@ -5,7 +5,7 @@
  * 
  * ARCHITECTURE:
  * - One document per user (userId is unique key)
- * - Stores ONLY user preferences (language, theme)
+ * - Stores ONLY user preferences (language, theme, saveMode)
  * - LLM API keys are stored ONLY in LLMConfig collection
  * 
  * MIGRATION NOTE (J4.4):
@@ -21,11 +21,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 /**
- * User Preferences (language, theme, etc.)
+ * User Preferences (language, theme, saveMode, etc.)
  */
 export interface UserPreferences {
     language: 'fr' | 'en' | 'de' | 'es' | 'pt';
     theme?: 'dark' | 'light';
+    saveMode?: 'auto' | 'manual';
 }
 
 /**
@@ -68,6 +69,11 @@ const userSettingsSchema = new Schema(
                 type: String,
                 enum: ['dark', 'light'],
                 default: 'dark'
+            },
+            saveMode: {
+                type: String,
+                enum: ['auto', 'manual'],
+                default: 'manual'
             }
         },
 

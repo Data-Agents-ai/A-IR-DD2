@@ -262,16 +262,53 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
           <div className="pt-4 max-h-[60vh] overflow-y-auto pr-2">
             {activeTab === 'language' && (
               <div className="space-y-4">
-                <div>
-                  <label htmlFor="language-select" className="block text-sm font-medium text-gray-300 mb-1">{t('settings_language_label')}</label>
-                  <select
-                    id="language-select"
-                    value={locale}
-                    onChange={(e) => setLocale(e.target.value as Locale)}
-                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {Object.entries(locales).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-                  </select>
+                <div className="bg-indigo-900/20 border border-indigo-600/30 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-indigo-400 mb-3">Langue de l'application</h4>
+                  <p className="text-sm text-gray-400 mb-4">
+                    Choisissez la langue pour l'interface utilisateur.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 gap-3">
+                    {Object.entries(locales).map(([localeCode, localeName]) => (
+                      <label 
+                        key={localeCode}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                          locale === localeCode 
+                            ? 'bg-indigo-900/40 border-2 border-indigo-500' 
+                            : 'bg-gray-800 border-2 border-transparent hover:border-gray-600'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="language"
+                          value={localeCode}
+                          checked={locale === localeCode}
+                          onChange={async () => {
+                            try {
+                              await setLocale(localeCode as Locale);
+                            } catch (err) {
+                              console.error('Failed to set language:', err);
+                            }
+                          }}
+                          className="w-4 h-4 accent-indigo-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-200">{localeName}</span>
+                        </div>
+                        {locale === localeCode && (
+                          <span className="text-xs bg-indigo-500/30 text-indigo-300 px-2 py-1 rounded">
+                            Actuelle
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Info supplémentaire */}
+                  <div className="text-xs text-gray-500 bg-gray-800/50 rounded-lg p-3 mt-4">
+                    💡 <strong>Note :</strong> La langue est sauvegardée automatiquement et persistée 
+                    {isAuthenticated ? ' dans votre profil utilisateur' : ' en localStorage'}.
+                  </div>
                 </div>
               </div>
             )}

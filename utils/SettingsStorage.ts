@@ -18,7 +18,7 @@
  */
 
 import { AuthContextType } from '../contexts/AuthContext';
-import { BACKEND_URL } from '../config/api.config';
+import { getBackendUrl } from '../config/api.config';
 
 export interface UserSettingsData {
     preferences: {
@@ -111,7 +111,7 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
     async getSettings(): Promise<UserSettingsData> {
         try {
-            const response = await fetch(`${BACKEND_URL}/api/user-settings`, {
+            const response = await fetch(`${getBackendUrl()}/api/user-settings`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -140,7 +140,7 @@ class AuthenticatedSettingsStorage implements ISettingsStorage {
 
     async saveSettings(data: Partial<UserSettingsData>): Promise<UserSettingsData> {
         try {
-            const response = await fetch(`${BACKEND_URL}/api/user-settings`, {
+            const response = await fetch(`${getBackendUrl()}/api/user-settings`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,

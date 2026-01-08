@@ -378,7 +378,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               variant="primary"
             >
               <PlusIcon className="w-4 h-4" />
-              <span>+ Prototype d'agent</span>
+              <span>Prototype d'agent</span>
             </Button>
           </div>
         </div>

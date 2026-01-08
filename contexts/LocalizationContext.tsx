@@ -1,5 +1,6 @@
-import React, { createContext, useState, useCallback } from 'react';
+import React, { createContext, useState, useCallback, useEffect } from 'react';
 import { Locale, locales, defaultLocale } from '../i18n/locales';
+import { useLocalizationStore } from '../stores/useLocalizationStore';
 
 // Import all languages statically to avoid race conditions
 import fr from '../i18n/fr';
@@ -33,11 +34,17 @@ const getInitialLocale = (): Locale => {
 
 export const LocalizationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [locale, setLocaleState] = useState<Locale>(getInitialLocale());
+    
+    // Zustand store for global state
+    const { setLocale: setStoreLocale } = useLocalizationStore();
 
     const setLocale = useCallback((newLocale: Locale) => {
         localStorage.setItem('app-locale', newLocale);
         setLocaleState(newLocale);
-    }, []);
+        
+        // ⭐ Synchronize with Zustand store
+        setStoreLocale(newLocale);
+    }, [setStoreLocale]);
 
     const t = useCallback((key: string, params: Record<string, string | number> = {}) => {
         const translations = allTranslations[locale] || allTranslations[defaultLocale];

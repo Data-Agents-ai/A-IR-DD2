@@ -4,8 +4,17 @@
 /**
  * URL du backend proxy
  * En production, utiliser la variable d'environnement VITE_BACKEND_URL
+ * ⭐ CRITICAL: Use process.env instead of import.meta.env to avoid Jest parse errors
+ * Vite handles process.env.VITE_* replacement in browser builds
  */
-export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+export const getBackendUrl = (): string => {
+  // process.env.VITE_BACKEND_URL is replaced by Vite in browser builds
+  // In tests/Node, it falls back to localhost
+  return process.env.VITE_BACKEND_URL || 'http://localhost:3001';
+};
+
+// Deprecated: Use getBackendUrl() instead. Kept for backward compatibility in some edge cases.
+export const BACKEND_URL = 'http://localhost:3001';
 
 /**
  * Endpoints du backend proxy
@@ -34,7 +43,7 @@ export const API_ENDPOINTS = {
  * Construire une URL complète vers le backend
  */
 export function buildBackendUrl(endpoint: string, queryParams?: Record<string, string>): string {
-    const url = new URL(endpoint, BACKEND_URL);
+    const url = new URL(endpoint, getBackendUrl());
 
     if (queryParams) {
         Object.entries(queryParams).forEach(([key, value]) => {

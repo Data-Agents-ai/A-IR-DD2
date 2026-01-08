@@ -45,7 +45,6 @@ export const useSaveModeStore = create<SaveModeState>((set, get) => ({
     
     setSaveMode: (mode: SaveMode) => {
         set({ saveMode: mode });
-        console.log('[useSaveModeStore] Mode updated:', mode);
     },
     
     setLoading: (loading: boolean) => {
@@ -54,7 +53,6 @@ export const useSaveModeStore = create<SaveModeState>((set, get) => ({
     
     initialize: (mode: SaveMode) => {
         set({ saveMode: mode, isInitialized: true });
-        console.log('[useSaveModeStore] Initialized with:', mode);
     },
     
     isManualSave: () => get().saveMode === 'manual',

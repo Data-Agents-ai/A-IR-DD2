@@ -4,7 +4,7 @@
 // SOLID: SRP - ce service délègue toute la détection au backend
 
 import { LLMCapability } from '../types';
-import { BACKEND_URL } from '../config/api.config';
+import { getBackendUrl } from '../config/api.config';
 
 interface DetectionResult {
     healthy: boolean;
@@ -81,7 +81,7 @@ export async function detectLocalLLMCapabilities(endpoint: string): Promise<Dete
         console.log(`[LocalLLMDetection] Starting detection for endpoint: ${endpoint}`);
 
         // Étape 2: Appeler le backend proxy unique
-        const proxyUrl = `${BACKEND_URL}/api/local-llm/detect-capabilities?endpoint=${encodeURIComponent(endpoint)}`;
+        const proxyUrl = `${getBackendUrl()}/api/local-llm/detect-capabilities?endpoint=${encodeURIComponent(endpoint)}`;
         console.log(`[LocalLLMDetection] Calling backend proxy: ${proxyUrl}`);
 
         const response = await fetch(proxyUrl, {

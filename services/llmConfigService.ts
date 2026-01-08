@@ -11,7 +11,7 @@
  */
 
 import { ILLMConfigUI } from '../types';
-import { BACKEND_URL } from '../config/api.config';
+import { getBackendUrl } from '../config/api.config';
 import { GUEST_STORAGE_KEYS } from '../utils/guestDataUtils';
 
 export interface LLMConfigServiceOptions {
@@ -75,7 +75,7 @@ async function apiRequest(
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${BACKEND_URL}${endpoint}`, options);
+  const response = await fetch(`${getBackendUrl()}${endpoint}`, options);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
