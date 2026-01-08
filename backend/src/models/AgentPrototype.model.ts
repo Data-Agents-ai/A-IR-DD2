@@ -33,14 +33,15 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
     },
     role: {
         type: String,
-        required: true,
+        required: false,  // ⭐ J4.5: Allow empty role
         trim: true,
-        maxlength: 200
+        maxlength: 200,
+        default: ''
     },
     systemPrompt: {
         type: String,
-        required: true,
-        minlength: 1
+        required: false,  // ⭐ J4.5: Allow empty systemPrompt
+        default: ''
     },
     llmProvider: {
         type: String,
@@ -60,8 +61,9 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
         type: String,
         required: true,
         enum: {
-            values: ['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'],
-            message: 'RobotId invalide. Seuls AR_001, BOS_001, COM_001, PHIL_001, TIM_001 sont autorisés'
+            // ⭐ J4.5: Must match frontend RobotId enum in types.ts
+            values: ['AR_001', 'BO_002', 'CO_003', 'PH_004', 'TI_005'],
+            message: 'RobotId invalide. Seuls AR_001, BO_002, CO_003, PH_004, TI_005 sont autorisés'
         }
         // Removed: index: true (used in composite index with userId)
     },

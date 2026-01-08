@@ -86,6 +86,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                             setUser(user);
                             setAccessToken(accessToken);
                             setRefreshToken(refreshToken);
+                            // ⭐ J4.5: Fetch LLM keys on session restore (was missing!)
+                            // Note: fetchLLMApiKeys is called via effect below
                         }
                     } else {
                         // Malformed data - clear
@@ -93,7 +95,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     }
                 }
             } catch (err) {
-                console.error('[AuthContext] Hydration error:', err);
                 localStorage.removeItem(AUTH_STORAGE_KEY);
             } finally {
                 // Always finish loading (fallback to guest mode)
@@ -112,7 +113,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     useEffect(() => {
         const handleLogoutEvent = (event: Event) => {
             const customEvent = event as CustomEvent;
-            console.warn('[AuthContext] Logout event received:', customEvent.detail?.reason);
+            // Logout event received
 
             // Clear auth state
             setUser(null);
@@ -152,7 +153,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const fetchLLMApiKeys = useCallback(async (token: string) => {
         // ⭐ J4.4: Check mount state before async operation
         if (!isMounted) {
-            console.warn('[AuthContext] fetchLLMApiKeys: Component not mounted, skipping');
             return;
         }
 
@@ -172,7 +172,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
 
             if (!response.ok) {
-                console.warn('[AuthContext] Failed to fetch LLM API keys:', response.status);
                 // Non-blocking: continue without keys
                 if (isMounted) {
                     setLlmApiKeys([]);
@@ -185,14 +184,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // ⭐ J4.4: Only update state if component still mounted
             if (isMounted) {
                 setLlmApiKeys(keys);
-                console.log('[AuthContext] LLM API keys fetched successfully:', keys.length, 'keys');
             }
         } catch (err: any) {
             // ⭐ J4.4: Ignore abort errors (timeout) and unmount errors
             if (err.name === 'AbortError') {
-                console.warn('[AuthContext] fetchLLMApiKeys: Timeout (5s) reached');
-            } else {
-                console.warn('[AuthContext] Error fetching LLM API keys:', err.message);
+                // Timeout reached
             }
             
             // Only update state if component still mounted
@@ -204,8 +200,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     }, [isMounted]);
 
-    /**
-     * Login with email & password
+    /**     * ⭐ J4.5 FIX: Fetch LLM API keys when accessToken becomes available
+     * This handles both:
+     * - Fresh login (fetchLLMApiKeys already called in login(), but this is a safety net)
+     * - Session restore from localStorage (hydrateFromStorage doesn't call fetchLLMApiKeys)
+     */
+    useEffect(() => {
+        if (accessToken && llmApiKeys === null && isMounted) {
+            fetchLLMApiKeys(accessToken);
+        }
+    }, [accessToken, llmApiKeys, isMounted, fetchLLMApiKeys]);
+
+    /**     * Login with email & password
      * POST /api/auth/login
      * 
      * CRITICAL: Wipes guest data before setting auth state

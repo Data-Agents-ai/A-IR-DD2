@@ -58,7 +58,15 @@ const loadLLMConfigs = (isAuthenticated: boolean = false, accessToken: string | 
     }
     
     // Guest mode: Load from localStorage
-    const storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
+    // ⭐ J4.5: Try new key first, then legacy key for backward compatibility
+    let storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
+    if (!storedConfigsJSON) {
+      // Try legacy key
+      storedConfigsJSON = localStorage.getItem(GUEST_STORAGE_KEYS.LLM_CONFIGS_LEGACY);
+      if (storedConfigsJSON) {
+        localStorage.setItem(LLM_CONFIGS_KEY, storedConfigsJSON);
+      }
+    }
     if (!storedConfigsJSON) {
       return initialLLMConfigs;
     }
@@ -196,7 +204,17 @@ function AppContent() {
    * This effect runs AFTER auth change effect, merging real API keys with defaults.
    */
   useEffect(() => {
-    if (isAuthenticated && llmApiKeys && llmApiKeys.length > 0) {
+    // ⭐ CRITICAL: Wait for llmApiKeys to be loaded (not null/undefined)
+    // When isAuthenticated but llmApiKeys is null, it means AuthContext is still fetching
+    if (!isAuthenticated) {
+      return; // Not authenticated, nothing to do
+    }
+    
+    if (llmApiKeys === null || llmApiKeys === undefined) {
+      return; // Still loading, wait for next trigger
+    }
+    
+    if (llmApiKeys.length > 0) {
       // Convert LLMApiKey[] to LLMConfig[]
       const apiConfigs: LLMConfig[] = llmApiKeys.map(key => ({
         provider: key.provider as LLMProvider,
@@ -217,6 +235,8 @@ function AppContent() {
         }
         return initial;
       });
+      
+      const enabledProviders = mergedConfigs.filter(c => c.enabled).map(c => c.provider);
       
       setLlmConfigs(mergedConfigs);
       updateLLMConfigs(mergedConfigs);
@@ -272,12 +292,7 @@ function AppContent() {
 
   const handleSaveSettings = async (newLLMConfigs: LLMConfig[]) => {
     try {
-      console.log('[App] handleSaveSettings called with configs:', newLLMConfigs);
       const lmStudioConfig = newLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
-      console.log('[App] Saving LMStudio config:', {
-        enabled: lmStudioConfig?.enabled,
-        endpoint: lmStudioConfig?.apiKey
-      });
 
       // Get appropriate storage based on auth state
       const storage = getSettingsStorage({
@@ -301,35 +316,16 @@ function AppContent() {
       await storage.saveSettings({
         preferences: { language: 'fr' }
       });
-
-      console.log('[App] Preferences saved to storage successfully');
-      setLlmConfigs(newLLMConfigs);
-      console.log('[App] React state updated with new configs');
+      
+      // ⭐ J4.5 FIX: Reload configs from fresh source to ensure synchronization
+      // For guests: reload from localStorage (useLLMConfigs already saved there)
+      // For auth: use the provided newLLMConfigs (which came from API via useLLMConfigs)
+      const freshConfigs = loadLLMConfigs(isAuthenticated, accessToken);
+      setLlmConfigs(freshConfigs);
+      updateLLMConfigs(freshConfigs);
     } catch (error) {
-      console.error("[App] Failed to save settings", error);
+      // Handle error silently
     }
-  };
-
-  const handleOpenEditAgentModal = (agent: Agent) => {
-    setEditingAgent(agent);
-    setAgentModalOpen(true);
-  };
-
-  const handleSaveAgent = (agentData: Omit<Agent, 'id'>, agentId?: string) => {
-    if (agentId) { // Editing existing agent
-      const instancesCount = workflowNodes.filter(n => n.agent.id === agentId).length;
-      if (instancesCount > 0) {
-        setUpdateConfirmation({ agentData, agentId, count: instancesCount });
-      } else {
-        // No instances, just save directly
-        const updatedAgent = { ...agentData, id: agentId };
-        setAgents(prev => prev.map(a => a.id === agentId ? updatedAgent : a));
-      }
-    } else { // Creating new agent
-      setAgents(prev => [...prev, { ...agentData, id: `agent-${Date.now()}` }]);
-    }
-    setAgentModalOpen(false);
-    setEditingAgent(null);
   };
 
   const handleUpdateConfirmation = (updateInstances: boolean) => {
@@ -367,6 +363,11 @@ function AppContent() {
     }
   };
 
+  const handleOpenEditAgentModal = (agent: Agent) => {
+    setEditingAgent(agent);
+    setAgentModalOpen(true);
+  };
+
   const addAgentToWorkflow = useCallback((agent: Agent) => {
     // Calculate position based on existing instances
     const position = {
@@ -374,8 +375,11 @@ function AppContent() {
       y: Math.floor(workflowNodes.length / 4) * 540 + 20,
     };
 
-    // Add agent instance to DesignStore instead of local state
-    const instanceId = addAgentInstance(agent.id, position);
+    // Use instanceName if provided, otherwise use agent name
+    const instanceName = agent.instanceName || agent.name;
+
+    // Add agent instance to DesignStore with custom instance name
+    const instanceId = addAgentInstance(agent.id, position, instanceName);
 
     // Legacy: Also add to local state for now to maintain compatibility
     const newNode: WorkflowNode = {

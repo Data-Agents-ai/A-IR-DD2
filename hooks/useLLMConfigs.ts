@@ -68,13 +68,9 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
     token: accessToken || undefined
   };
 
-  // DEBUG: Log auth state changes
+  // Monitor auth state changes
   useEffect(() => {
-    console.log('[useLLMConfigs] Auth state changed:', {
-      isAuthenticated,
-      hasAccessToken: !!accessToken,
-      willUseApi: isAuthenticated && !!accessToken
-    });
+    // Auth state changed - configs will be reloaded if needed
   }, [isAuthenticated, accessToken]);
 
   /**
@@ -84,7 +80,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
    */
   useEffect(() => {
     if (!isAuthenticated && configs.length > 0) {
-      console.log('[useLLMConfigs] Clearing configs from memory on logout');
       setConfigs([]);
     }
   }, [isAuthenticated]);
@@ -108,7 +103,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(errorMsg);
-      console.error('[useLLMConfigs] loadConfigs failed:', err);
     } finally {
       setLoading(false);
     }
@@ -124,7 +118,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(errorMsg);
-        console.error('[useLLMConfigs] getConfig failed:', err);
         return null;
       }
     },
@@ -145,12 +138,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
     ): Promise<ILLMConfigUI> => {
       setLoading(true);
       setError(null);
-      console.log('[useLLMConfigs] updateConfig called:', {
-        provider,
-        useApi: serviceOptions.useApi,
-        hasToken: !!serviceOptions.token,
-        apiKeyLength: data.apiKey.length
-      });
       
       try {
         const result = await llmConfigService.upsertLLMConfig(
@@ -171,12 +158,10 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
           }
         });
 
-        console.log('[useLLMConfigs] updateConfig success:', result);
         return result;
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(errorMsg);
-        console.error('[useLLMConfigs] updateConfig failed:', err);
         throw err;
       } finally {
         setLoading(false);
@@ -200,7 +185,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(errorMsg);
-        console.error('[useLLMConfigs] deleteConfig failed:', err);
         throw err;
       } finally {
         setLoading(false);
@@ -219,7 +203,6 @@ export function useLLMConfigs(): UseLLMConfigsReturn {
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Erreur inconnue';
         setError(errorMsg);
-        console.error('[useLLMConfigs] validateProvider failed:', err);
         throw err;
       }
     },

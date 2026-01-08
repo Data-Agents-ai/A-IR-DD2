@@ -15,6 +15,13 @@ import { executeTool } from '../utils/toolExecutor';
 import { countTokens, countWords, countSentences, countMessages } from '../utils/textUtils';
 import { useLocalization } from '../hooks/useLocalization';
 
+// ⭐ J4.5: Global counter to ensure unique message IDs even if Date.now() returns same value
+let messageIdCounter = 0;
+const generateMessageId = (suffix?: string): string => {
+    const id = `msg-${Date.now()}-${++messageIdCounter}${suffix ? `-${suffix}` : ''}`;
+    return id;
+};
+
 // Temporary minimize icon
 const MinimizeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -197,9 +204,10 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
   const handleFullscreen = () => {
     // Open fullscreen chat modal for this node
-    const { setFullscreenChatAgent } = useRuntimeStore.getState();
-    setFullscreenChatNodeId(id);
-    setFullscreenChatAgent(agent); // Passer l'agent pour que le modal puisse l'utiliser
+    // Pass instanceId (not nodeId) so getResolvedInstance can retrieve the instance with its custom name
+    if (agentInstance) {
+      setFullscreenChatNodeId(agentInstance.id);
+    }
   };
 
 
@@ -247,7 +255,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
     setNodeExecuting(id, true);
 
     const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: generateMessageId('user'),
       sender: 'user',
       text: trimmedInput,
     };
@@ -276,12 +284,9 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
     // llmConfigs now from hook above
     const agentConfig = llmConfigs?.find(c => c.provider === effectiveAgent.llmProvider);
 
-    // DEBUG: Log endpoint being used
-    console.log(`[V2AgentNode] Agent "${effectiveAgent.name}" using ${effectiveAgent.llmProvider} with endpoint: ${agentConfig?.apiKey}`);
-
     if (!agentConfig?.enabled || !agentConfig.apiKey) {
       const errorMessage: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: generateMessageId('error'),
         sender: 'agent',
         text: `Erreur: ${effectiveAgent.llmProvider} n'est pas configuré ou activé.`,
         isError: true
@@ -338,7 +343,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
           );
 
           const summaryMessage: ChatMessage = {
-            id: `msg-${Date.now()}-summary`,
+            id: generateMessageId('summary'),
             sender: 'agent',
             text: `(Résumé de l'historique): ${summary}`
           };
@@ -366,7 +371,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
       );
 
       let currentResponse = '';
-      let agentMessageId = `msg-${Date.now()}-agent`;
+      let agentMessageId = generateMessageId('agent');
       let toolCalls: ToolCall[] = [];
 
       for await (const chunk of stream) {
@@ -426,7 +431,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
           try {
             const toolResult = await executeTool(toolCall);
             const toolResultMessage: ChatMessage = {
-              id: `msg-${Date.now()}-tool-result`,
+              id: generateMessageId('tool-result'),
               sender: 'tool_result',
               text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
               toolCallId: toolCall.id,
@@ -435,7 +440,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
             addNodeMessage(id, toolResultMessage);
           } catch (error) {
             const errorMessage: ChatMessage = {
-              id: `msg-${Date.now()}-tool-error`,
+              id: generateMessageId('tool-error'),
               sender: 'tool_result',
               text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
               toolCallId: toolCall.id,
@@ -471,7 +476,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
             const toolResultsSummary = toolResults.map(tr =>
               `${t('tool_result_from')} ${tr.toolName}: ${tr.text}`
             ).join('\n\n'); const contextMessage: ChatMessage = {
-              id: `msg-${Date.now()}-tool-context`,
+              id: generateMessageId('tool-context'),
               sender: 'user',
               text: `${t('tool_results_context')}:\n\n${toolResultsSummary}\n\n${t('analyze_results_request')}`
             };
@@ -492,7 +497,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
           );
 
           let followUpResponse = '';
-          let followUpMessageId = `msg-${Date.now()}-followup`;
+          let followUpMessageId = generateMessageId('followup');
 
           for await (const chunk of followUpStream) {
             if (chunk.error) {
@@ -531,7 +536,7 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
     } catch (error) {
       const errorMessage: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: generateMessageId('error'),
         sender: 'agent',
         text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
         isError: true

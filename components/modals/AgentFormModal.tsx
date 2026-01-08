@@ -147,18 +147,15 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       getLMStudioMergedModels(lmStudioEndpoint)
         .then(models => {
           setLmStudioDynamicModels(models);
-          console.log(`[AgentFormModal] Loaded ${models.length} LMStudio models (${models.filter(m => m.isDynamic).length} dynamic)`);
 
           // Point 1: Auto-sélection du modèle détecté si disponible
           if (lmStudioDetection?.modelId) {
             const detectedModel = models.find(m => m.id === lmStudioDetection.modelId);
             if (detectedModel) {
               setModel(detectedModel.id);
-              console.log(`[AgentFormModal] Auto-selected detected model: ${detectedModel.id}`);
 
               // Auto-activer les capacités détectées
               setSelectedCapabilities(lmStudioDetection.capabilities);
-              console.log(`[AgentFormModal] Auto-enabled capabilities:`, lmStudioDetection.capabilities);
               return;
             }
           }
@@ -166,11 +163,9 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
           // Fallback: Auto-sélectionner le premier modèle si aucun modèle n'est sélectionné
           if (!model && models.length > 0) {
             setModel(models[0].id);
-            console.log(`[AgentFormModal] Auto-selected first model: ${models[0].id}`);
           }
         })
         .catch(error => {
-          console.warn('[AgentFormModal] Failed to load LMStudio models:', error);
           setLmStudioDynamicModels([]);
         })
         .finally(() => setIsLoadingLMStudioModels(false));
@@ -203,14 +198,12 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
   const getAvailableCapabilities = React.useCallback((provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
     const config = llmConfigs.find(c => c.provider === provider && c.enabled);
     if (!config) {
-      console.log('[AgentFormModal] getAvailableCapabilities - provider not enabled:', provider);
       return []; // Return empty array if provider not configured
     }
 
     // PRIORITÉ 1: Pour LMStudio, utiliser les capacités détectées dynamiquement si disponibles
     if (provider === LLMProvider.LMStudio && lmStudioDetection?.capabilities) {
       const detectedCaps = lmStudioDetection.capabilities.filter((cap): cap is LLMCapability => cap !== undefined && cap !== null);
-      console.log('[AgentFormModal] Using dynamically detected capabilities for LMStudio:', detectedCaps);
       return detectedCaps;
     }
 
@@ -218,7 +211,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     if (selectedModel) {
       const modelCapabilities = getModelCapabilities(provider, selectedModel);
       if (modelCapabilities.length > 0) {
-        console.log(`[AgentFormModal] Using model capabilities for ${provider}/${selectedModel}:`, modelCapabilities);
         return modelCapabilities;
       }
     }
@@ -227,7 +219,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     const caps = Object.keys(config.capabilities)
       .filter(cap => config.capabilities[cap as LLMCapability])
       .map(cap => cap as LLMCapability);
-    console.log(`[AgentFormModal] Using config capabilities for ${provider}:`, caps);
     return caps;
   }, [llmConfigs, lmStudioDetection]);
 

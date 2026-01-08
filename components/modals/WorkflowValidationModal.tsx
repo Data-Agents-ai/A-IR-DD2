@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Agent, LLMConfig, LLMProvider } from '../../types';
 import { Button } from '../UI';
 import { CloseIcon } from '../Icons';
@@ -7,7 +7,7 @@ interface WorkflowValidationModalProps {
   isOpen: boolean;
   agent: Agent | null;
   llmConfigs: LLMConfig[];
-  onConfirm: () => void;
+  onConfirm: (instanceName: string) => void;
   onCancel: () => void;
 }
 
@@ -39,6 +39,8 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
   onConfirm,
   onCancel
 }) => {
+  const [instanceName, setInstanceName] = useState('');
+
   if (!isOpen || !agent) return null;
 
   // Validation des prérequis
@@ -52,23 +54,50 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
   const hasTools = agent.tools && agent.tools.length > 0;
   const isReady = hasEnabledLLM && hasCompatibleLLM;
 
+  const handleConfirm = () => {
+    const finalName = instanceName.trim() || agent.name;
+    onConfirm(finalName);
+    setInstanceName('');
+  };
+
+  const handleCancel = () => {
+    setInstanceName('');
+    onCancel();
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl border border-gray-600">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold text-white">Ajouter au workflow</h2>
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="text-gray-400 hover:text-white transition-colors"
           >
             <CloseIcon className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Prototype Info */}
+        <p className="text-gray-400 text-sm mb-4">Prototype : <span className="text-white font-semibold">{agent.name}</span></p>
+
+        {/* Instance Name Form */}
+        <div className="mb-6">
+          <label htmlFor="instanceName" className="block text-white font-semibold mb-2">
+            Nom de l'agent
+          </label>
+          <input
+            id="instanceName"
+            type="text"
+            value={instanceName}
+            onChange={(e) => setInstanceName(e.target.value)}
+            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
+        </div>
+
         {/* Agent Info */}
         <div className="bg-gray-700 p-3 rounded-lg mb-4">
-          <h3 className="text-white font-semibold">{agent.name}</h3>
           <p className="text-gray-300 text-sm">{agent.description || 'Aucune description'}</p>
         </div>
 
@@ -159,14 +188,14 @@ export const WorkflowValidationModal: React.FC<WorkflowValidationModalProps> = (
         {/* Actions */}
         <div className="flex space-x-3">
           <Button
-            onClick={onCancel}
+            onClick={handleCancel}
             variant="secondary"
             className="flex-1"
           >
             Annuler
           </Button>
           <Button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             variant={isReady ? "primary" : "secondary"}
             disabled={!isReady}
             className="flex-1"

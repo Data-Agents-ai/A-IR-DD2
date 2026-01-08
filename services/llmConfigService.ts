@@ -103,12 +103,12 @@ export async function getAllLLMConfigs(
       const response = await apiRequest('/api/llm-configs', 'GET', options.token);
       return response;
     } catch (error) {
-      console.error('[LLMConfigService] getAllLLMConfigs API failed:', error);
       throw error;
     }
   } else {
     // localStorage (Guest)
-    return getLocalConfigs();
+    const local = getLocalConfigs();
+    return local;
   }
 }
 

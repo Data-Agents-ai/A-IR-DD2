@@ -6,6 +6,13 @@ import { fileToBase64, fileToText } from '../utils/fileUtils';
 import { executeTool } from '../utils/toolExecutor';
 import { countTokens, countWords, countSentences, countMessages } from '../utils/textUtils';
 
+// ⭐ J4.5: Global counter to ensure unique message IDs even if Date.now() returns same value
+let messageIdCounter = 0;
+const generateMessageId = (suffix?: string): string => {
+    const id = `msg-${Date.now()}-${++messageIdCounter}${suffix ? `-${suffix}` : ''}`;
+    return id;
+};
+
 interface UseAgentChatOptions {
     nodeId: string;
     agent: Agent | null;
@@ -53,7 +60,7 @@ export const useAgentChat = ({
         setNodeExecuting(nodeId, true);
 
         const userMessage: ChatMessage = {
-            id: `msg-${Date.now()}`,
+            id: generateMessageId('user'),
             sender: 'user',
             text: trimmedInput,
         };
@@ -81,7 +88,7 @@ export const useAgentChat = ({
 
         if (!agentConfig?.enabled || !agentConfig.apiKey) {
             const errorMessage: ChatMessage = {
-                id: `msg-${Date.now()}`,
+                id: generateMessageId('error'),
                 sender: 'agent',
                 text: `Erreur: ${agent.llmProvider} n'est pas configuré ou activé.`,
                 isError: true
@@ -123,7 +130,7 @@ export const useAgentChat = ({
 
                     const summarizationPrompt = `${t('conversation_to_summarize')}:\n\n${currentFullHistory.map(m => `${m.sender}: ${m.text}`).join('\n')}`;
                     const summarizationHistory: ChatMessage[] = [{
-                        id: `msg-summary-prompt-${Date.now()}`,
+                        id: generateMessageId('summary-prompt'),
                         sender: 'user',
                         text: summarizationPrompt
                     }];
@@ -137,7 +144,7 @@ export const useAgentChat = ({
                     );
 
                     const summaryMessage: ChatMessage = {
-                        id: `msg-${Date.now()}-summary`,
+                        id: generateMessageId('summary'),
                         sender: 'agent',
                         text: `(Résumé de l'historique): ${summary}`
                     };
@@ -166,7 +173,7 @@ export const useAgentChat = ({
             );
 
             let currentResponse = '';
-            let agentMessageId = `msg-${Date.now()}-agent`;
+            let agentMessageId = generateMessageId('agent');
             let toolCalls: ToolCall[] = [];
 
             for await (const chunk of stream) {
@@ -226,7 +233,7 @@ export const useAgentChat = ({
                     try {
                         const toolResult = await executeTool(toolCall);
                         const toolResultMessage: ChatMessage = {
-                            id: `msg-${Date.now()}-tool-result`,
+                            id: generateMessageId('tool-result'),
                             sender: 'tool_result',
                             text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
                             toolCallId: toolCall.id,
@@ -235,7 +242,7 @@ export const useAgentChat = ({
                         addNodeMessage(nodeId, toolResultMessage);
                     } catch (error) {
                         const errorMessage: ChatMessage = {
-                            id: `msg-${Date.now()}-tool-error`,
+                            id: generateMessageId('tool-error'),
                             sender: 'tool_result',
                             text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
                             toolCallId: toolCall.id,
@@ -272,7 +279,7 @@ export const useAgentChat = ({
                         ).join('\n\n');
 
                         const contextMessage: ChatMessage = {
-                            id: `msg-${Date.now()}-tool-context`,
+                            id: generateMessageId('tool-context'),
                             sender: 'user',
                             text: `${t('tool_results_context')}:\n\n${toolResultsSummary}\n\n${t('analyze_results_request')}`
                         };
@@ -294,7 +301,7 @@ export const useAgentChat = ({
                     );
 
                     let followUpResponse = '';
-                    let followUpMessageId = `msg-${Date.now()}-followup`;
+                    let followUpMessageId = generateMessageId('followup');
 
                     for await (const chunk of followUpStream) {
                         if (chunk.error) {
@@ -333,7 +340,7 @@ export const useAgentChat = ({
 
         } catch (error) {
             const errorMessage: ChatMessage = {
-                id: `msg-${Date.now()}`,
+                id: generateMessageId('error'),
                 sender: 'agent',
                 text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
                 isError: true

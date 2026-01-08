@@ -96,6 +96,8 @@ export interface Agent {
   creator_id: RobotId;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp
+  // V2 Workflow: Optional custom instance name when added to workflow
+  instanceName?: string;
 }
 
 // V2 Governance: Other prototype types by robot specialization

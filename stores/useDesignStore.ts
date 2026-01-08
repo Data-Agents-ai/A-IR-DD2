@@ -81,6 +81,7 @@ interface DesignStore {
   }) => void;
   
   // ⭐ Direct setters for testing and hydration
+  setAgents: (agents: Agent[]) => void;
   setAgentInstances: (instances: AgentInstance[]) => void;
   setNodes: (nodes: V2WorkflowNode[]) => void;
   setEdges: (edges: V2WorkflowEdge[]) => void;
@@ -517,6 +518,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   /**
    * ⭐ Direct setters for testing and hydration
    */
+  setAgents: (agents) => set({ agents }),
   setAgentInstances: (instances) => set({ agentInstances: instances }),
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges })

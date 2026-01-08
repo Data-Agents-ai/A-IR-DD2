@@ -8,17 +8,19 @@ import { IUser } from '../models/User.model';
 const router = Router();
 
 // Schema validation
+// ⭐ J4.5: Robot IDs must match frontend RobotId enum in types.ts
+// ⭐ J4.5: Allow empty strings for role/systemPrompt to match frontend flexibility
 const createAgentPrototypeSchema = z.object({
     name: z.string().min(1).max(100),
-    role: z.string().min(1).max(200),
-    systemPrompt: z.string().min(1),
+    role: z.string().max(200).default(''),
+    systemPrompt: z.string().default(''),
     llmProvider: z.string(),
     llmModel: z.string(),
     capabilities: z.array(z.string()).default([]),
     historyConfig: z.object({}).passthrough().optional(),
     tools: z.array(z.object({}).passthrough()).optional(),
     outputConfig: z.object({}).passthrough().optional(),
-    robotId: z.enum(['AR_001', 'BOS_001', 'COM_001', 'PHIL_001', 'TIM_001'])
+    robotId: z.enum(['AR_001', 'BO_002', 'CO_003', 'PH_004', 'TI_005'])
 });
 
 const updateAgentPrototypeSchema = createAgentPrototypeSchema.partial();

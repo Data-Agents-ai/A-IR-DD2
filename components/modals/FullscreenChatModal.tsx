@@ -225,12 +225,14 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
         <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-900/80 via-gray-800/60 to-gray-900/80 rounded-t-lg backdrop-blur-sm">
           <div className="flex items-center space-x-3">
             <div className={`w-3 h-3 rounded-full shadow-lg transition-all duration-200 ${isLoading ? 'bg-yellow-400 animate-pulse shadow-yellow-400/60' : 'bg-green-400 shadow-green-400/60'}`}></div>
-            <h2 className="text-xl font-semibold text-white">
-              💬 {agentName}
-            </h2>
-            <span className="text-sm text-gray-400">
-              ({agentModel} • {agentProvider})
-            </span>
+            <div>
+              <h2 className="text-xl font-semibold text-white">
+                💬 {agentName}
+              </h2>
+              <span className="text-xs text-gray-400">
+                {agentModel} • {agentProvider}
+              </span>
+            </div>
           </div>
 
           {/* Header Action Buttons */}

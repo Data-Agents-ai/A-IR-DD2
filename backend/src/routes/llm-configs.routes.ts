@@ -166,6 +166,12 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
         const userId = user.id || user._id;
         const { provider, apiKey, enabled, capabilities } = req.body;
 
+        // ⭐ J4.5 FIX: Detect masked API key (•••) and skip update if masked
+        // When frontend loads settings, it receives masked keys for display
+        // If user saves without changing the key, we receive the masked string
+        // We must NOT store the masked string - keep the original encrypted key
+        const isMaskedKey = apiKey && apiKey.includes('•');
+
         // Upsert: chercher config existante
         let config = await LLMConfig.findOne({ userId, provider });
 
@@ -173,12 +179,22 @@ router.post('/', requireAuth, validateRequest(upsertConfigSchema), async (req: R
             // Update existant
             config.enabled = enabled;
             config.capabilities = capabilities;
-            config.setApiKey(apiKey); // Chiffrement automatique
+            
+            // ⭐ J4.5 FIX: Only update API key if it's a real key, not masked
+            if (!isMaskedKey) {
+                config.setApiKey(apiKey); // Chiffrement automatique
+                console.log(`[LLMConfig] Updated config for user ${userId}, provider ${provider} (with new API key)`);
+            } else {
+                console.log(`[LLMConfig] Updated config for user ${userId}, provider ${provider} (API key unchanged - masked)`);
+            }
+            
             await config.save();
-
-            console.log(`[LLMConfig] Updated config for user ${userId}, provider ${provider}`);
         } else {
-            // Nouveau
+            // Nouveau - masked key not allowed for new configs
+            if (isMaskedKey) {
+                return res.status(400).json({ error: 'API key invalide (clé masquée détectée)' });
+            }
+            
             config = new LLMConfig({
                 userId,
                 provider,

@@ -34,8 +34,6 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
   // IMPORTANT: Must merge with defaults for missing providers!
   useEffect(() => {
     if (isAuthenticated && !hookLoading) {
-      console.log('[SettingsModal] Loading user configs from hook:', hookConfigs.length);
-      
       // ⭐ MERGE: Combine API configs with defaults to show all 10 providers
       // Map API configs by provider for quick lookup
       const apiConfigsMap = new Map(hookConfigs.map(hc => [hc.provider, hc]));
@@ -57,12 +55,6 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
           capabilities: userConfig.capabilities || defaultConfig.capabilities, // User's capabilities (or defaults)
           hasApiKey: userConfig.hasApiKey // Indicator that a key exists in DB
         } as LLMConfigWithHasKey;
-      });
-      
-      console.log('[SettingsModal] Merged configs:', {
-        propConfigsCount: propConfigs.length,
-        apiConfigsCount: hookConfigs.length,
-        mergedCount: mergedConfigs.length
       });
       
       setCurrentLLMConfigs(mergedConfigs);
@@ -129,8 +121,6 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
 
       // JALON 5: Appel unique au backend proxy (Option C Hybride)
       // URL endpoint est passée en query param
-      console.log(`[SettingsModal] Testing endpoint: ${lmStudioConfig.apiKey}`);
-
       const apiUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:3001'}/api/local-llm/detect-capabilities?endpoint=${encodeURIComponent(lmStudioConfig.apiKey)}`;
       
       const response = await fetch(apiUrl, {
@@ -178,17 +168,10 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
         })
       );
 
-      console.log('[SettingsModal] Detection successful:', {
-        endpoint: result.endpoint,
-        modelId: result.modelId,
-        capabilitiesCount: result.capabilities.length
-      });
-
       setTimeout(() => setDetectionProgress(0), 1000);
     } catch (error: any) {
       setDetectionError(error.message || 'Erreur lors de la détection');
       setDetectionProgress(0);
-      console.error('[SettingsModal] Detection error:', error);
     } finally {
       setIsDetecting(false);
     }
@@ -221,8 +204,10 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
     }
 
     // Also update local state and parent
-    onSave(currentLLMConfigs);
     setIsSaving(false);
+    // ⭐ CRITICAL: Notify parent component of saved configs
+    // This ensures App.tsx updates its llmConfigs state
+    onSave(currentLLMConfigs);
     onClose();
   };
 

@@ -176,8 +176,8 @@ body {
 /* SaveButton position fixe - Au-dessus des Controls, aligné verticalement */
 .workflow-save-button-fixed {
   position: fixed !important;
-  bottom: 148px !important;
-  right: 250px !important;
+  bottom: 150px !important;
+  right: 249px !important;
   z-index: 4 !important;
   pointer-events: auto !important;
 }
