@@ -59,12 +59,23 @@ interface WorkflowStore {
   isPaletteOpen: boolean;
   isConfigPanelOpen: boolean;
   
+  // ⭐ ÉTAPE 3: Persistence State (Règle 4.5.2 Dev_rules.md)
+  isDirty: boolean;                    // True if local state differs from server
+  lastSynced: Date | null;             // Last successful sync timestamp
+  syncVersion: number;                 // MongoDB __v for conflict detection
+  pendingChanges: string[];            // List of pending change types
+  
   // Workflow Management
   createWorkflow: (name: string, creatorId: RobotId) => string;
   loadWorkflow: (id: string) => void;
   saveWorkflow: () => void;
   deleteWorkflow: (id: string) => void;
   updateWorkflowMeta: (updates: Partial<Pick<Workflow, 'name' | 'description'>>) => void;
+  
+  // ⭐ ÉTAPE 3: Dirty State Management
+  markDirty: (changeType?: string) => void;
+  markClean: (newVersion?: number) => void;
+  getSyncStatus: () => { isDirty: boolean; lastSynced: Date | null; pendingCount: number };
   
   // Node Management
   addNode: (node: Omit<WorkflowNode, 'id'>) => string;
@@ -105,6 +116,40 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   selectedNodeId: null,
   isPaletteOpen: true,
   isConfigPanelOpen: false,
+  
+  // ⭐ ÉTAPE 3: Persistence State Initial
+  isDirty: false,
+  lastSynced: null,
+  syncVersion: 0,
+  pendingChanges: [],
+  
+  // ⭐ ÉTAPE 3: Dirty State Actions
+  markDirty: (changeType?: string) => {
+    set((state) => ({
+      isDirty: true,
+      pendingChanges: changeType 
+        ? [...new Set([...state.pendingChanges, changeType])]
+        : state.pendingChanges
+    }));
+  },
+  
+  markClean: (newVersion?: number) => {
+    set({
+      isDirty: false,
+      lastSynced: new Date(),
+      syncVersion: newVersion ?? get().syncVersion + 1,
+      pendingChanges: []
+    });
+  },
+  
+  getSyncStatus: () => {
+    const state = get();
+    return {
+      isDirty: state.isDirty,
+      lastSynced: state.lastSynced,
+      pendingCount: state.pendingChanges.length
+    };
+  },
   
   // Workflow Management
   createWorkflow: (name: string, creatorId: RobotId) => {
@@ -396,13 +441,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     }
   },
   
-  // ⭐ CRITICAL SECURITY: Reset ALL workflow state
+  // ⭐ CRITICAL SECURITY: Reset ALL workflow state (including persistence state)
   resetAll: () => set({
     currentWorkflow: null,
     workflows: [],
     execution: null,
     selectedNodeId: null,
     isPaletteOpen: true,
-    isConfigPanelOpen: false
+    isConfigPanelOpen: false,
+    // ⭐ ÉTAPE 3: Reset persistence state
+    isDirty: false,
+    lastSynced: null,
+    syncVersion: 0,
+    pendingChanges: []
   })
 }));

@@ -684,6 +684,49 @@ const addLLMConfig = async (provider: string, apiKey: string) => {
 - [ ] **Tests**: useScreenName.test.ts créé
 - [ ] **Documentation**: Quelles données chargées + où
 
+### 4.5 Cas particulier de l'enregistrement automatique des données du workflow pour un utilisateur connecté
+1. Stratégie de Déclenchement (Debouncing)
+N'enregistrez pas à chaque modification. Utilisez un debounce pour regrouper les actions utilisateur et les retours d'API.
+
+Logique : Attendez un délai d'inactivité (ex: 2 secondes) avant d'envoyer la requête de sauvegarde.
+
+Zustand Middleware : Vous pouvez utiliser un subscribe dans votre store pour surveiller les changements et déclencher la fonction de sauvegarde.
+
+2. Structure du Store Zustand
+Votre store doit distinguer les données de travail des métadonnées de synchronisation.
+
+Dirty State : Ajoutez un flag isDirty ou lastSynced pour savoir si le store local est en avance sur la BDD.
+
+Actions hybrides : Vos actions Zustand doivent pouvoir mettre à jour l'état (User Input) ET capturer les réponses de vos agents IA (API Results).
+
+3. Optimisation Backend & MongoDB
+Pour un SaaS d'agents, les documents peuvent devenir volumineux.
+
+Mises à jour partielles (PATCH) : N'envoyez pas tout le workflow à chaque fois. Utilisez l'opérateur $set de MongoDB pour ne mettre à jour que les champs modifiés (ex: workflow.steps.2.result).
+
+Atomicité : Utilisez $push pour ajouter des logs ou des résultats d'agents sans écraser le reste du document.
+
+Gestion des conflits (Versioning) : Implémentez un système de version (__v ou timestamp). Si deux agents ou l'utilisateur tentent de sauvegarder simultanément, rejetez la version la plus ancienne pour éviter le "Lost Update".
+
+4. Workflow de Persistance : Le pattern "Optimiste"
+Pour une expérience fluide, utilisez l'Optimistic UI :
+
+L'utilisateur modifie un nœud du workflow.
+
+Zustand met à jour l'UI immédiatement (Status : "Enregistrement...").
+
+Le backend MongoDB valide.
+
+Si succès : Status : "Enregistré".
+
+Si erreur : On revient à l'état précédent ou on affiche une alerte de reconnexion.
+
+5. Recommandation pour les résultats d'Agents IA
+Puisque vos agents génèrent des données de manière asynchrone :
+
+Websockets : Si l'agent envoie des résultats partiels (streaming), ne sauvegardez dans MongoDB qu'à des intervalles réguliers (ex: toutes les 10 secondes) ou à la fin du stream pour limiter les écritures disque.
+
+Collection séparée : Si les logs des agents sont très lourds, séparez la Configuration du Workflow et les Résultats d'Exécution dans deux collections MongoDB différentes, liées par une référence (workflowId).
 ---
 
 ## 🔐 RÈGLE 5: Règles Systématiques à Respecter

@@ -217,6 +217,257 @@ router.post('/:id/save',
     }
 );
 
+/**
+ * ⭐ ÉTAPE 4: PATCH /api/workflows/:id/patch - Mise à jour atomique partielle
+ * 
+ * RÈGLE 4.5.3 Dev_rules.md:
+ * - N'envoie pas tout le workflow à chaque fois
+ * - Utilise MongoDB $set pour updates ciblés
+ * - Gère le versioning (__v) pour éviter "Lost Update"
+ * 
+ * Body: {
+ *   $set: { field: value, ... },     // Partial updates
+ *   expectedVersion?: number          // Optimistic locking
+ * }
+ */
+router.patch('/:id/patch',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    async (req, res) => {
+        try {
+            const user = req.user as IUser;
+            const { $set, expectedVersion } = req.body;
+
+            if (!$set || typeof $set !== 'object') {
+                return res.status(400).json({ 
+                    error: 'Missing $set object in request body' 
+                });
+            }
+
+            // Build query with optional version check (optimistic locking)
+            const query: any = { _id: req.params.id, userId: user.id };
+            if (expectedVersion !== undefined) {
+                query.__v = expectedVersion;
+            }
+
+            // Build update with $set + auto-update fields
+            const update = {
+                $set: {
+                    ...$set,
+                    updatedAt: new Date(),
+                    isDirty: false,
+                    lastSavedAt: new Date()
+                },
+                $inc: { __v: 1 } // Increment version for conflict detection
+            };
+
+            // Perform atomic update
+            const result = await Workflow.findOneAndUpdate(
+                query,
+                update,
+                { 
+                    new: true,           // Return updated document
+                    runValidators: true  // Run schema validators
+                }
+            );
+
+            if (!result) {
+                // Check if it's a version conflict or not found
+                const exists = await Workflow.findOne({ 
+                    _id: req.params.id, 
+                    userId: user.id 
+                });
+                
+                if (exists && expectedVersion !== undefined) {
+                    return res.status(409).json({ 
+                        error: 'Version conflict',
+                        message: 'Document was modified by another request. Please refresh.',
+                        currentVersion: exists.__v,
+                        expectedVersion
+                    });
+                }
+                
+                return res.status(404).json({ error: 'Workflow introuvable' });
+            }
+
+            console.log('[Workflows] PATCH atomic update:', {
+                id: req.params.id,
+                fields: Object.keys($set),
+                newVersion: result.__v
+            });
+
+            res.json({
+                success: true,
+                version: result.__v,
+                updatedAt: result.updatedAt,
+                lastSavedAt: result.lastSavedAt
+            });
+
+        } catch (error) {
+            console.error('[Workflows] PATCH/:id/patch error:', error);
+            res.status(500).json({ 
+                error: 'Erreur mise à jour partielle workflow',
+                message: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+);
+
+/**
+ * ⭐ ÉTAPE 4: PATCH /api/workflows/:id/nodes/:nodeId/position
+ * 
+ * Optimized endpoint for node position updates only
+ * Avoids sending full workflow on every drag
+ */
+router.patch('/:id/nodes/:nodeId/position',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    async (req, res) => {
+        try {
+            const user = req.user as IUser;
+            const { x, y } = req.body;
+
+            if (typeof x !== 'number' || typeof y !== 'number') {
+                return res.status(400).json({ 
+                    error: 'Invalid position: x and y must be numbers' 
+                });
+            }
+
+            // Use positional operator to update specific node
+            const result = await Workflow.findOneAndUpdate(
+                { 
+                    _id: req.params.id, 
+                    userId: user.id,
+                    'nodes.id': req.params.nodeId 
+                },
+                { 
+                    $set: { 
+                        'nodes.$.position': { x, y },
+                        updatedAt: new Date()
+                    }
+                },
+                { new: true }
+            );
+
+            if (!result) {
+                return res.status(404).json({ 
+                    error: 'Workflow or node not found' 
+                });
+            }
+
+            res.json({ 
+                success: true, 
+                nodeId: req.params.nodeId,
+                position: { x, y }
+            });
+
+        } catch (error) {
+            console.error('[Workflows] PATCH node position error:', error);
+            res.status(500).json({ error: 'Erreur mise à jour position' });
+        }
+    }
+);
+
+/**
+ * ⭐ ÉTAPE 4: POST /api/workflows/:id/edges - Add edge with $push
+ * 
+ * RÈGLE 4.5.3: Utilise $push pour ajout sans écraser le document
+ */
+router.post('/:id/edges',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    async (req, res) => {
+        try {
+            const user = req.user as IUser;
+            const { source, target, type = 'default', data } = req.body;
+
+            if (!source || !target) {
+                return res.status(400).json({ 
+                    error: 'source and target are required' 
+                });
+            }
+
+            const edgeId = `edge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const newEdge = {
+                id: edgeId,
+                source,
+                target,
+                type,
+                data: data || {}
+            };
+
+            const result = await Workflow.findOneAndUpdate(
+                { _id: req.params.id, userId: user.id },
+                { 
+                    $push: { edges: newEdge },
+                    $set: { updatedAt: new Date() }
+                },
+                { new: true }
+            );
+
+            if (!result) {
+                return res.status(404).json({ error: 'Workflow introuvable' });
+            }
+
+            res.status(201).json({ 
+                success: true, 
+                edge: newEdge 
+            });
+
+        } catch (error) {
+            console.error('[Workflows] POST edge error:', error);
+            res.status(500).json({ error: 'Erreur ajout edge' });
+        }
+    }
+);
+
+/**
+ * ⭐ ÉTAPE 4: DELETE /api/workflows/:id/edges/:edgeId - Remove edge with $pull
+ */
+router.delete('/:id/edges/:edgeId',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    async (req, res) => {
+        try {
+            const user = req.user as IUser;
+
+            const result = await Workflow.findOneAndUpdate(
+                { _id: req.params.id, userId: user.id },
+                { 
+                    $pull: { edges: { id: req.params.edgeId } },
+                    $set: { updatedAt: new Date() }
+                },
+                { new: true }
+            );
+
+            if (!result) {
+                return res.status(404).json({ error: 'Workflow introuvable' });
+            }
+
+            res.json({ 
+                success: true, 
+                deletedEdgeId: req.params.edgeId 
+            });
+
+        } catch (error) {
+            console.error('[Workflows] DELETE edge error:', error);
+            res.status(500).json({ error: 'Erreur suppression edge' });
+        }
+    }
+);
+
 // POST /api/workflows/:id/mark-dirty - Marquer workflow comme modifié
 router.post('/:id/mark-dirty',
     requireAuth,

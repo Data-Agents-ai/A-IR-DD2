@@ -22,6 +22,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationDisplay } from './components/NotificationDisplay';
 import { QueryProvider } from './providers';
 import { getSettingsStorage } from './utils/SettingsStorage';
+// ⭐ ÉTAPE 5: Import HydrationOverlay for loading state
+import { HydrationOverlay } from './components/HydrationOverlay';
 
 // ⭐ J4.4: Use the key from guestDataUtils to ensure consistency with wipeGuestData()
 const LLM_CONFIGS_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
@@ -126,6 +128,8 @@ interface UpdateConfirmationState {
   count: number;
 }
 
+// ⭐ ÉTAPE 5: API URL for workspace hydration
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 /**
  * Inner App component that uses Auth context
@@ -158,11 +162,116 @@ function AppContent() {
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; mimeType: string } | null>(null);
   const { t } = useLocalization();
 
+  // ⭐ ÉTAPE 5: Hydration state for authenticated users
+  const [isHydrating, setIsHydrating] = useState(false);
+  const [hydrationProgress, setHydrationProgress] = useState(0);
+
   // Runtime Store access
   const { updateLLMConfigs, setNavigationHandler, addNodeMessage } = useRuntimeStore();
 
   // Design Store access for integrity validation  
-  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode } = useDesignStore();
+  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode, hydrateFromServer, setNodes, setEdges } = useDesignStore();
+
+  /**
+   * ⭐ ÉTAPE 5: Hydration for authenticated users
+   * Fetches workspace data from GET /api/user/workspace and populates stores
+   */
+  useEffect(() => {
+    const hydrateWorkspace = async () => {
+      if (!isAuthenticated || !accessToken) {
+        setIsHydrating(false);
+        return;
+      }
+
+      setIsHydrating(true);
+      setHydrationProgress(10);
+
+      try {
+        console.log('[App] Starting workspace hydration...');
+        setHydrationProgress(30);
+
+        const response = await fetch(`${API_BASE_URL}/api/user/workspace`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setHydrationProgress(60);
+
+        if (!response.ok) {
+          throw new Error(`Hydration failed: ${response.status}`);
+        }
+
+        const workspace = await response.json();
+        setHydrationProgress(80);
+
+        // Hydrate stores with server data
+        if (workspace.agentInstances) {
+          hydrateFromServer({
+            agentInstances: workspace.agentInstances
+          });
+        }
+
+        if (workspace.nodes) {
+          setNodes(workspace.nodes);
+        }
+
+        if (workspace.edges) {
+          setEdges(workspace.edges);
+        }
+
+        // Convert nodes to WorkflowNode format for legacy React state
+        if (workspace.agentInstances && workspace.agentInstances.length > 0) {
+          const now = new Date().toISOString();
+          const hydrationNodes: WorkflowNode[] = workspace.agentInstances.map((instance: any) => ({
+            id: instance.id,
+            agent: {
+              id: instance.id,
+              name: instance.name,
+              role: instance.systemInstruction || 'assistant',
+              systemPrompt: instance.systemInstruction || '',
+              llmProvider: (instance.provider as LLMProvider) || LLMProvider.Gemini,
+              model: instance.model || 'gemini-2.0-flash',
+              capabilities: [],
+              tools: [],
+              historyConfig: { enabled: false, llmProvider: LLMProvider.Gemini, model: '', role: '', systemPrompt: '', limits: { char: 0, word: 0, token: 0, sentence: 0, message: 50 } },
+              creator_id: RobotId.Archi,
+              created_at: instance.createdAt || now,
+              updated_at: now
+            } as Agent,
+            position: instance.position || { x: 0, y: 0 },
+            messages: instance.content?.filter((c: any) => c.type === 'chat').map((c: any) => ({
+              id: c.id || `msg-${Date.now()}`,
+              sender: c.role || 'agent',
+              text: c.message || ''
+            })) || [],
+            isMinimized: false,
+            isMaximized: false,
+            instanceId: instance.id
+          }));
+          setWorkflowNodes(hydrationNodes);
+        }
+
+        setHydrationProgress(100);
+        console.log('[App] Workspace hydration complete:', {
+          nodes: workspace.nodes?.length || 0,
+          instances: workspace.agentInstances?.length || 0
+        });
+
+      } catch (err) {
+        console.error('[App] Workspace hydration error:', err);
+      } finally {
+        // Small delay to show 100% before hiding
+        setTimeout(() => {
+          setIsHydrating(false);
+          setHydrationProgress(0);
+        }, 500);
+      }
+    };
+
+    hydrateWorkspace();
+  }, [isAuthenticated, accessToken, hydrateFromServer, setNodes, setEdges]);
 
   /**
    * ⭐ CRITICAL J4.4: Reload LLM configs + WIPE STATE when auth state changes
@@ -520,6 +629,13 @@ function AppContent() {
   return (
     <QueryProvider>
       <NotificationProvider>
+        {/* ⭐ ÉTAPE 5: Hydration Overlay - Blur Racing Style */}
+        <HydrationOverlay 
+          isLoading={isHydrating} 
+          progress={hydrationProgress}
+          message="Chargement de votre workspace..."
+        />
+        
         <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
           <Header
             onOpenSettings={() => setSettingsModalOpen(true)}
