@@ -290,6 +290,25 @@ function AppContent() {
     console.log(`Navigating to robot ${robotId} at path ${path}`);
   };
 
+  const handleSaveAgent = async (agentData: Omit<Agent, 'id'>, agentId?: string) => {
+    try {
+      if (agentId) {
+        // Update existing agent
+        // TODO: Implement API call to update agent
+        console.log('Updating agent:', agentId, agentData);
+      } else {
+        // Create new agent
+        // TODO: Implement API call to create agent
+        console.log('Creating new agent:', agentData);
+      }
+      // Close the modal
+      setAgentModalOpen(false);
+      setEditingAgent(null);
+    } catch (error) {
+      console.error('Error saving agent:', error);
+    }
+  };
+
   const handleSaveSettings = async (newLLMConfigs: LLMConfig[]) => {
     try {
       const lmStudioConfig = newLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);

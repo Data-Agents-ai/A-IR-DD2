@@ -5,8 +5,11 @@ import { useRuntimeStore } from '../../stores/useRuntimeStore';
 import { useDesignStore } from '../../stores/useDesignStore';
 import { useAgentChat } from '../../hooks/useAgentChat';
 import { useLocalization } from '../../hooks/useLocalization';
-import { ChatMessage, Agent, LLMCapability } from '../../types';
+import { ChatMessage, Agent, LLMCapability, WorkflowNode } from '../../types';
 import { ConfirmationModal } from './ConfirmationModal';
+import { ImageGenerationPanel } from '../panels/ImageGenerationPanel';
+import { VideoGenerationConfigPanel } from '../panels/VideoGenerationConfigPanel';
+import { MapsGroundingConfigPanel } from '../panels/MapsGroundingConfigPanel';
 
 // Minimize icon
 const MinimizeIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -76,6 +79,7 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
   const [showThinking, setShowThinking] = useState(true);
   const [webFetchEnabled, setWebFetchEnabled] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [activeSidePanel, setActiveSidePanel] = useState<'none' | 'image' | 'video' | 'maps'>('none');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -138,22 +142,32 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
   };
 
   const handleOpenImagePanel = () => {
-    if (fullscreenChatNodeId && onOpenImagePanel) {
-      onOpenImagePanel(fullscreenChatNodeId);
-    }
+    setActiveSidePanel(activeSidePanel === 'image' ? 'none' : 'image');
   };
 
   const handleOpenVideoPanel = () => {
-    if (fullscreenChatNodeId && onOpenVideoPanel) {
-      onOpenVideoPanel(fullscreenChatNodeId);
-    }
+    setActiveSidePanel(activeSidePanel === 'video' ? 'none' : 'video');
   };
 
   const handleOpenMapsPanel = () => {
-    if (fullscreenChatNodeId && onOpenMapsPanel) {
-      onOpenMapsPanel(fullscreenChatNodeId);
-    }
+    setActiveSidePanel(activeSidePanel === 'maps' ? 'none' : 'maps');
   };
+
+  const handleCloseSidePanel = () => {
+    setActiveSidePanel('none');
+  };
+
+  // Créer un mockNode pour workflowNodes basé sur les données actuelles
+  const mockWorkflowNode = fullscreenChatNodeId && agent ? {
+    id: fullscreenChatNodeId,
+    agent: agent,
+    position: { x: 0, y: 0 },
+    data: {},
+    width: 300,
+    height: 200
+  } : null;
+
+  const workflowNodesForPanels = mockWorkflowNode ? [mockWorkflowNode] : [];
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,7 +233,12 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
-      <div className="w-full h-full max-w-6xl bg-gray-800 rounded-lg shadow-2xl flex flex-col">
+      {/* Main container - Split-View Layout with Dynamic Expansion */}
+      <div className={`flex flex-col bg-gray-800 rounded-lg shadow-2xl transition-all duration-500 ease-in-out ${
+        activeSidePanel !== 'none' 
+          ? 'w-[98vw] h-[98vh] max-w-none' 
+          : 'w-full h-full max-w-6xl'
+      }`}>
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-900/80 via-gray-800/60 to-gray-900/80 rounded-t-lg backdrop-blur-sm">
@@ -235,56 +254,8 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
             </div>
           </div>
 
-          {/* Header Action Buttons */}
+          {/* Header Control Buttons (Minimize, Delete only) */}
           <div className="flex items-center space-x-2">
-            {/* Image generation/modification button */}
-            {(agent?.capabilities?.includes(LLMCapability.ImageGeneration) || agent?.capabilities?.includes(LLMCapability.ImageModification)) && (
-              <Button
-                variant="ghost"
-                className="p-2 h-8 w-8 text-gray-400 hover:text-purple-400 
-                           hover:bg-purple-500/20 hover:shadow-lg hover:shadow-purple-500/40
-                           transition-all duration-200 rounded-md
-                           hover:scale-110 active:scale-95"
-                onClick={handleOpenImagePanel}
-                disabled={isLoading}
-                title={t('agentNode_aria_generateImage')}
-              >
-                <ImageIcon width={16} height={16} />
-              </Button>
-            )}
-
-            {/* Video generation button */}
-            {agent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
-              <Button
-                variant="ghost"
-                className="p-2 h-8 w-8 text-gray-400 hover:text-pink-400 
-                           hover:bg-pink-500/20 hover:shadow-lg hover:shadow-pink-500/40
-                           transition-all duration-200 rounded-md
-                           hover:scale-110 active:scale-95"
-                onClick={handleOpenVideoPanel}
-                disabled={isLoading}
-                title="Générer une vidéo"
-              >
-                <VideoIcon />
-              </Button>
-            )}
-
-            {/* Maps grounding button */}
-            {agent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
-              <Button
-                variant="ghost"
-                className="p-2 h-8 w-8 text-gray-400 hover:text-green-400 
-                           hover:bg-green-500/20 hover:shadow-lg hover:shadow-green-500/40
-                           transition-all duration-200 rounded-md
-                           hover:scale-110 active:scale-95"
-                onClick={handleOpenMapsPanel}
-                disabled={isLoading}
-                title="Recherche de lieux"
-              >
-                <MapIcon />
-              </Button>
-            )}
-
             {/* Minimize/Restore button (ferme le fullscreen) */}
             <Button
               variant="ghost"
@@ -313,143 +284,256 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
           </div>
         </div>
 
-        {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <div className="text-center">
-                <div className="text-4xl mb-2">💬</div>
-                <p>Commencez une conversation avec {agentName}</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {messages.map(renderMessage)}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-
-          {isLoading && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-gray-700 text-gray-100 mr-12 px-4 py-2 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
-                  <span>{loadingMessage || 'Agent en cours de réflexion...'}</span>
+        {/* Main content area - Split-View (Chat + Side Panel) */}
+        <div className={`flex flex-1 overflow-hidden`}>
+          
+          {/* Chat section - Takes full width or flex-1 if panel is open */}
+          <div className={`flex flex-col ${activeSidePanel !== 'none' ? 'flex-1' : 'w-full'} border-r ${activeSidePanel !== 'none' ? 'border-cyan-500/30' : 'border-transparent'}`}>
+            
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">💬</div>
+                    <p>Commencez une conversation avec {agentName}</p>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input Area */}
-        <div className="border-t border-gray-700 bg-gray-900/30 p-4">
-          <form onSubmit={handleSendMessage} className="space-y-3">
-            {attachedFile && (
-              <div className="flex items-center justify-between bg-gray-700/50 p-2 rounded">
-                <span className="text-sm text-gray-300">📎 {attachedFile.name}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setAttachedFile(null)}
-                  className="p-1 h-6 w-6 text-gray-400 hover:text-red-400"
-                >
-                  <CloseIcon width={12} height={12} />
-                </Button>
-              </div>
-            )}
-
-            <div className="flex space-x-2">
-              {/* Extended Thinking toggle */}
-              {agent?.capabilities?.includes(LLMCapability.ExtendedThinking) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${showThinking
-                      ? 'text-purple-400 bg-purple-500/20 hover:text-purple-300 hover:bg-purple-500/30'
-                      : 'text-gray-400 hover:text-purple-400 hover:bg-purple-500/20'
-                    }`}
-                  onClick={() => setShowThinking(!showThinking)}
-                  disabled={isLoading}
-                  title={showThinking ? 'Masquer la pensée' : 'Afficher la pensée'}
-                >
-                  💭
-                </Button>
-              )}
-
-              {agent?.capabilities?.includes(LLMCapability.FileUpload) && (
+              ) : (
                 <>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept={agent?.capabilities?.includes(LLMCapability.PDFSupport) ? "image/*,application/pdf" : "image/*"}
-                    className="hidden"
-                  />
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-2 h-10 w-10 text-gray-400 hover:text-blue-400"
-                    disabled={isLoading}
-                  >
-                    <UploadIcon width={16} height={16} />
-                  </Button>
+                  {messages.map(renderMessage)}
+                  <div ref={messagesEndRef} />
                 </>
               )}
 
-              {/* Anthropic Web Fetch Tool */}
-              {agent?.capabilities?.includes(LLMCapability.WebFetchTool) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${webFetchEnabled
-                      ? 'text-teal-300 bg-teal-500/30 hover:text-teal-200 hover:bg-teal-500/40 shadow-lg shadow-teal-500/40'
-                      : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/20'
-                    }`}
-                  onClick={() => setWebFetchEnabled(!webFetchEnabled)}
-                  disabled={isLoading}
-                  title={webFetchEnabled ? 'Web Fetch activé' : 'Web Fetch désactivé'}
-                >
-                  🌐
-                </Button>
+              {isLoading && (
+                <div className="flex justify-start mb-4">
+                  <div className="bg-gray-700 text-gray-100 mr-12 px-4 py-2 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+                      <span>{loadingMessage || 'Agent en cours de réflexion...'}</span>
+                    </div>
+                  </div>
+                </div>
               )}
-
-              {/* Anthropic Web Search Tool */}
-              {agent?.capabilities?.includes(LLMCapability.WebSearchToolAnthropic) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={`p-2 h-10 w-10 transition-all duration-200 rounded-md ${webSearchEnabled
-                      ? 'text-orange-300 bg-orange-500/30 hover:text-orange-200 hover:bg-orange-500/40 shadow-lg shadow-orange-500/40'
-                      : 'text-gray-400 hover:text-orange-400 hover:bg-orange-500/20'
-                    }`}
-                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                  disabled={isLoading}
-                  title={webSearchEnabled ? 'Web Search activé' : 'Web Search désactivé'}
-                >
-                  🔍
-                </Button>
-              )}
-
-              <input
-                type="text"
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder="Tapez votre message..."
-                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
-                disabled={isLoading}
-              />
-
-              <Button
-                type="submit"
-                disabled={(!userInput.trim() && !attachedFile) || isLoading}
-                className="p-2 h-10 w-10 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SendIcon width={16} height={16} />
-              </Button>
             </div>
-          </form>
+
+            {/* Unified Features Toolbar - All functionality buttons above the input */}
+            <div className="border-t border-gray-700 bg-gray-900/50 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Thinking capability */}
+                {agent?.capabilities?.includes(LLMCapability.ExtendedThinking) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 transition-all duration-200 rounded-md text-sm font-medium ${showThinking
+                        ? 'text-purple-400 bg-purple-500/20 hover:text-purple-300 hover:bg-purple-500/30'
+                        : 'text-gray-400 hover:text-purple-400 hover:bg-purple-500/20'
+                      }`}
+                    onClick={() => setShowThinking(!showThinking)}
+                    disabled={isLoading}
+                    title={showThinking ? 'Masquer la pensée' : 'Afficher la pensée'}
+                  >
+                    💭 {t('extended_thinking') || 'Pensée'}
+                  </Button>
+                )}
+
+                {/* File upload */}
+                {agent?.capabilities?.includes(LLMCapability.FileUpload) && (
+                  <>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept={agent?.capabilities?.includes(LLMCapability.PDFSupport) ? "image/*,application/pdf" : "image/*"}
+                      className="hidden"
+                    />
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-2 h-9 text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 transition-all duration-200 rounded-md text-sm font-medium"
+                      disabled={isLoading}
+                      title="Joindre un fichier"
+                    >
+                      <UploadIcon width={16} height={16} className="mr-1" />
+                      Fichier
+                    </Button>
+                  </>
+                )}
+
+                {/* Web Fetch Tool */}
+                {agent?.capabilities?.includes(LLMCapability.WebFetchTool) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 transition-all duration-200 rounded-md text-sm font-medium ${webFetchEnabled
+                        ? 'text-teal-300 bg-teal-500/30 hover:text-teal-200 hover:bg-teal-500/40 shadow-lg shadow-teal-500/40'
+                        : 'text-gray-400 hover:text-teal-400 hover:bg-teal-500/20'
+                      }`}
+                    onClick={() => setWebFetchEnabled(!webFetchEnabled)}
+                    disabled={isLoading}
+                    title={webFetchEnabled ? 'Web Fetch activé' : 'Web Fetch désactivé'}
+                  >
+                    🌐 Web Fetch
+                  </Button>
+                )}
+
+                {/* Web Search Tool */}
+                {agent?.capabilities?.includes(LLMCapability.WebSearchToolAnthropic) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 transition-all duration-200 rounded-md text-sm font-medium ${webSearchEnabled
+                        ? 'text-orange-300 bg-orange-500/30 hover:text-orange-200 hover:bg-orange-500/40 shadow-lg shadow-orange-500/40'
+                        : 'text-gray-400 hover:text-orange-400 hover:bg-orange-500/20'
+                      }`}
+                    onClick={() => setWebSearchEnabled(!webSearchEnabled)}
+                    disabled={isLoading}
+                    title={webSearchEnabled ? 'Web Search activé' : 'Web Search désactivé'}
+                  >
+                    <WebSearchIcon width={16} height={16} className="mr-1" />
+                    Web Search
+                  </Button>
+                )}
+
+                {/* Image generation/modification button */}
+                {(agent?.capabilities?.includes(LLMCapability.ImageGeneration) || agent?.capabilities?.includes(LLMCapability.ImageModification)) && (
+                  <Button
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 text-gray-400 
+                               ${activeSidePanel === 'image' ? 'text-purple-400 bg-purple-500/30' : 'hover:text-purple-400 hover:bg-purple-500/20'} 
+                               hover:shadow-lg hover:shadow-purple-500/40
+                               transition-all duration-200 rounded-md text-sm font-medium`}
+                    onClick={handleOpenImagePanel}
+                    disabled={isLoading}
+                    title={t('agentNode_aria_generateImage')}
+                  >
+                    <ImageIcon width={16} height={16} className="mr-1" />
+                    Image
+                  </Button>
+                )}
+
+                {/* Video generation button */}
+                {agent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
+                  <Button
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 text-gray-400 
+                               ${activeSidePanel === 'video' ? 'text-pink-400 bg-pink-500/30' : 'hover:text-pink-400 hover:bg-pink-500/20'} 
+                               hover:shadow-lg hover:shadow-pink-500/40
+                               transition-all duration-200 rounded-md text-sm font-medium`}
+                    onClick={handleOpenVideoPanel}
+                    disabled={isLoading}
+                    title="Générer une vidéo"
+                  >
+                    <VideoIcon width={16} height={16} className="mr-1" />
+                    Vidéo
+                  </Button>
+                )}
+
+                {/* Maps grounding button */}
+                {agent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
+                  <Button
+                    variant="ghost"
+                    className={`px-3 py-2 h-9 text-gray-400 
+                               ${activeSidePanel === 'maps' ? 'text-green-400 bg-green-500/30' : 'hover:text-green-400 hover:bg-green-500/20'} 
+                               hover:shadow-lg hover:shadow-green-500/40
+                               transition-all duration-200 rounded-md text-sm font-medium`}
+                    onClick={handleOpenMapsPanel}
+                    disabled={isLoading}
+                    title="Recherche de lieux"
+                  >
+                    <MapIcon width={16} height={16} className="mr-1" />
+                    Cartes
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Input Area - Simplified */}
+            <div className="border-t border-gray-700 bg-gray-900/30 p-4">
+              <form onSubmit={handleSendMessage} className="space-y-3">
+                {attachedFile && (
+                  <div className="flex items-center justify-between bg-gray-700/50 p-2 rounded">
+                    <span className="text-sm text-gray-300">📎 {attachedFile.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setAttachedFile(null)}
+                      className="p-1 h-6 w-6 text-gray-400 hover:text-red-400"
+                    >
+                      <CloseIcon width={12} height={12} />
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    placeholder="Tapez votre message..."
+                    className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+                    disabled={isLoading}
+                  />
+
+                  <Button
+                    type="submit"
+                    disabled={(!userInput.trim() && !attachedFile) || isLoading}
+                    className="p-2 h-10 w-10 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <SendIcon width={16} height={16} />
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Side Panel - Configuration (Image, Video, Maps) */}
+          {activeSidePanel !== 'none' && (
+            <div className={`w-96 flex flex-col border-l border-cyan-500 bg-gray-800/90 backdrop-blur-sm overflow-hidden transition-all duration-500 ease-in-out transform ${
+              activeSidePanel !== 'none' ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
+            } shadow-[-10px_0_30px_-10px_rgba(6,182,212,0.3)]`}>
+              
+              {/* Side Panel Content - Scrollable (No Header - let child components manage it) */}
+              <div className="flex-1 overflow-y-auto">
+                {activeSidePanel === 'image' && agent?.capabilities?.includes(LLMCapability.ImageGeneration) && (
+                  <ImageGenerationPanel
+                    isOpen={true}
+                    nodeId={fullscreenChatNodeId || null}
+                    workflowNodes={workflowNodesForPanels as any}
+                    llmConfigs={llmConfigs}
+                    onClose={handleCloseSidePanel}
+                    onImageGenerated={() => {}}
+                    onOpenImageModificationPanel={() => {}}
+                    hideSlideOver={true}
+                  />
+                )}
+
+                {activeSidePanel === 'video' && agent?.capabilities?.includes(LLMCapability.VideoGeneration) && (
+                  <VideoGenerationConfigPanel
+                    isOpen={true}
+                    nodeId={fullscreenChatNodeId || undefined}
+                    llmConfigs={llmConfigs}
+                    onClose={handleCloseSidePanel}
+                    hideSlideOver={true}
+                  />
+                )}
+
+                {activeSidePanel === 'maps' && agent?.capabilities?.includes(LLMCapability.MapsGrounding) && (
+                  <MapsGroundingConfigPanel
+                    isOpen={true}
+                    nodeId={fullscreenChatNodeId || null}
+                    workflowNodes={workflowNodesForPanels as any}
+                    llmConfigs={llmConfigs}
+                    onClose={handleCloseSidePanel}
+                    hideSlideOver={true}
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

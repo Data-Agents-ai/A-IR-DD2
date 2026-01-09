@@ -1,5 +1,5 @@
 /**
- * @file __tests__/localization-persistence.test.ts
+ * @file tests/unitaires/localization-persistence.test.ts
  * @description Tests for localization persistence (ÉTAPE 3)
  * 
  * Scénarios testés:
