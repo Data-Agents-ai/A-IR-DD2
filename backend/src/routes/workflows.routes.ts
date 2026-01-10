@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { Workflow } from '../models/Workflow.model';
 import { AgentInstance } from '../models/AgentInstance.model';
 import { WorkflowEdge } from '../models/WorkflowEdge.model';
 import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middleware';
 import { validateRequest } from '../middleware/validation.middleware';
 import { IUser } from '../models/User.model';
+import { WorkflowSelfHealingService } from '../services/workflowSelfHealing.service';
 
 const router = Router();
 
@@ -114,6 +116,31 @@ router.post('/', requireAuth, validateRequest(createWorkflowSchema), async (req,
 // PUT /api/workflows/:id - Mettre à jour workflow
 router.put('/:id',
     requireAuth,
+    async (req, res, next) => {
+        // ⭐ SELF-HEALING: Validation stricte de l'ID AVANT ownership check
+        const workflowId = req.params.id;
+        
+        // Rejeter les IDs placeholder
+        if (WorkflowSelfHealingService.isPlaceholderId(workflowId)) {
+            return res.status(400).json({ 
+                error: 'Invalid workflow ID',
+                message: `"${workflowId}" is a placeholder ID. Please use a valid MongoDB ObjectId.`,
+                code: 'INVALID_WORKFLOW_ID',
+                hint: 'The frontend should fetch the real workflow ID from GET /api/user/workspace first.'
+            });
+        }
+        
+        // Valider format ObjectId
+        if (!mongoose.Types.ObjectId.isValid(workflowId)) {
+            return res.status(400).json({ 
+                error: 'Invalid workflow ID format',
+                message: `"${workflowId}" is not a valid MongoDB ObjectId.`,
+                code: 'INVALID_OBJECT_ID'
+            });
+        }
+        
+        next();
+    },
     requireOwnershipAsync(async (req) => {
         const workflow = await Workflow.findById(req.params.id);
         return workflow ? workflow.userId.toString() : null;

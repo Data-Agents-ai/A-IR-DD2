@@ -5,6 +5,8 @@ import * as llmService from '../services/llmService';
 import { fileToBase64, fileToText } from '../utils/fileUtils';
 import { executeTool } from '../utils/toolExecutor';
 import { countTokens, countWords, countSentences, countMessages } from '../utils/textUtils';
+// ⭐ AUTO-SAVE: Import persistence service for chat content
+import { PersistenceService } from '../services/persistenceService';
 
 // ⭐ J4.5: Global counter to ensure unique message IDs even if Date.now() returns same value
 let messageIdCounter = 0;
@@ -19,6 +21,10 @@ interface UseAgentChatOptions {
     llmConfigs: LLMConfig[];
     t: (key: string) => string;
     nativeToolsConfig?: { webFetch?: boolean; webSearch?: boolean };
+    // ⭐ AUTO-SAVE: Authentication context for persistent chat history
+    instanceId?: string;
+    isAuthenticated?: boolean;
+    accessToken?: string | null;
 }
 
 interface UseAgentChatReturn {
@@ -30,13 +36,18 @@ interface UseAgentChatReturn {
  * Hook réutilisable pour gérer l'envoi de messages et l'interaction avec le LLM
  * Principe SOLID : Single Responsibility - Ce hook gère UNIQUEMENT la logique de chat
  * Utilisé par V2AgentNode et FullscreenChatModal pour garantir un comportement identique
+ * 
+ * ⭐ AUTO-SAVE: Chat messages are automatically persisted to backend when authenticated
  */
 export const useAgentChat = ({
     nodeId,
     agent,
     llmConfigs,
     t,
-    nativeToolsConfig
+    nativeToolsConfig,
+    instanceId,
+    isAuthenticated = false,
+    accessToken = null
 }: UseAgentChatOptions): UseAgentChatReturn => {
     const {
         getNodeMessages,
@@ -46,6 +57,47 @@ export const useAgentChat = ({
     } = useRuntimeStore();
 
     const [loadingMessage, setLoadingMessage] = useState('');
+
+    /**
+     * ⭐ AUTO-SAVE: Persist chat message to backend immediately
+     * Called after each addNodeMessage for authenticated users
+     */
+    const persistChatMessage = async (message: ChatMessage) => {
+        if (!instanceId || !isAuthenticated || !accessToken) {
+            return; // Skip for guest mode or missing instanceId
+        }
+
+        try {
+            await PersistenceService.addAgentInstanceContent(
+                instanceId,
+                {
+                    type: message.isError ? 'error' : 'chat',
+                    role: message.sender,
+                    message: message.text,
+                    timestamp: new Date(),
+                    metadata: {
+                        messageId: message.id,
+                        hasImage: !!message.image,
+                        hasFile: !!message.filename,
+                        toolCalls: message.toolCalls
+                    }
+                },
+                { isAuthenticated, accessToken }
+            );
+            console.log('[useAgentChat] ✅ Message persisted:', message.id);
+        } catch (err) {
+            console.warn('[useAgentChat] ⚠️ Failed to persist message:', err);
+            // Don't block UI - message is in runtime state
+        }
+    };
+
+    /**
+     * Wrapper: Add message to runtime store AND persist to backend
+     */
+    const addAndPersistMessage = async (nodeId: string, message: ChatMessage) => {
+        addNodeMessage(nodeId, message);
+        await persistChatMessage(message);
+    };
 
     const handleSendMessage = async (userInput: string, attachedFile: File | null) => {
         const trimmedInput = userInput.trim();
@@ -81,7 +133,8 @@ export const useAgentChat = ({
             }
         }
 
-        addNodeMessage(nodeId, userMessage);
+        // ⭐ AUTO-SAVE: Use wrapper to add and persist user message
+        await addAndPersistMessage(nodeId, userMessage);
 
         // Get LLM config
         const agentConfig = llmConfigs?.find(c => c.provider === agent.llmProvider);
@@ -93,7 +146,7 @@ export const useAgentChat = ({
                 text: `Erreur: ${agent.llmProvider} n'est pas configuré ou activé.`,
                 isError: true
             };
-            addNodeMessage(nodeId, errorMessage);
+            await addAndPersistMessage(nodeId, errorMessage);
             setNodeExecuting(nodeId, false);
             return;
         }
@@ -345,10 +398,21 @@ export const useAgentChat = ({
                 text: `Erreur: ${error instanceof Error ? error.message : String(error)}`,
                 isError: true
             };
-            addNodeMessage(nodeId, errorMessage);
+            // ⭐ AUTO-SAVE: Persist error message
+            await addAndPersistMessage(nodeId, errorMessage);
         } finally {
             setNodeExecuting(nodeId, false);
             setLoadingMessage('');
+            
+            // ⭐ AUTO-SAVE: After streaming is complete, persist the final agent response
+            if (instanceId && isAuthenticated && accessToken) {
+                const finalMessages = getNodeMessages(nodeId);
+                // Find the latest agent message that was added during this interaction
+                const latestAgentMessage = [...finalMessages].reverse().find(m => m.sender === 'agent');
+                if (latestAgentMessage && !latestAgentMessage.isError) {
+                    await persistChatMessage(latestAgentMessage);
+                }
+            }
         }
     };
 

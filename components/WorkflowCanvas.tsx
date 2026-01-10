@@ -21,6 +21,7 @@ import { AgentFormModal } from './modals/AgentFormModal';
 import { SavePrototypeButton } from './SavePrototypeButton';
 import { Agent, WorkflowNode, LLMConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
+import { useWorkflowStore } from '../stores/useWorkflowStore';
 
 interface WorkflowCanvasProps {
   nodes?: WorkflowNode[];
@@ -84,10 +85,22 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     isVideoPanelOpen = false,
     isMapsPanelOpen = false,
     // ⭐ ÉTAPE 2: Persistence props
-    workflowId = 'default-workflow',
+    workflowId: workflowIdProp,
     workflowName,
     onSaveComplete
   } = props;
+
+  // ⭐ SELF-HEALING: Get real workflow ID from store (falls back to prop)
+  const { getCurrentWorkflowId } = useWorkflowStore();
+  const storeWorkflowId = getCurrentWorkflowId();
+  const workflowId = storeWorkflowId || workflowIdProp || 'default-workflow';
+  
+  // Log warning if using placeholder ID
+  useEffect(() => {
+    if (workflowId === 'default-workflow') {
+      console.warn('[WorkflowCanvas] ⚠️ Using placeholder workflowId - persistence may fail for authenticated users');
+    }
+  }, [workflowId]);
 
   // Hook de thème jour/nuit
   const theme = useDayNightTheme();

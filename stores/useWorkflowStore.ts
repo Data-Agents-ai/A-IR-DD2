@@ -33,6 +33,14 @@ export interface Workflow {
   created_at: string;
   updated_at: string;
   creator_id: RobotId;
+  // ⭐ NEW: Server-synced properties
+  isDefault?: boolean;
+  isActive?: boolean;
+  canvasState?: {
+    zoom: number;
+    panX: number;
+    panY: number;
+  };
 }
 
 export interface WorkflowExecution {
@@ -71,6 +79,19 @@ interface WorkflowStore {
   saveWorkflow: () => void;
   deleteWorkflow: (id: string) => void;
   updateWorkflowMeta: (updates: Partial<Pick<Workflow, 'name' | 'description'>>) => void;
+  
+  // ⭐ SELF-HEALING: Hydration from server (with real MongoDB ID)
+  hydrateWorkflowFromServer: (workflowData: {
+    id: string;
+    name: string;
+    description?: string;
+    isDefault?: boolean;
+    isActive?: boolean;
+    canvasState?: { zoom: number; panX: number; panY: number };
+  }) => void;
+  
+  // ⭐ Getter for current workflow ID (for persistence)
+  getCurrentWorkflowId: () => string | null;
   
   // ⭐ ÉTAPE 3: Dirty State Management
   markDirty: (changeType?: string) => void;
@@ -149,6 +170,44 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       lastSynced: state.lastSynced,
       pendingCount: state.pendingChanges.length
     };
+  },
+  
+  // ⭐ SELF-HEALING: Hydrate workflow from server (with real MongoDB ID)
+  hydrateWorkflowFromServer: (workflowData) => {
+    const now = new Date().toISOString();
+    
+    // Create or update the currentWorkflow with server data
+    const hydratedWorkflow: Workflow = {
+      id: workflowData.id, // ⭐ CRITICAL: Real MongoDB ObjectId
+      name: workflowData.name,
+      description: workflowData.description || '',
+      nodes: [], // Will be populated separately
+      edges: [], // Will be populated separately
+      variables: {},
+      created_at: now,
+      updated_at: now,
+      creator_id: 'archi' as RobotId,
+      isDefault: workflowData.isDefault,
+      isActive: workflowData.isActive,
+      canvasState: workflowData.canvasState
+    };
+    
+    set({
+      currentWorkflow: hydratedWorkflow,
+      isDirty: false,
+      lastSynced: new Date()
+    });
+    
+    console.log('[useWorkflowStore] Hydrated workflow from server:', {
+      id: workflowData.id,
+      name: workflowData.name,
+      isDefault: workflowData.isDefault
+    });
+  },
+  
+  // ⭐ Getter for current workflow ID (for persistence service)
+  getCurrentWorkflowId: () => {
+    return get().currentWorkflow?.id || null;
   },
   
   // Workflow Management

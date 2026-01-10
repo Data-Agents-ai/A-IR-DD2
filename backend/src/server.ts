@@ -57,6 +57,8 @@ app.use('/api/auth', authRoutes);
 // CORRECTION SOLID: agent-instances imbriquées SOUS workflows pour héritage des params
 app.use('/api/workflows', workflowsRoutes);
 workflowsRoutes.use('/:workflowId/instances', agentInstancesRoutes);
+// ⭐ AUTO-SAVE: Direct route for agent-instances (content update doesn't need workflowId)
+app.use('/api/agent-instances', agentInstancesRoutes);
 app.use('/api/agent-prototypes', agentPrototypesRoutes);
 
 // LLM routes (Jalon 3 - Phase 2)

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { User } from '../models/User.model';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt';
 import { validateRequest } from '../middleware/validation.middleware';
+import { WorkflowSelfHealingService } from '../services/workflowSelfHealing.service';
 
 const router = Router();
 
@@ -53,6 +54,10 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
             isActive: true              // CORRECTION: Valeur par défaut explicite
         });
         await user.save();
+
+        // ⭐ SELF-HEALING: Créer le workflow par défaut pour le nouvel utilisateur
+        const defaultWorkflow = await WorkflowSelfHealingService.createDefaultWorkflowForNewUser(user.id);
+        console.log(`✅ [Auth] Default workflow created for user ${user.email}:`, defaultWorkflow.id);
 
         // Générer tokens JWT
         const payload = {

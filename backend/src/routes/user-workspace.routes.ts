@@ -34,6 +34,7 @@ import { LLMConfig } from '../models/LLMConfig.model';
 import UserSettings from '../models/UserSettings.model';
 import { requireAuth } from '../middleware/auth.middleware';
 import { IUser } from '../models/User.model';
+import { WorkflowSelfHealingService } from '../services/workflowSelfHealing.service';
 
 const router = Router();
 
@@ -120,6 +121,8 @@ interface WorkspaceResponse {
         loadedAt: Date;
         userId: string;
         hasWorkflow: boolean;
+        workflowWasCreated?: boolean;  // ⭐ SELF-HEALING indicator
+        healingActions?: string[];      // ⭐ SELF-HEALING actions taken
     };
 }
 
@@ -141,15 +144,20 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
 
         console.log('[Workspace] GET - userId:', userId);
 
+        // ⭐ SELF-HEALING: Garantir qu'un workflow par défaut existe
+        const { workflow: defaultWorkflow, wasCreated, healingActions } = 
+            await WorkflowSelfHealingService.ensureDefaultWorkflow(userId.toString());
+        
+        if (wasCreated) {
+            console.log('[Workspace] Self-healing triggered:', healingActions);
+        }
+
         // Parallel fetch all user resources for performance
         const [
-            activeWorkflow,
             agentPrototypes,
             llmConfigs,
             userSettings
         ] = await Promise.all([
-            // Get active workflow (or most recent)
-            Workflow.findOne({ userId, isActive: true }).sort({ updatedAt: -1 }),
             // Get all agent prototypes for user
             AgentPrototype.find({ userId }).sort({ name: 1 }),
             // Get all LLM configs (without API keys)
@@ -158,11 +166,8 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
             UserSettings.findOne({ userId })
         ]);
 
-        // If no active workflow, get most recent
-        let workflow = activeWorkflow;
-        if (!workflow) {
-            workflow = await Workflow.findOne({ userId }).sort({ updatedAt: -1 });
-        }
+        // Le workflow par défaut est garanti par Self-Healing
+        const workflow = defaultWorkflow;
 
         // Fetch workflow-specific data if workflow exists
         let agentInstances: any[] = [];
@@ -258,12 +263,16 @@ router.get('/workspace', requireAuth, async (req: Request, res: Response) => {
             metadata: {
                 loadedAt: new Date(),
                 userId: userId.toString(),
-                hasWorkflow: !!workflow
+                hasWorkflow: !!workflow,
+                workflowWasCreated: wasCreated,  // ⭐ SELF-HEALING indicator
+                healingActions: healingActions.length > 0 ? healingActions : undefined
             }
         };
 
         console.log('[Workspace] GET - response summary:', {
             hasWorkflow: !!workflow,
+            workflowId: workflow?.id,
+            workflowWasCreated: wasCreated,
             nodesCount: response.nodes.length,
             edgesCount: response.edges.length,
             llmConfigsCount: response.llmConfigs.length

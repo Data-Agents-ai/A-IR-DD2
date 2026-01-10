@@ -248,6 +248,86 @@ router.put('/:id',
     }
 );
 
+// ============================================
+// ⭐ AUTO-SAVE: POST /api/agent-instances/:id/content
+// Ajouter du contenu (chat, image, video, error) à une instance
+// Appelé automatiquement après chaque interaction chat
+// ============================================
+const contentSchema = z.object({
+    content: z.object({
+        type: z.enum(['chat', 'image', 'video', 'error']),
+        role: z.string().optional(),
+        message: z.string().optional(),
+        mediaId: z.string().optional(),
+        prompt: z.string().optional(),
+        url: z.string().optional(),
+        duration: z.number().optional(),
+        subType: z.string().optional(),
+        timestamp: z.string().or(z.date()).optional(),
+        metadata: z.object({}).passthrough().optional()
+    })
+});
+
+router.post('/:id/content',
+    requireAuth,
+    validateRequest(contentSchema),
+    async (req: Request, res: Response) => {
+        try {
+            const user = req.user as IUser;
+            const instanceId = req.params.id;
+            const { content } = req.body;
+
+            // Validate ObjectId
+            if (!mongoose.Types.ObjectId.isValid(instanceId)) {
+                return res.status(400).json({ error: 'ID instance invalide' });
+            }
+
+            // Find instance and verify ownership
+            const instance = await AgentInstance.findOne({ 
+                _id: instanceId, 
+                userId: user.id 
+            });
+
+            if (!instance) {
+                return res.status(404).json({ error: 'Instance introuvable' });
+            }
+
+            // Add content with timestamp
+            const contentWithTimestamp = {
+                ...content,
+                timestamp: content.timestamp ? new Date(content.timestamp) : new Date()
+            };
+
+            // Push to content array
+            instance.content.push(contentWithTimestamp);
+
+            // Update metrics based on content type
+            if (content.type === 'chat') {
+                instance.metrics.callCount = (instance.metrics.callCount || 0) + 1;
+                if (content.metadata?.tokensUsed) {
+                    instance.metrics.totalTokens = (instance.metrics.totalTokens || 0) + content.metadata.tokensUsed;
+                }
+            } else if (content.type === 'error') {
+                instance.metrics.totalErrors = (instance.metrics.totalErrors || 0) + 1;
+            } else if (content.type === 'image' || content.type === 'video') {
+                instance.metrics.totalMediaGenerated = (instance.metrics.totalMediaGenerated || 0) + 1;
+            }
+
+            await instance.save();
+
+            console.log(`[AgentInstances] ✅ Content added to ${instanceId}: ${content.type}`);
+            res.status(201).json({ 
+                success: true, 
+                contentCount: instance.content.length 
+            });
+
+        } catch (error) {
+            console.error('[AgentInstances] POST/:id/content error:', error);
+            res.status(500).json({ error: 'Erreur ajout contenu' });
+        }
+    }
+);
+
 // DELETE /api/agent-instances/:id - Supprimer instance
 router.delete('/:id',
     requireAuth,

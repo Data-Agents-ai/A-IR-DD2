@@ -17,6 +17,7 @@ import { FullscreenChatModal } from './components/modals/FullscreenChatModal';
 import { AgentConfigurationModal } from './components/modals/AgentConfigurationModal';
 import { useRuntimeStore } from './stores/useRuntimeStore';
 import { useDesignStore } from './stores/useDesignStore';
+import { useWorkflowStore } from './stores/useWorkflowStore';
 import { NotificationProvider } from './contexts';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationDisplay } from './components/NotificationDisplay';
@@ -24,6 +25,10 @@ import { QueryProvider } from './providers';
 import { getSettingsStorage } from './utils/SettingsStorage';
 // ⭐ ÉTAPE 5: Import HydrationOverlay for loading state
 import { HydrationOverlay } from './components/HydrationOverlay';
+// ⭐ UX Polish: Import HyperspaceReveal for guest entry animation
+import { HyperspaceReveal } from './components/HyperspaceReveal';
+// ⭐ AUTO-SAVE: Import PersistenceService for immediate instance creation
+import { PersistenceService } from './services/persistenceService';
 
 // ⭐ J4.4: Use the key from guestDataUtils to ensure consistency with wipeGuestData()
 const LLM_CONFIGS_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
@@ -166,11 +171,51 @@ function AppContent() {
   const [isHydrating, setIsHydrating] = useState(false);
   const [hydrationProgress, setHydrationProgress] = useState(0);
 
+  // ⭐ UX Polish: Hyperspace animation state for guests
+  // Shows when: first load as guest OR after logout
+  const [showHyperspace, setShowHyperspace] = useState(!isAuthenticated);
+  const [hyperspaceActive, setHyperspaceActive] = useState(false);
+  const wasAuthenticatedRef = React.useRef(isAuthenticated);
+
+  // ⭐ UX: Trigger hyperspace on logout (auth → guest transition)
+  useEffect(() => {
+    const wasAuth = wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = isAuthenticated;
+
+    // Transition: authenticated → guest (logout)
+    if (wasAuth && !isAuthenticated) {
+      setShowHyperspace(true);
+      setHyperspaceActive(false); // Reset to idle
+    }
+  }, [isAuthenticated]);
+
+  // ⭐ UX: Auto-trigger warp after short delay when hyperspace is shown
+  useEffect(() => {
+    if (showHyperspace && !hyperspaceActive) {
+      const timer = setTimeout(() => {
+        setHyperspaceActive(true);
+      }, 1500); // 1.5s idle phase before warp
+      return () => clearTimeout(timer);
+    }
+  }, [showHyperspace, hyperspaceActive]);
+
+  // ⭐ UX: Handle hyperspace animation complete
+  const handleHyperspaceComplete = useCallback(() => {
+    // Small delay to ensure smooth transition
+    setTimeout(() => {
+      setShowHyperspace(false);
+      setHyperspaceActive(false);
+    }, 100);
+  }, []);
+
   // Runtime Store access
   const { updateLLMConfigs, setNavigationHandler, addNodeMessage } = useRuntimeStore();
 
   // Design Store access for integrity validation  
   const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode, hydrateFromServer, setNodes, setEdges } = useDesignStore();
+  
+  // ⭐ SELF-HEALING: Workflow Store for hydrating workflow ID
+  const { hydrateWorkflowFromServer, getCurrentWorkflowId } = useWorkflowStore();
 
   /**
    * ⭐ ÉTAPE 5: Hydration for authenticated users
@@ -205,6 +250,26 @@ function AppContent() {
 
         const workspace = await response.json();
         setHydrationProgress(80);
+
+        // ⭐ SELF-HEALING: Hydrate workflow with REAL MongoDB ID from server
+        // This is CRITICAL for persistence to work correctly
+        if (workspace.workflow) {
+          hydrateWorkflowFromServer({
+            id: workspace.workflow.id,  // ⭐ Real MongoDB ObjectId
+            name: workspace.workflow.name,
+            description: workspace.workflow.description,
+            isDefault: workspace.workflow.isDefault,
+            isActive: workspace.workflow.isActive,
+            canvasState: workspace.workflow.canvasState
+          });
+          
+          console.log('[App] ⭐ Workflow hydrated with ID:', workspace.workflow.id, {
+            wasCreated: workspace.metadata?.workflowWasCreated,
+            isDefault: workspace.workflow.isDefault
+          });
+        } else {
+          console.warn('[App] ⚠️ No workflow in server response - Self-Healing may have failed');
+        }
 
         // Hydrate stores with server data
         if (workspace.agentInstances) {
@@ -255,6 +320,7 @@ function AppContent() {
 
         setHydrationProgress(100);
         console.log('[App] Workspace hydration complete:', {
+          workflowId: workspace.workflow?.id,
           nodes: workspace.nodes?.length || 0,
           instances: workspace.agentInstances?.length || 0
         });
@@ -271,7 +337,7 @@ function AppContent() {
     };
 
     hydrateWorkspace();
-  }, [isAuthenticated, accessToken, hydrateFromServer, setNodes, setEdges]);
+  }, [isAuthenticated, accessToken, hydrateFromServer, setNodes, setEdges, hydrateWorkflowFromServer]);
 
   /**
    * ⭐ CRITICAL J4.4: Reload LLM configs + WIPE STATE when auth state changes
@@ -496,7 +562,13 @@ function AppContent() {
     setAgentModalOpen(true);
   };
 
-  const addAgentToWorkflow = useCallback((agent: Agent) => {
+  /**
+   * ⭐ AUTO-SAVE: Add agent to workflow with immediate API persistence
+   * 
+   * Per Dev_rules.md: Agent instances are ALWAYS auto-saved (independent of workflow save mode)
+   * This ensures the agent_instances collection is populated immediately on creation.
+   */
+  const addAgentToWorkflow = useCallback(async (agent: Agent) => {
     // Calculate position based on existing instances
     const position = {
       x: (workflowNodes.length % 4) * 420 + 20,
@@ -506,8 +578,48 @@ function AppContent() {
     // Use instanceName if provided, otherwise use agent name
     const instanceName = agent.instanceName || agent.name;
 
-    // Add agent instance to DesignStore with custom instance name
+    // Add agent instance to DesignStore with custom instance name (local state)
     const instanceId = addAgentInstance(agent.id, position, instanceName);
+
+    // ⭐ AUTO-SAVE: Immediately persist to backend (if authenticated)
+    const workflowId = getCurrentWorkflowId();
+    
+    if (isAuthenticated && accessToken && workflowId) {
+      console.log('[App] 📤 Auto-saving new agent instance to backend:', {
+        instanceId,
+        prototypeId: agent.id,
+        workflowId
+      });
+      
+      const result = await PersistenceService.createAgentInstance(
+        {
+          id: instanceId,
+          prototypeId: agent.id,
+          name: instanceName,
+          position,
+          configuration_json: {
+            role: agent.role,
+            model: agent.model,
+            llmProvider: agent.llmProvider,
+            systemPrompt: agent.systemPrompt,
+            tools: agent.tools || [],
+            outputConfig: agent.outputConfig
+          }
+        },
+        workflowId,
+        { isAuthenticated, accessToken }
+      );
+      
+      if (result.success) {
+        console.log('[App] ✅ Agent instance persisted to DB:', result.backendId);
+        // TODO: Update instanceId in store if backend returns different ID
+      } else {
+        console.error('[App] ❌ Failed to persist agent instance:', result.error);
+        // Don't block UI - instance exists locally, will sync later
+      }
+    } else {
+      console.log('[App] Guest mode - agent instance saved to localStorage via store');
+    }
 
     // Legacy: Also add to local state for now to maintain compatibility
     const newNode: WorkflowNode = {
@@ -520,7 +632,7 @@ function AppContent() {
       instanceId // ✅ Stocker instanceId pour accès au modal de configuration
     };
     setWorkflowNodes(prev => [...prev, newNode]);
-  }, [workflowNodes, addAgentInstance]);
+  }, [workflowNodes, addAgentInstance, isAuthenticated, accessToken, getCurrentWorkflowId]);
 
   const handleDeleteNode = (nodeId: string) => {
     setWorkflowNodes(prev => prev.filter(node => node.id !== nodeId));
@@ -629,7 +741,19 @@ function AppContent() {
   return (
     <QueryProvider>
       <NotificationProvider>
-        {/* ⭐ ÉTAPE 5: Hydration Overlay - Blur Racing Style */}
+        {/* ⭐ UX Polish: Hyperspace Entry Animation for Guests */}
+        {showHyperspace && !isAuthenticated && (
+          <HyperspaceReveal
+            isActive={hyperspaceActive}
+            onComplete={handleHyperspaceComplete}
+            className="fixed inset-0 z-[100]"
+          >
+            {/* Empty children - the app will be revealed underneath */}
+            <div className="w-full h-full" />
+          </HyperspaceReveal>
+        )}
+
+        {/* ⭐ ÉTAPE 5: Hydration Overlay - Blur Racing Style (for authenticated users) */}
         <HydrationOverlay 
           isLoading={isHydrating} 
           progress={hydrationProgress}

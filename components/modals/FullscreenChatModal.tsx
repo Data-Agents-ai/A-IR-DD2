@@ -5,6 +5,7 @@ import { useRuntimeStore } from '../../stores/useRuntimeStore';
 import { useDesignStore } from '../../stores/useDesignStore';
 import { useAgentChat } from '../../hooks/useAgentChat';
 import { useLocalization } from '../../hooks/useLocalization';
+import { useAuth } from '../../contexts/AuthContext';
 import { ChatMessage, Agent, LLMCapability, WorkflowNode } from '../../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { ImageGenerationPanel } from '../panels/ImageGenerationPanel';
@@ -72,6 +73,8 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
 
   const { getResolvedInstance, agents } = useDesignStore();
   const { t } = useLocalization();
+  // ⭐ AUTO-SAVE: Get auth context for persisting chat messages
+  const { isAuthenticated, accessToken } = useAuth();
 
   const [userInput, setUserInput] = useState('');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -93,6 +96,9 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
 
   // Récupérer l'agent complet (priorité: fullscreenChatAgent du store, sinon V2 resolvedInstance)
   const agent: Agent | null = fullscreenChatAgent || (resolvedInstance ? resolvedInstance.prototype : null);
+  
+  // ⭐ AUTO-SAVE: Get instanceId for persisting chat to correct agent instance
+  const instanceId = resolvedInstance?.instance.id;
 
   // Hook pour gérer l'envoi de messages (logique partagée avec V2AgentNode)
   const { handleSendMessage: sendMessageToLLM, loadingMessage } = useAgentChat({
@@ -100,7 +106,11 @@ export const FullscreenChatModal: React.FC<FullscreenChatModalProps> = ({
     agent,
     llmConfigs,
     t,
-    nativeToolsConfig: { webFetch: webFetchEnabled, webSearch: webSearchEnabled }
+    nativeToolsConfig: { webFetch: webFetchEnabled, webSearch: webSearchEnabled },
+    // ⭐ AUTO-SAVE: Pass auth context for immediate message persistence
+    instanceId,
+    isAuthenticated,
+    accessToken
   });
 
   // Auto-scroll vers le bas quand de nouveaux messages arrivent

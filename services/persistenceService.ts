@@ -84,6 +84,26 @@ export interface AgentInstanceContent {
 // WORKFLOW PERSISTENCE
 // ============================================
 
+// ⭐ SELF-HEALING: Liste des IDs placeholder invalides
+const INVALID_WORKFLOW_IDS = [
+    'default-workflow',
+    'new-workflow', 
+    'temp-workflow',
+    'placeholder',
+    ''
+];
+
+/**
+ * Validates that a workflow ID is not a placeholder
+ * @returns true if ID is valid (not a placeholder)
+ */
+function isValidWorkflowId(id: string): boolean {
+    if (!id) return false;
+    if (INVALID_WORKFLOW_IDS.includes(id.toLowerCase())) return false;
+    // MongoDB ObjectId pattern (24 hex chars)
+    return /^[a-f\d]{24}$/i.test(id);
+}
+
 /**
  * Save workflow structure (MANUAL SAVE - Bouton 💾)
  * 
@@ -123,6 +143,15 @@ export async function saveWorkflow(
         // Authenticated mode: API
         if (!options.accessToken) {
             return { success: false, error: 'No access token provided' };
+        }
+
+        // ⭐ SELF-HEALING: Validate workflow ID before API call
+        if (!isValidWorkflowId(data.id)) {
+            console.error('[PersistenceService] Invalid workflow ID:', data.id);
+            return { 
+                success: false, 
+                error: `Invalid workflow ID: "${data.id}". Please refresh the page to get the real workflow ID from the server.`
+            };
         }
 
         const response = await fetch(`${API_BASE_URL}/api/workflows/${data.id}`, {
@@ -173,6 +202,109 @@ export async function saveCanvasState(
 // ============================================
 // AGENT INSTANCE PERSISTENCE (AUTO-SAVE)
 // ============================================
+
+/**
+ * ⭐ CREATE agent instance (AUTO-SAVE - Immediate on creation)
+ * Called when user adds an agent to the workflow canvas
+ * 
+ * NOTE: This is INDEPENDENT of workflow save mode (manual/auto)
+ * Agent instances are ALWAYS auto-saved per Dev_rules.md
+ * 
+ * @param data - Instance data including prototypeId, position, name
+ * @param workflowId - Current workflow ID (must be valid MongoDB ObjectId)
+ * @param options - Authentication options
+ */
+export interface CreateAgentInstanceData {
+    id: string;           // Frontend-generated ID (will be replaced by backend ID in response)
+    prototypeId: string;
+    name: string;
+    position: { x: number; y: number };
+    configuration_json?: Record<string, any>;
+}
+
+export async function createAgentInstance(
+    data: CreateAgentInstanceData,
+    workflowId: string,
+    options: PersistenceOptions
+): Promise<{ success: boolean; backendId?: string; error?: string }> {
+    try {
+        if (!options.isAuthenticated) {
+            // Guest mode: localStorage - just store with frontend ID
+            const existing = localStorage.getItem(GUEST_STORAGE_KEYS.AGENT_INSTANCES);
+            const instances = existing ? JSON.parse(existing) : [];
+            
+            instances.push({
+                ...data,
+                workflowId: 'guest-workflow',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                content: [],
+                metrics: { totalTokens: 0, totalErrors: 0, totalMediaGenerated: 0, callCount: 0 }
+            });
+            
+            localStorage.setItem(GUEST_STORAGE_KEYS.AGENT_INSTANCES, JSON.stringify(instances));
+            console.log('[PersistenceService] ✅ Agent instance created in localStorage:', data.id);
+            return { success: true, backendId: data.id };
+        }
+
+        // Authenticated mode: API POST
+        if (!options.accessToken) {
+            return { success: false, error: 'No access token provided' };
+        }
+
+        // Validate workflowId
+        if (!isValidWorkflowId(workflowId)) {
+            console.error('[PersistenceService] ❌ Cannot create instance: invalid workflowId:', workflowId);
+            return { 
+                success: false, 
+                error: `Cannot create agent instance: workflow ID "${workflowId}" is invalid. Please refresh the page.`
+            };
+        }
+
+        console.log('[PersistenceService] 📤 Creating agent instance:', {
+            workflowId,
+            prototypeId: data.prototypeId,
+            name: data.name,
+            position: data.position
+        });
+
+        const response = await fetch(`${API_BASE_URL}/api/workflows/${workflowId}/instances/from-prototype`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${options.accessToken}`
+            },
+            body: JSON.stringify({
+                prototypeId: data.prototypeId,
+                position: data.position,
+                name: data.name,
+                configuration_json: data.configuration_json
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('[PersistenceService] ❌ Create instance failed:', errorData);
+            return { 
+                success: false, 
+                error: errorData.message || errorData.error || `HTTP ${response.status}` 
+            };
+        }
+
+        const created = await response.json();
+        console.log('[PersistenceService] ✅ Agent instance created in DB:', created._id || created.id);
+        
+        return { 
+            success: true, 
+            backendId: created._id || created.id 
+        };
+        
+    } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[PersistenceService] createAgentInstance error:', errorMsg);
+        return { success: false, error: errorMsg };
+    }
+}
 
 /**
  * Save agent instance position/config (AUTO-SAVE)
@@ -389,6 +521,7 @@ export function createImageContent(
 export const PersistenceService = {
     saveWorkflow,
     saveCanvasState,
+    createAgentInstance,  // ⭐ NEW: Auto-save on creation
     saveAgentInstance,
     addAgentInstanceContent,
     createChatContent,
