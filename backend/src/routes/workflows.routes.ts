@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import { Workflow } from '../models/Workflow.model';
@@ -8,6 +8,14 @@ import { requireAuth, requireOwnershipAsync } from '../middleware/auth.middlewar
 import { validateRequest } from '../middleware/validation.middleware';
 import { IUser } from '../models/User.model';
 import { WorkflowSelfHealingService } from '../services/workflowSelfHealing.service';
+
+// ⭐ V2 IMPORTS - Nouvelle architecture de persistance (Jalon 1-2)
+import {
+    createInstance,
+    deleteNode,
+    getWorkflowGraph,
+    updateNode
+} from '../controllers/workflow.controller';
 
 const router = Router();
 
@@ -520,6 +528,109 @@ router.post('/:id/mark-dirty',
             res.status(500).json({ error: 'Erreur marquage workflow' });
         }
     }
+);
+
+// ============================================
+// ⭐ ROUTES V2 - Nouvelle architecture de persistance
+// ============================================
+// Ces routes utilisent les modèles V2 (AgentInstanceV2, WorkflowNodeV2, AgentJournal)
+// et implémentent le pattern Instance/Journal séparé.
+// 
+// Documentation: Guides/WIP/PERSISTANCES_ROUTES.md
+// ============================================
+
+/**
+ * GET /api/workflows/:id/v2/graph
+ * 
+ * Version V2 du GET /:id - Retourne uniquement la structure légère du graphe.
+ * Ne charge pas les données complètes des agents (lazy loading).
+ * 
+ * Response: {
+ *   workflow: { _id, name, isDirty, canvasState, lastSavedAt },
+ *   nodes: [{ id, type, position, data: { instanceId, ...uiConfig } }],
+ *   edges: [{ id, source, target }]
+ * }
+ */
+router.get('/:id/v2/graph',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    (req: Request, res: Response) => getWorkflowGraph(req as Request & { user: IUser }, res)
+);
+
+/**
+ * POST /api/workflows/:id/v2/instances
+ * 
+ * Création atomique d'une instance d'agent ET de son nœud visuel.
+ * Utilise une transaction MongoDB pour garantir la cohérence.
+ * 
+ * Body: {
+ *   agentConfig: { name, role, prototypeId?, robotId, configuration },
+ *   persistenceOptions: { saveChatHistory, saveMedia, mediaStorageMode, ... },
+ *   position: { x, y }
+ * }
+ * 
+ * Response: {
+ *   instance: { _id, name, role, status, persistenceConfig },
+ *   node: { _id, instanceId, position }
+ * }
+ */
+router.post('/:id/v2/instances',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    (req: Request, res: Response) => createInstance(req as Request & { user: IUser }, res)
+);
+
+/**
+ * DELETE /api/workflows/:id/v2/nodes/:nodeId
+ * 
+ * Suppression en cascade transactionnelle :
+ * - WorkflowNodeV2
+ * - AgentInstanceV2 (si type agent)
+ * - AgentJournals liés
+ * - WorkflowEdges connectés
+ * - Fichiers média locaux
+ * 
+ * Response: {
+ *   success: true,
+ *   deletedNodeId, deletedInstanceId,
+ *   deletedCounts: { journals, edges, mediaFiles }
+ * }
+ */
+router.delete('/:id/v2/nodes/:nodeId',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    (req: Request, res: Response) => deleteNode(req as Request & { user: IUser }, res)
+);
+
+/**
+ * PATCH /api/workflows/:id/v2/nodes/:nodeId
+ * 
+ * Mise à jour partielle d'un nœud V2 (position, uiConfig).
+ * Optimisé pour les updates fréquents lors du drag sur le canvas.
+ * 
+ * Body: {
+ *   position?: { x, y },
+ *   uiConfig?: { label?, color?, expanded?, ... }
+ * }
+ * 
+ * Response: { success: true, node }
+ */
+router.patch('/:id/v2/nodes/:nodeId',
+    requireAuth,
+    requireOwnershipAsync(async (req) => {
+        const workflow = await Workflow.findById(req.params.id);
+        return workflow ? workflow.userId.toString() : null;
+    }),
+    (req: Request, res: Response) => updateNode(req as Request & { user: IUser }, res)
 );
 
 export default router;

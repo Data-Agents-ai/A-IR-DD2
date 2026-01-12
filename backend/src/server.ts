@@ -20,6 +20,9 @@ import llmProxyRoutes from './routes/llm-proxy.routes';
 import userSettingsRoutes from './routes/user-settings.routes';
 import userWorkspaceRoutes from './routes/user-workspace.routes';
 
+// ⭐ V2 ROUTES - Nouvelle architecture de persistance (Jalon 2)
+import instancesRoutes from './routes/instances.routes';
+
 // SOLID: Valider la configuration au démarrage (fail-fast pattern)
 validateConfig();
 
@@ -60,6 +63,10 @@ workflowsRoutes.use('/:workflowId/instances', agentInstancesRoutes);
 // ⭐ AUTO-SAVE: Direct route for agent-instances (content update doesn't need workflowId)
 app.use('/api/agent-instances', agentInstancesRoutes);
 app.use('/api/agent-prototypes', agentPrototypesRoutes);
+
+// ⭐ V2 ROUTES - Instances avec lazy loading (Jalon 2)
+// Nouvelle architecture: GET/PATCH instances individuelles, journaux paginés
+app.use('/api/instances', instancesRoutes);
 
 // LLM routes (Jalon 3 - Phase 2)
 app.use('/api/llm-configs', llmConfigsRoutes);
