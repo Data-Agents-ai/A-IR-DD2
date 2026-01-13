@@ -4,25 +4,105 @@ import { createServer } from 'http';
 import { WebSocketManager } from './websocket/WebSocketManager';
 import { spawn } from 'child_process';
 import path from 'path';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
+import passport from './middleware/auth.middleware';
+import { connectDatabase } from './config/database';
+import config, { validateConfig } from './config/environment';
 import lmstudioRoutes from './routes/lmstudio.routes';
+import localLLMRoutes from './routes/local-llm.routes';
+import authRoutes from './routes/auth.routes';
+import workflowsRoutes from './routes/workflows.routes';
+import agentPrototypesRoutes from './routes/agent-prototypes.routes';
+import agentInstancesRoutes from './routes/agent-instances.routes';
+import llmConfigsRoutes from './routes/llm-configs.routes';
+import llmProxyRoutes from './routes/llm-proxy.routes';
+import userSettingsRoutes from './routes/user-settings.routes';
+import userWorkspaceRoutes from './routes/user-workspace.routes';
+
+// SOLID: Valider la configuration au démarrage (fail-fast pattern)
+validateConfig();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
+
+// ===== SECURITY MIDDLEWARE =====
+// Helmet: Sécurise les headers HTTP
+app.use(helmet());
+
+// MongoDB query sanitization (prévention injection NoSQL)
+app.use(mongoSanitize());
 
 // Configuration CORS
+// In development, accept any localhost port (5173, 5174, 5175, 3000, etc.)
+// In production, use FRONTEND_URL env var
+const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  if (!origin) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    callback(null, true);
+    return;
+  }
+
+  const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+  const isProduction = process.env.NODE_ENV === 'production';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+  if (isProduction) {
+    // Production: strict CORS - only accept configured frontend URL
+    if (origin === frontendUrl) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  } else {
+    // Development: allow all localhost origins
+    if (isLocalhost) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: corsOrigin,
   credentials: true
 }));
 
 app.use(express.json());
 
-// Route de test
+// ===== PASSPORT INITIALIZATION =====
+app.use(passport.initialize());
+
+// ===== ROUTES =====
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend is running' });
 });
 
-// Routes proxy LMStudio
+// Auth routes (Jalon 2)
+app.use('/api/auth', authRoutes);
+
+// Workflow routes (Jalon 3 - Phase 1)
+// CORRECTION SOLID: agent-instances imbriquées SOUS workflows pour héritage des params
+app.use('/api/workflows', workflowsRoutes);
+workflowsRoutes.use('/:workflowId/instances', agentInstancesRoutes);
+app.use('/api/agent-prototypes', agentPrototypesRoutes);
+
+// LLM routes (Jalon 3 - Phase 2)
+app.use('/api/llm-configs', llmConfigsRoutes);
+app.use('/api/llm', llmProxyRoutes);
+
+// Local LLM detection routes (new architecture - Option C Hybrid)
+app.use('/api/local-llm', localLLMRoutes);
+
+// User settings routes (Jalon 4 - Phase 3)
+app.use(userSettingsRoutes);
+
+// User workspace composite routes (Jalon 4 - Phase 4: Hydration)
+app.use('/api/user', userWorkspaceRoutes);
+
+// Routes proxy LMStudio (legacy)
 app.use('/api/lmstudio', lmstudioRoutes);
 
 // Route pour exécuter les outils Python
@@ -83,10 +163,39 @@ const httpServer = createServer(app);
 // Initialiser WebSocket
 const wsManager = new WebSocketManager(httpServer);
 
-// Démarrer le serveur
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Backend démarré sur le port ${PORT}`);
-  console.log(`📡 WebSocket prêt pour les connexions`);
-});
+// ===== DÉMARRAGE DU SERVEUR =====
+async function startServer() {
+  try {
+    // Tentative connexion MongoDB (non-bloquante pour Jalon 1)
+    try {
+      await connectDatabase();
+    } catch (dbError) {
+      console.warn('⚠️  MongoDB non disponible - Mode Guest uniquement');
+      console.warn('   Pour activer le mode Authenticated, démarrer MongoDB :');
+      console.warn('   - Windows: Installer MongoDB Community Server');
+      console.warn('   - Docker: docker run -d -p 27017:27017 --name mongodb mongo:6');
+      console.warn('');
+    }
 
-export { };
+    // Démarrer le serveur HTTP (même sans MongoDB)
+    httpServer.listen(PORT, () => {
+      console.log('\n✨ ===== A-IR-DD2 BACKEND DÉMARRÉ ===== ✨');
+      console.log(`🚀 Serveur HTTP: http://localhost:${PORT}`);
+      console.log(`📡 WebSocket prêt pour les connexions`);
+      console.log(`🔐 Mode: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✅ Jalon 1: Infrastructure prête (MongoDB + Encryption)`);
+      console.log(`✅ Jalon 2: Authentification JWT (Passport + Zod)`);
+      console.log(`🔓 Mode Guest: OPÉRATIONNEL (Python tools, WebSocket)`);
+      console.log(`🔐 Mode Auth: DISPONIBLE (/api/auth/*)`);
+      console.log('═══════════════════════════════════════════\n');
+    });
+  } catch (error) {
+    console.error('💀 Erreur critique au démarrage:', error);
+    process.exit(1);
+  }
+}
+
+// Lancer le serveur
+startServer();
+
+export { app };

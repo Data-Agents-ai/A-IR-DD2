@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Agent, LLMConfig, RobotId } from '../types';
+import { Agent, LLMConfig, RobotId, PersistenceConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
+import { useAuth } from '../contexts/AuthContext';
 import { AgentFormModal } from './modals/AgentFormModal';
 import { AgentDeletionConfirmModal } from './modals/AgentDeletionConfirmModal';
 import { WorkflowValidationModal } from './modals/WorkflowValidationModal';
@@ -14,6 +15,7 @@ import { AgentTemplate, createAgentFromTemplate, createAgentFromTemplateObject }
 import { GovernanceTestModal } from './modals/GovernanceTestModal';
 import { TodoModal } from './modals/TodoModal';
 import { addPrototypeToTemplates, loadCustomTemplates } from '../services/templateService';
+import { createAgentPrototype, updateAgentPrototype, fetchAgentPrototypes, mapAPIResponseToAgent } from '../services/agentPrototypeAPI';
 
 interface ArchiPrototypingPageProps {
   llmConfigs: LLMConfig[];
@@ -30,10 +32,15 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
 }) => {
   const { t } = useLocalization();
   const { addNotification } = useNotifications();
+  
+  // ⭐ Auth context pour persistence MongoDB (users connectés uniquement)
+  const { isAuthenticated, accessToken } = useAuth();
+  
   const {
     agents,
     currentRobotId,
     setCurrentRobot,
+    setAgents,
     addAgent,
     updateAgent,
     deleteAgent,
@@ -100,6 +107,27 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     };
   }, [agents.length]);
 
+  // ⭐ J4.5: Charger les prototypes persistés au montage (users authentifiés uniquement)
+  useEffect(() => {
+    const loadPersistedPrototypes = async () => {
+      if (!isAuthenticated || !accessToken) {
+        return;
+      }
+
+      const result = await fetchAgentPrototypes(accessToken);
+      
+      if (result.success && result.data) {
+        // Convertir format backend → frontend
+        const mappedAgents = result.data.map(mapAPIResponseToAgent);
+        
+        // Remplacer les agents locaux par les agents persistés
+        setAgents(mappedAgents);
+      }
+    };
+
+    loadPersistedPrototypes();
+  }, [isAuthenticated, accessToken]);
+
   const handleCreateAgent = () => {
     setEditingAgent(null);
     setAgentModalOpen(true);
@@ -146,18 +174,26 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     setWorkflowValidationOpen(true);
   };
 
-  const confirmAddToWorkflow = () => {
+  const confirmAddToWorkflow = (instanceName: string, persistenceConfig?: PersistenceConfig) => {
     if (!agentToAdd) return;
+
+    // Create an agent instance with custom name and persistence config if provided
+    const agentWithInstanceData = {
+      ...agentToAdd,
+      instanceName: instanceName || agentToAdd.name,
+      // ⭐ Include persistenceConfig override if provided from modal
+      ...(persistenceConfig && { persistenceConfig })
+    };
 
     // Use the global onAddToWorkflow prop instead of local store
     if (onAddToWorkflow) {
-      onAddToWorkflow(agentToAdd);
+      onAddToWorkflow(agentWithInstanceData);
 
       // Show success notification
       addNotification({
         type: 'success',
         title: 'Agent ajouté au workflow',
-        message: `${agentToAdd.name} a été ajouté au workflow global`,
+        message: `${instanceName || agentToAdd.name} a été ajouté au workflow global`,
         duration: 3000
       });
 
@@ -171,7 +207,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     setAgentToAdd(null);
   };
 
-  const handleSaveAgent = (agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>, agentId?: string) => {
+  const handleSaveAgent = async (agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>, agentId?: string) => {
     if (agentId && agentId !== 'temp') { // Exclure l'ID temporaire des templates
       // Check impact before updating existing agent
       const impact = getPrototypeImpact(agentId);
@@ -183,11 +219,21 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
         return;
       } else {
         // No instances affected, proceed directly
-        proceedWithUpdate(agentId, agentData);
+        await proceedWithUpdate(agentId, agentData);
       }
     } else {
       // Create new with governance (includes templates with id: 'temp')
-      const result = addAgent(agentData); if (result.success) {
+      const result = addAgent(agentData);
+      
+      if (result.success) {
+        // ⭐ PERSISTENCE: Si user connecté, sauvegarder aussi dans MongoDB
+        if (isAuthenticated && accessToken && result.agentId) {
+          const apiResult = await createAgentPrototype(agentData, accessToken, currentRobotId);
+          if (!apiResult.success) {
+            // Note: On ne bloque pas - le prototype existe localement
+          }
+        }
+        
         addNotification({
           type: 'success',
           title: 'Agent créé',
@@ -208,10 +254,18 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     setEditingAgent(null);
   };
 
-  const proceedWithUpdate = (agentId: string, agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>) => {
+  const proceedWithUpdate = async (agentId: string, agentData: Omit<Agent, 'id' | 'creator_id' | 'created_at' | 'updated_at'>) => {
     const result = updateAgent(agentId, agentData);
 
     if (result.success) {
+      // ⭐ PERSISTENCE: Si user connecté, mettre à jour aussi dans MongoDB
+      if (isAuthenticated && accessToken) {
+        const apiResult = await updateAgentPrototype(agentId, agentData, accessToken, currentRobotId);
+        if (!apiResult.success) {
+          // Note: On ne bloque pas - le prototype est mis à jour localement
+        }
+      }
+      
       addNotification({
         type: 'success',
         title: 'Prototype modifié',
@@ -228,9 +282,9 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     }
   };
 
-  const handleConfirmImpactUpdate = () => {
+  const handleConfirmImpactUpdate = async () => {
     if (pendingUpdate) {
-      proceedWithUpdate(pendingUpdate.agentId, pendingUpdate.agentData);
+      await proceedWithUpdate(pendingUpdate.agentId, pendingUpdate.agentData);
       setPendingUpdate(null);
       setImpactConfirmOpen(false);
       setAgentModalOpen(false);
@@ -327,16 +381,16 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
           <div className="flex items-center space-x-3">
             <WrenchIcon className="w-6 h-6 text-indigo-400" />
             <div>
-              <h1 className="text-xl font-bold text-white">Prototypage d'Agents</h1>
-              <p className="text-gray-400 text-sm">Créez et configurez les agents IA pour votre workflow</p>
+              <h1 className="text-xl font-bold text-white">{t('page_prototyping_title')}</h1>
+              <p className="text-gray-400 text-sm">{t('page_prototyping_description')}</p>
             </div>
           </div>
 
           {/* Governance Indicator */}
           <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-lg px-3 py-1.5">
-            <div className="text-xs text-indigo-300 font-medium">Robot Actuel</div>
+            <div className="text-xs text-indigo-300 font-medium">{t('current_robot_label')}</div>
             <div className="text-sm text-indigo-100 font-bold">{currentRobotId}</div>
-            <div className="text-xs text-indigo-400">Créateur autorisé</div>
+            <div className="text-xs text-indigo-400">{t('authorized_creator')}</div>
           </div>
         </div>
       </div>
@@ -378,7 +432,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
               variant="primary"
             >
               <PlusIcon className="w-4 h-4" />
-              <span>Nouveau Prototype</span>
+              <span>Création de prototype</span>
             </Button>
           </div>
         </div>
@@ -394,19 +448,18 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
             {agents.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <WrenchIcon className="w-16 h-16 text-gray-600 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-400 mb-2">Aucun prototype d'agent</h3>
+                <h3 className="text-xl font-semibold text-gray-400 mb-2">{t('no_prototype_empty_title')}</h3>
                 <p className="text-gray-500 mb-6 max-w-md">
-                  Commencez par créer votre premier agent. Définissez son rôle, ses capacités
-                  et les outils qu'il peut utiliser.
+                  {t('no_prototype_empty_description')}
                 </p>
                 <div className="flex space-x-3">
                   <Button onClick={handleCreateFromTemplate} className="flex items-center space-x-2" variant="secondary">
                     <span>📋</span>
-                    <span>Partir d'un Template</span>
+                    <span>{t('button_create_from_template')}</span>
                   </Button>
                   <Button onClick={handleCreateAgent} className="flex items-center space-x-2">
                     <PlusIcon className="w-4 h-4" />
-                    <span>Créer un Prototype</span>
+                    <span>{t('button_create_prototype')}</span>
                   </Button>
                 </div>
               </div>
@@ -458,15 +511,15 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                       {/* Metadata */}
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Fournisseur</span>
+                          <span className="text-gray-500">{t('provider_label')}</span>
                           <span className="text-gray-300">{agent.llmProvider}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Modèle</span>
+                          <span className="text-gray-500">{t('model_label')}</span>
                           <span className="text-gray-300">{agent.model}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-500">Capacités</span>
+                          <span className="text-gray-500">{t('capabilities_label')}</span>
                           <span className="text-gray-300">{agent.capabilities.length}</span>
                         </div>
                       </div>
@@ -481,7 +534,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                             handleAddToWorkflow(agent);
                           }}
                         >
-                          Ajouter au Workflow
+                          {t('button_add_to_workflow')}
                         </Button>
                         <Button
                           variant="outline"
@@ -491,7 +544,7 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
                             handleAddToTemplates(agent);
                           }}
                         >
-                          💾 Ajouter aux Templates
+                          {t('button_add_to_templates')}
                         </Button>
                       </div>
                     </div>

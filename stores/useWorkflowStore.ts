@@ -33,6 +33,14 @@ export interface Workflow {
   created_at: string;
   updated_at: string;
   creator_id: RobotId;
+  // ⭐ NEW: Server-synced properties
+  isDefault?: boolean;
+  isActive?: boolean;
+  canvasState?: {
+    zoom: number;
+    panX: number;
+    panY: number;
+  };
 }
 
 export interface WorkflowExecution {
@@ -59,12 +67,36 @@ interface WorkflowStore {
   isPaletteOpen: boolean;
   isConfigPanelOpen: boolean;
   
+  // ⭐ ÉTAPE 3: Persistence State (Règle 4.5.2 Dev_rules.md)
+  isDirty: boolean;                    // True if local state differs from server
+  lastSynced: Date | null;             // Last successful sync timestamp
+  syncVersion: number;                 // MongoDB __v for conflict detection
+  pendingChanges: string[];            // List of pending change types
+  
   // Workflow Management
   createWorkflow: (name: string, creatorId: RobotId) => string;
   loadWorkflow: (id: string) => void;
   saveWorkflow: () => void;
   deleteWorkflow: (id: string) => void;
   updateWorkflowMeta: (updates: Partial<Pick<Workflow, 'name' | 'description'>>) => void;
+  
+  // ⭐ SELF-HEALING: Hydration from server (with real MongoDB ID)
+  hydrateWorkflowFromServer: (workflowData: {
+    id: string;
+    name: string;
+    description?: string;
+    isDefault?: boolean;
+    isActive?: boolean;
+    canvasState?: { zoom: number; panX: number; panY: number };
+  }) => void;
+  
+  // ⭐ Getter for current workflow ID (for persistence)
+  getCurrentWorkflowId: () => string | null;
+  
+  // ⭐ ÉTAPE 3: Dirty State Management
+  markDirty: (changeType?: string) => void;
+  markClean: (newVersion?: number) => void;
+  getSyncStatus: () => { isDirty: boolean; lastSynced: Date | null; pendingCount: number };
   
   // Node Management
   addNode: (node: Omit<WorkflowNode, 'id'>) => string;
@@ -90,6 +122,9 @@ interface WorkflowStore {
   // Persistence
   loadFromLocalStorage: () => void;
   saveToLocalStorage: () => void;
+  
+  // ⭐ ÉTAPE 2.2: Reset complet pour wipe à la connexion
+  resetAll: () => void;
 }
 
 const generateId = () => `wf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -102,6 +137,78 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   selectedNodeId: null,
   isPaletteOpen: true,
   isConfigPanelOpen: false,
+  
+  // ⭐ ÉTAPE 3: Persistence State Initial
+  isDirty: false,
+  lastSynced: null,
+  syncVersion: 0,
+  pendingChanges: [],
+  
+  // ⭐ ÉTAPE 3: Dirty State Actions
+  markDirty: (changeType?: string) => {
+    set((state) => ({
+      isDirty: true,
+      pendingChanges: changeType 
+        ? [...new Set([...state.pendingChanges, changeType])]
+        : state.pendingChanges
+    }));
+  },
+  
+  markClean: (newVersion?: number) => {
+    set({
+      isDirty: false,
+      lastSynced: new Date(),
+      syncVersion: newVersion ?? get().syncVersion + 1,
+      pendingChanges: []
+    });
+  },
+  
+  getSyncStatus: () => {
+    const state = get();
+    return {
+      isDirty: state.isDirty,
+      lastSynced: state.lastSynced,
+      pendingCount: state.pendingChanges.length
+    };
+  },
+  
+  // ⭐ SELF-HEALING: Hydrate workflow from server (with real MongoDB ID)
+  hydrateWorkflowFromServer: (workflowData) => {
+    const now = new Date().toISOString();
+    
+    // Create or update the currentWorkflow with server data
+    const hydratedWorkflow: Workflow = {
+      id: workflowData.id, // ⭐ CRITICAL: Real MongoDB ObjectId
+      name: workflowData.name,
+      description: workflowData.description || '',
+      nodes: [], // Will be populated separately
+      edges: [], // Will be populated separately
+      variables: {},
+      created_at: now,
+      updated_at: now,
+      creator_id: 'archi' as RobotId,
+      isDefault: workflowData.isDefault,
+      isActive: workflowData.isActive,
+      canvasState: workflowData.canvasState
+    };
+    
+    set({
+      currentWorkflow: hydratedWorkflow,
+      isDirty: false,
+      lastSynced: new Date()
+    });
+    
+    console.log('[useWorkflowStore] Hydrated workflow from server:', {
+      id: workflowData.id,
+      name: workflowData.name,
+      isDefault: workflowData.isDefault
+    });
+  },
+  
+  // ⭐ Getter for current workflow ID (for persistence service)
+  getCurrentWorkflowId: () => {
+    return get().currentWorkflow?.id || null;
+  },
   
   // Workflow Management
   createWorkflow: (name: string, creatorId: RobotId) => {
@@ -391,5 +498,20 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to save workflow data:', error);
     }
-  }
+  },
+  
+  // ⭐ CRITICAL SECURITY: Reset ALL workflow state (including persistence state)
+  resetAll: () => set({
+    currentWorkflow: null,
+    workflows: [],
+    execution: null,
+    selectedNodeId: null,
+    isPaletteOpen: true,
+    isConfigPanelOpen: false,
+    // ⭐ ÉTAPE 3: Reset persistence state
+    isDirty: false,
+    lastSynced: null,
+    syncVersion: 0,
+    pendingChanges: []
+  })
 }));

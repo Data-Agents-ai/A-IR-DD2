@@ -54,6 +54,9 @@ interface RuntimeStore {
   // Utility
   getNodeMessages: (nodeId: string) => ChatMessage[];
   isNodeExecuting: (nodeId: string) => boolean;
+  
+  // ⭐ ÉTAPE 2.2: Reset complet pour wipe à la connexion
+  resetAll: () => void;
 }
 
 export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
@@ -109,12 +112,6 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
 
   // LLM Config
   updateLLMConfigs: (configs) => {
-    // DEBUG: Log LMStudio config being set in store
-    const lmStudioConfig = configs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[RuntimeStore] updateLLMConfigs - LMStudio:', {
-      enabled: lmStudioConfig?.enabled,
-      endpoint: lmStudioConfig?.apiKey
-    });
     set({ llmConfigs: configs });
   },
 
@@ -147,7 +144,9 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
 
   setNavigationHandler: (handler) => set({
     navigationHandler: handler
-  }),  // Utility functions
+  }),
+
+  // Utility functions
   getNodeMessages: (nodeId) => {
     const state = get();
     return state.nodeMessages[nodeId] || [];
@@ -156,5 +155,24 @@ export const useRuntimeStore = create<RuntimeStore>((set, get) => ({
   isNodeExecuting: (nodeId) => {
     const state = get();
     return state.executingNodes.has(nodeId);
-  }
+  },
+
+  /**
+   * ⭐ ÉTAPE 2.2: Reset complet du store runtime pour wipe à la connexion
+   * Nettoie tous les messages et états d'exécution
+   */
+  resetAll: () => set({
+    nodeMessages: {},
+    executingNodes: new Set(),
+    llmConfigs: [],
+    isImagePanelOpen: false,
+    isImageModificationPanelOpen: false,
+    currentImageNodeId: null,
+    editingImageInfo: null,
+    fullscreenImage: null,
+    fullscreenChatNodeId: null,
+    fullscreenChatAgent: null,
+    configModalInstanceId: null
+    // Note: navigationHandler conservé car c'est une fonction
+  })
 }));

@@ -82,6 +82,7 @@ body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* Laser border animation */
@@ -168,6 +169,24 @@ body {
   bottom: 20px !important;
   right: 240px !important;
   /* 200px (minimap width) + 40px (gap) */
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+
+/* SaveButton position fixe - Au-dessus des Controls, aligné verticalement */
+.workflow-save-button-fixed {
+  position: fixed !important;
+  bottom: 150px !important;
+  right: 249px !important;
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+
+/* AutoSave Indicator - Mode automatique, position discrète */
+.workflow-autosave-indicator-fixed {
+  position: fixed !important;
+  bottom: 85px !important;
+  right: 15px !important;
   z-index: 4 !important;
   pointer-events: auto !important;
 }

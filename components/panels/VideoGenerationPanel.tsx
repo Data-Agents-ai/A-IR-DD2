@@ -69,6 +69,7 @@ export const VideoGenerationPanel: React.FC<VideoGenerationPanelProps> = ({
 
         const options: VideoGenerationOptions = {
             prompt: prompt.trim(),
+            mode: referenceImages.length > 0 ? 'with-references' : 'text-to-video',
             referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
             resolution,
             aspectRatio

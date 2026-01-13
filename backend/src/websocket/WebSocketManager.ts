@@ -51,7 +51,31 @@ export class WebSocketManager {
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: ["http://localhost:5173", "http://localhost:3000"],
+        origin: (origin: string, callback: (err: Error | null, allow?: boolean) => void) => {
+          if (!origin) {
+            callback(null, true);
+            return;
+          }
+          const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+          const isProduction = process.env.NODE_ENV === 'production';
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+          
+          if (isProduction) {
+            if (origin === frontendUrl) {
+              callback(null, true);
+            } else {
+              callback(new Error('Not allowed by CORS'));
+            }
+          } else {
+            if (isLocalhost) {
+              callback(null, true);
+            } else {
+              callback(new Error('Not allowed by CORS'));
+            }
+          }
+        },
+        credentials: true
+      },
         methods: ["GET", "POST"],
         credentials: true
       },

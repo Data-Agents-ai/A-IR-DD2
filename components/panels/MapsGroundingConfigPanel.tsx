@@ -15,6 +15,7 @@ interface MapsGroundingConfigPanelProps {
         mapSources: MapSource[];
         query?: string;
     };
+    hideSlideOver?: boolean;
 }
 
 /**
@@ -31,7 +32,8 @@ export const MapsGroundingConfigPanel: React.FC<MapsGroundingConfigPanelProps> =
     workflowNodes,
     llmConfigs,
     onClose,
-    preloadedResults
+    preloadedResults,
+    hideSlideOver = false
 }) => {
     const { addNodeMessage } = useRuntimeStore();
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -253,14 +255,44 @@ export const MapsGroundingConfigPanel: React.FC<MapsGroundingConfigPanelProps> =
         }
     };
 
+    // Si hideSlideOver, afficher sans le SlideOver wrapper
+    if (hideSlideOver) {
+        return (
+            <div className="w-full h-full flex flex-col bg-gray-900/50 text-white overflow-y-auto">
+                <div className="sticky top-0 z-10 bg-gradient-to-r from-cyan-900/30 to-emerald-900/30 border-b border-cyan-500/20 px-6 py-4 flex items-center justify-between flex-shrink-0">
+                    <h2 className="text-lg font-semibold flex items-center gap-2 text-cyan-300">
+                        🗺️ Maps Grounding
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-cyan-400 text-2xl leading-none transition-colors"
+                        aria-label="Close"
+                    >
+                        ×
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6">
+                    {renderSlideOverContent()}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <SlideOver
             isOpen={isOpen}
             onClose={onClose}
             title="🗺️ Maps Grounding - Configuration"
         >
-            {/* Résultats de recherche avec carte */}
-            {searchResults && searchResults.mapSources.length > 0 ? (
+            {renderSlideOverContent()}
+        </SlideOver>
+    );
+
+    function renderSlideOverContent() {
+        return (
+            <>
+                {/* Résultats de recherche avec carte */}
+                {searchResults && searchResults.mapSources.length > 0 ? (
                 <div className="space-y-4 h-full flex flex-col">
                     {/* Carte interactive */}
                     <div className="flex-shrink-0">
@@ -523,6 +555,7 @@ export const MapsGroundingConfigPanel: React.FC<MapsGroundingConfigPanelProps> =
                     </div>
                 </div>
             )}
-        </SlideOver>
-    );
+            </>
+        );
+    }
 };

@@ -11,7 +11,7 @@ export enum LLMProvider {
   Qwen = 'Qwen',
   Kimi = 'Kimi K2',
   DeepSeek = 'DeepSeek',
-  LMStudio = 'LMStudio',
+  LMStudio = 'LLM local (on premise)',
   ArcLLM = 'Arc-LLM', // Arc-LLM provider for Video, Maps, Web Grounding
 }
 
@@ -28,7 +28,6 @@ export enum LLMCapability {
   OCR = 'OCR',
   Reasoning = 'Reasoning Mode',
   CacheOptimization = 'Cache Optimization',
-  LocalDeployment = 'Local Deployment',
   CodeSpecialization = 'Code Specialization',
   // Arc-LLM specific capabilities
   VideoGeneration = 'Video Generation',
@@ -82,6 +81,30 @@ export interface OutputConfig {
   useCodestralCompletion?: boolean;
 }
 
+/**
+ * ⭐ PERSISTENCE CONFIG: Configuration granulaire de persistance par agent
+ * Définit ce qui est sauvegardé pour chaque agent individuellement
+ */
+export type MediaStorageType = 'db' | 'local' | 'cloud';
+
+export interface PersistenceConfig {
+  saveChat: boolean;             // Défaut: true - Sauvegarder les messages de chat
+  saveErrors: boolean;           // Défaut: true - Sauvegarder les erreurs rencontrées
+  saveHistorySummary: boolean;   // Défaut: false - Générer et stocker un résumé périodique (économie tokens)
+  saveLinks: boolean;            // Défaut: false - Sauvegarder les liens entre agents (placeholder)
+  saveTasks: boolean;            // Défaut: false - Sauvegarder les tâches assignées (placeholder)
+  mediaStorage: MediaStorageType; // Défaut: 'db' - GridFS, local filesystem, ou cloud storage
+}
+
+export const defaultPersistenceConfig: PersistenceConfig = {
+  saveChat: true,
+  saveErrors: true,
+  saveHistorySummary: false,
+  saveLinks: false,
+  saveTasks: false,
+  mediaStorage: 'db'
+};
+
 export interface Agent {
   id: string;
   name: string;
@@ -93,10 +116,13 @@ export interface Agent {
   historyConfig?: HistoryConfig;
   tools?: Tool[];
   outputConfig?: OutputConfig;
+  persistenceConfig?: PersistenceConfig; // ⭐ NEW: Configuration de persistance
   // V2 Governance: Robot creator validation
   creator_id: RobotId;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp
+  // V2 Workflow: Optional custom instance name when added to workflow
+  instanceName?: string;
 }
 
 // V2 Governance: Other prototype types by robot specialization
@@ -431,3 +457,65 @@ export interface WebSearchGroundingResponse {
   text: string;
   webSources: WebSearchSource[];
 }
+
+// ============================================
+// LLM Config UI Types (Phase 2 - Jalon 3)
+// ============================================
+
+/**
+ * Interface UI pour les configurations LLM
+ * Utilisée par le hook useLLMConfigs et les composants React
+ * 
+ * NOTE: En mode authentifié, les API keys sont chiffrées côté backend
+ * En mode guest (localStorage), aucun chiffrement (mode de développement)
+ */
+export interface ILLMConfigUI {
+  id: string;
+  provider: string; // 'OpenAI', 'Anthropic', 'Gemini', etc.
+  enabled: boolean;
+  capabilities: Record<string, boolean>;
+  hasApiKey: boolean; // Indicateur (jamais l'API key elle-même)
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+  // ⚠️ ONLY in localStorage mode (guest):
+  apiKeyPlaintext?: string; // Non-sécurisé, développement uniquement
+  // ⭐ J4.4.3: Optional apiKey field for compatibility with SettingsModal state
+  // In guest mode: contains actual API key
+  // In auth mode: empty string (key stored server-side)
+  apiKey?: string;
+}
+
+/**
+ * Configuration LLM enrichie avec métadonnées utilisateur
+ */
+export interface LLMConfigWithUser extends ILLMConfigUI {
+  userId: string; // Propriétaire de la config
+  lastUsedAt?: string; // Tracking usage
+}
+
+
+// ============================================
+// BACKWARD COMPATIBILITY ALIASES
+// Mapping ancien code vers V2 types
+// ============================================
+
+/** @deprecated Utiliser V2WorkflowEdge */
+export type WorkflowEdge = V2WorkflowEdge;
+
+/** Alias pour WorkflowNode ancien vers V2WorkflowNode moderne */
+export type V2_WorkflowNodeAlias = V2WorkflowNode;
+
+/**
+ * @deprecated Utiliser V2WorkflowNode[]
+ * Alias pour backward compatibility avec workflowService.ts
+ */
+export interface Workflow {
+  _id?: string;
+  name?: string;
+  description?: string;
+  nodes: V2WorkflowNode[];
+  edges: V2WorkflowEdge[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+

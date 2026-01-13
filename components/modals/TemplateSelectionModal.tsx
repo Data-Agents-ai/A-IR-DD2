@@ -188,7 +188,7 @@ export const TemplateSelectionModal: React.FC<TemplateSelectionModalProps> = ({
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <span className="text-indigo-400">📋</span>
-              Choisir un template d'agent
+              Choisir un template de prototype
             </h2>
             {robotId && (
               <p className="text-gray-400 mt-1 text-sm">Catalogue pour le robot <span className="text-indigo-400 font-semibold">{robotId}</span></p>

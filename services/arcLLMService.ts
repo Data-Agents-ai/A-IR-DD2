@@ -95,7 +95,7 @@ class ArcLLMValidator {
 
         if (options.referenceImages) {
             for (const img of options.referenceImages) {
-                if (!img.mimeType || !img.data) {
+                if (!img.image.mimeType || !img.image.data) {
                     return { valid: false, error: 'Invalid image format (missing mimeType or data)' };
                 }
             }

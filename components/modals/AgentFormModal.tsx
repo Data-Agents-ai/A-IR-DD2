@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Agent, LLMConfig, LLMProvider, LLMCapability, HistoryConfig, Tool, OutputConfig, OutputFormat, RobotId } from '../../types';
+import { Agent, LLMConfig, LLMProvider, LLMCapability, HistoryConfig, Tool, OutputConfig, OutputFormat, RobotId, PersistenceConfig, defaultPersistenceConfig } from '../../types';
 import { Button, Modal, ToggleSwitch } from '../UI';
 import { LLM_MODELS, LLM_MODELS_DETAILED, getModelCapabilities, getLMStudioMergedModels, invalidateLMStudioCache } from '../../llmModels';
 import { CloseIcon, PlusIcon } from '../Icons';
 import { useLocalization } from '../../hooks/useLocalization';
 import { validateAgentCapabilities, type CapabilityValidationResult } from '../../utils/lmStudioCapabilityValidator';
 import { useLMStudioDetection } from '../../hooks/useLMStudioDetection';
+import { AgentPersistenceForm } from './AgentPersistenceForm';
 
 interface AgentFormModalProps {
   onClose: () => void;
@@ -112,13 +113,18 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       llmProvider: enabledLLMProvider,
       model: availableModels.length > 0 ? availableModels[0] : '',
     };
-  }); const [activeTab, setActiveTab] = useState<'description' | 'historique' | 'fonctions' | 'formatage'>('description');
+  }); 
+  const [activeTab, setActiveTab] = useState<'description' | 'historique' | 'fonctions' | 'formatage' | 'persistance'>('description');
   const [schemaErrors, setSchemaErrors] = useState<Record<string, string | null>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [lmStudioValidation, setLmStudioValidation] = useState<CapabilityValidationResult | null>(null);
   const [capabilitiesExpanded, setCapabilitiesExpanded] = useState(false);
   const [lmStudioDynamicModels, setLmStudioDynamicModels] = useState<any[]>([]);
   const [isLoadingLMStudioModels, setIsLoadingLMStudioModels] = useState(false);
+  // ⭐ NEW: État pour la configuration de persistance
+  const [persistenceConfig, setPersistenceConfig] = useState<PersistenceConfig>(
+    existingAgent?.persistenceConfig || defaultPersistenceConfig
+  );
   const isEditing = !!existingAgent;
 
   // Jalon 3: Hook de détection LMStudio avec auto-refresh
@@ -147,18 +153,15 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       getLMStudioMergedModels(lmStudioEndpoint)
         .then(models => {
           setLmStudioDynamicModels(models);
-          console.log(`[AgentFormModal] Loaded ${models.length} LMStudio models (${models.filter(m => m.isDynamic).length} dynamic)`);
 
           // Point 1: Auto-sélection du modèle détecté si disponible
           if (lmStudioDetection?.modelId) {
             const detectedModel = models.find(m => m.id === lmStudioDetection.modelId);
             if (detectedModel) {
               setModel(detectedModel.id);
-              console.log(`[AgentFormModal] Auto-selected detected model: ${detectedModel.id}`);
 
               // Auto-activer les capacités détectées
               setSelectedCapabilities(lmStudioDetection.capabilities);
-              console.log(`[AgentFormModal] Auto-enabled capabilities:`, lmStudioDetection.capabilities);
               return;
             }
           }
@@ -166,11 +169,9 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
           // Fallback: Auto-sélectionner le premier modèle si aucun modèle n'est sélectionné
           if (!model && models.length > 0) {
             setModel(models[0].id);
-            console.log(`[AgentFormModal] Auto-selected first model: ${models[0].id}`);
           }
         })
         .catch(error => {
-          console.warn('[AgentFormModal] Failed to load LMStudio models:', error);
           setLmStudioDynamicModels([]);
         })
         .finally(() => setIsLoadingLMStudioModels(false));
@@ -179,26 +180,43 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     }
   }, [llmProvider, lmStudioEndpoint, lmStudioDetection]);
 
+  // Helper function to convert capability strings to LLMCapability enum
+  const stringToCapability = (str: string): LLMCapability | null => {
+    const enumValue = Object.values(LLMCapability).find(v => v === str);
+    return enumValue as LLMCapability || null;
+  };
+
+  // Helper function to get label from capability string
+  const getCapabilityLabel = (str: string): string => {
+    const capMap: Record<string, string> = {
+      'Chat': 'Chat',
+      'Function Calling': 'Appel de Fonction',
+      'Embedding': 'Embedding',
+      'Output Formatting': 'Output Formatting',
+      'Vision': 'Vision',
+      'Thinking': 'Thinking (Réflexion)'
+    };
+    return capMap[str] || str;
+  };
+
   // Helper function to get available capabilities for a provider (must be after lmStudioDetection)
   // Wrapped in useCallback to prevent infinite loops in useEffect dependencies
   const getAvailableCapabilities = React.useCallback((provider: LLMProvider, selectedModel?: string): LLMCapability[] => {
     const config = llmConfigs.find(c => c.provider === provider && c.enabled);
     if (!config) {
-      console.log('[AgentFormModal] getAvailableCapabilities - provider not enabled:', provider);
       return []; // Return empty array if provider not configured
     }
 
     // PRIORITÉ 1: Pour LMStudio, utiliser les capacités détectées dynamiquement si disponibles
     if (provider === LLMProvider.LMStudio && lmStudioDetection?.capabilities) {
-      console.log('[AgentFormModal] Using dynamically detected capabilities for LMStudio:', lmStudioDetection.capabilities);
-      return lmStudioDetection.capabilities;
+      const detectedCaps = lmStudioDetection.capabilities.filter((cap): cap is LLMCapability => cap !== undefined && cap !== null);
+      return detectedCaps;
     }
 
     // PRIORITÉ 2: If a specific model is selected, use its capabilities from LLM_MODELS_DETAILED
     if (selectedModel) {
       const modelCapabilities = getModelCapabilities(provider, selectedModel);
       if (modelCapabilities.length > 0) {
-        console.log(`[AgentFormModal] Using model capabilities for ${provider}/${selectedModel}:`, modelCapabilities);
         return modelCapabilities;
       }
     }
@@ -207,7 +225,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
     const caps = Object.keys(config.capabilities)
       .filter(cap => config.capabilities[cap as LLMCapability])
       .map(cap => cap as LLMCapability);
-    console.log(`[AgentFormModal] Using config capabilities for ${provider}:`, caps);
     return caps;
   }, [llmConfigs, lmStudioDetection]);
 
@@ -376,6 +393,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
       historyConfig,
       tools,
       outputConfig,
+      persistenceConfig, // ⭐ NEW: Include persistence configuration
       creator_id: existingAgent?.creator_id || RobotId.Archi, // Default to Archi for new agents
       created_at: existingAgent?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -393,11 +411,18 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
         </div>
 
         <div className="border-b border-gray-700">
-          <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+          <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
             <button type="button" onClick={() => setActiveTab('description')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'description' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('agentForm_tab_description')}</button>
             <button type="button" onClick={() => setActiveTab('historique')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'historique' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('agentForm_tab_history')}</button>
             {selectedCapabilities.includes(LLMCapability.FunctionCalling) && <button type="button" onClick={() => setActiveTab('fonctions')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'fonctions' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('agentForm_tab_functions')}</button>}
             {selectedCapabilities.includes(LLMCapability.OutputFormatting) && <button type="button" onClick={() => setActiveTab('formatage')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'formatage' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>{t('agentForm_tab_formatting')}</button>}
+            {/* ⭐ NEW: Onglet Options de sauvegarde */}
+            <button type="button" onClick={() => setActiveTab('persistance')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-1.5 ${activeTab === 'persistance' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+              </svg>
+              Sauvegarde
+            </button>
           </nav>
         </div>
 
@@ -482,7 +507,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                                 llmProvider === LLMProvider.Anthropic ? 'bg-orange-500/20 text-orange-200 border-orange-400/30' :
                                   'bg-gray-500/20 text-gray-200 border-gray-400/30'
                             }`}>
-                            {cap}
+                            {typeof cap === 'string' ? getCapabilityLabel(cap) : LLMCapability[cap]}
                           </span>
                         ))}
                       </div>
@@ -587,7 +612,6 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                             {cap === LLMCapability.Embedding && '🧮 Embeddings'}
                             {cap === LLMCapability.ImageGeneration && '🎨 Images'}
                             {cap === LLMCapability.OCR && '🎵 Audio'}
-                            {cap === LLMCapability.LocalDeployment && '🔌 Local'}
                             {cap === LLMCapability.CodeSpecialization && '💻 Code'}
                             {cap === LLMCapability.ExtendedThinking && '💭 Extended Thinking'}
                             {cap === LLMCapability.PDFSupport && '📄 PDF Support'}
@@ -690,7 +714,7 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
                           className="h-4 w-4 rounded border-gray-500 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
                         />
                         <span className="ml-3 text-sm text-gray-300">
-                          {cap}
+                          {typeof cap === 'string' ? getCapabilityLabel(cap) : LLMCapability[cap]}
                         </span>
                       </label>
                     ))}
@@ -818,6 +842,14 @@ export const AgentFormModal = ({ onClose, onSave, llmConfigs, existingAgent }: A
               <p className="text-xs text-gray-400 pt-2">{t('agentForm_functions_pythonNote')}</p>
               <Button type="button" variant="secondary" onClick={addTool} className="flex items-center gap-2"><PlusIcon /> {t('agentForm_functions_addTool')}</Button>
             </div>
+          )}
+          
+          {/* ⭐ NEW: Onglet Options de sauvegarde (Persistance) */}
+          {activeTab === 'persistance' && (
+            <AgentPersistenceForm
+              config={persistenceConfig}
+              onChange={setPersistenceConfig}
+            />
           )}
         </div>
 

@@ -1,25 +1,34 @@
 // services/routeDetectionService.ts
-// Jalon 1: Détection Dynamique des Routes LMStudio
-// Architecture: Strategy Pattern + Cache Pattern
-// MIGRATION JALON 4: Utilise le backend proxy au lieu d'appeler LMStudio directement
+// JALON 5: Détection Simplifiée des Capacités LLM Locaux
+// Architecture: Option C Hybride - appel unique au backend proxy
+// SOLID: SRP - ce service délègue toute la détection au backend
 
-import { LMStudioRoutes, LMStudioModelDetection, LLMCapability } from '../types';
-import { buildLMStudioProxyUrl } from '../config/api.config';
+import { LLMCapability } from '../types';
+import { getBackendUrl } from '../config/api.config';
 
-// ============================================================================
-// CACHE SYSTEM (TTL 5 minutes)
-// ============================================================================
+interface DetectionResult {
+    healthy: boolean;
+    endpoint: string;
+    modelId?: string;
+    modelName?: string;
+    capabilities: LLMCapability[];
+    detectedAt: string;
+    error?: string;
+}
 
 interface CacheEntry {
-    data: LMStudioModelDetection;
+    data: DetectionResult;
     timestamp: number;
 }
 
-class RouteDetectionCache {
+/**
+ * Cache simple (TTL 5 minutes)
+ */
+class DetectionCache {
     private cache = new Map<string, CacheEntry>();
     private TTL = 5 * 60 * 1000; // 5 minutes
 
-    get(endpoint: string): LMStudioModelDetection | null {
+    get(endpoint: string): DetectionResult | null {
         const entry = this.cache.get(endpoint);
         if (!entry || Date.now() - entry.timestamp > this.TTL) {
             this.cache.delete(endpoint);
@@ -28,7 +37,7 @@ class RouteDetectionCache {
         return entry.data;
     }
 
-    set(endpoint: string, data: LMStudioModelDetection): void {
+    set(endpoint: string, data: DetectionResult): void {
         this.cache.set(endpoint, { data, timestamp: Date.now() });
     }
 
@@ -45,486 +54,107 @@ class RouteDetectionCache {
     }
 }
 
-const detectionCache = new RouteDetectionCache();
-
-// ============================================================================
-// ROUTE DETECTION STRATEGIES
-// ============================================================================
-
-interface RouteTestConfig {
-    endpoint: string;
-    method: 'GET' | 'POST';
-    testPayload?: any;
-}
-
-const routeConfigs: Record<keyof LMStudioRoutes, RouteTestConfig> = {
-    models: {
-        endpoint: '/v1/models',
-        method: 'GET'
-    },
-    chatCompletions: {
-        endpoint: '/v1/chat/completions',
-        method: 'POST',
-        testPayload: {
-            model: 'test',
-            messages: [{ role: 'user', content: 'test' }],
-            max_tokens: 1
-        }
-    },
-    completions: {
-        endpoint: '/v1/completions',
-        method: 'POST',
-        testPayload: {
-            model: 'test',
-            prompt: 'test',
-            max_tokens: 1
-        }
-    },
-    embeddings: {
-        endpoint: '/v1/embeddings',
-        method: 'POST',
-        testPayload: {
-            model: 'test',
-            input: 'test'
-        }
-    },
-    images: {
-        endpoint: '/v1/images/generations',
-        method: 'POST',
-        testPayload: {
-            prompt: 'test',
-            n: 1,
-            size: '256x256'
-        }
-    },
-    audio: {
-        endpoint: '/v1/audio/transcriptions',
-        method: 'POST',
-        testPayload: {
-            model: 'test',
-            file: 'test.wav'
-        }
-    }
-};
-
-// ============================================================================
-// HTTP ROUTE DETECTION (VIA BACKEND PROXY)
-// ============================================================================
+const detectionCache = new DetectionCache();
 
 /**
- * Test si une route HTTP est disponible VIA BACKEND PROXY
- * MIGRATION JALON 4: TOUS les appels passent par le backend proxy pour éviter CORS
+ * Point d'entrée unique pour la détection de capacités LLM locaux
  * 
- * IMPORTANT: Ne JAMAIS appeler directement http://localhost:1234 depuis le frontend
- * → Toujours passer par http://localhost:3001/api/lmstudio/...
+ * Flux:
+ * 1. Vérifier le cache local (TTL 5 min)
+ * 2. Appeler le backend proxy /api/local-llm/detect-capabilities
+ * 3. Mettre en cache le résultat
+ * 4. Retourner
  * 
- * @param baseEndpoint - Endpoint LMStudio (ex: http://localhost:1234)
- * @param config - Configuration de test de la route
- * @param modelId - ID du modèle réel détecté (ex: 'mistral-7b-instruct-v0.2')
+ * Architecture SOLID: SRP
+ * - Backend: teste réellement les capacités (logic complexe)
+ * - Frontend: stocke config et appelle directement LLM local à runtime
  */
-async function testRoute(baseEndpoint: string, config: RouteTestConfig, modelId?: string): Promise<boolean> {
+export async function detectLocalLLMCapabilities(endpoint: string): Promise<DetectionResult> {
     try {
-        // TOUS les tests de routes passent maintenant par le backend proxy
-        // Le backend fait les appels directs vers LMStudio (localhost autorisé côté serveur)
-
-        if (config.endpoint === '/v1/models') {
-            // Route models: GET /api/lmstudio/models?endpoint=http://localhost:1234
-            const proxyUrl = buildLMStudioProxyUrl('models', baseEndpoint);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            const response = await fetch(proxyUrl, {
-                method: 'GET',
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-            return response.ok;
+        // Étape 1: Vérifier cache
+        const cached = detectionCache.get(endpoint);
+        if (cached) {
+            console.log(`[LocalLLMDetection] Cache hit for ${endpoint}`);
+            return cached;
         }
 
-        // Pour les autres routes (chat, embeddings, etc.), on utilise aussi le proxy
-        // Le backend route vers LMStudio en interne
-        if (config.endpoint === '/v1/chat/completions') {
-            const proxyUrl = buildLMStudioProxyUrl('chat', baseEndpoint);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+        console.log(`[LocalLLMDetection] Starting detection for endpoint: ${endpoint}`);
 
-            // Utiliser le vrai modèle détecté au lieu de 'test'
-            const payload = {
-                ...config.testPayload,
-                model: modelId || config.testPayload.model,
-                stream: false
-            };
-
-            const response = await fetch(proxyUrl, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            clearTimeout(timeoutId);
-            return response.status !== 404;
-        }
-
-        // Routes embeddings et completions maintenant supportées
-        if (config.endpoint === '/v1/embeddings') {
-            const proxyUrl = `${BACKEND_URL}/api/lmstudio/embeddings?endpoint=${encodeURIComponent(baseEndpoint)}`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            const response = await fetch(proxyUrl, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: baseEndpoint,
-                    model: modelId || 'test',
-                    input: 'test'
-                })
-            });
-
-            clearTimeout(timeoutId);
-            return response.ok;
-        }
-
-        if (config.endpoint === '/v1/completions') {
-            const proxyUrl = `${BACKEND_URL}/api/lmstudio/completions?endpoint=${encodeURIComponent(baseEndpoint)}`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            const response = await fetch(proxyUrl, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: baseEndpoint,
-                    model: modelId || 'test',
-                    prompt: 'test'
-                })
-            });
-
-            clearTimeout(timeoutId);
-            return response.ok;
-        }
-
-        // Pour les routes non supportées (images, audio), on retourne false
-        console.warn(`[RouteDetection] Route ${config.endpoint} not supported, marking as unavailable`);
-        return false;
-
-    } catch (error: any) {
-        // Timeout ou erreur réseau = route probablement non disponible
-        if (error.name === 'AbortError') {
-            console.warn(`[RouteDetection] Timeout testing ${config.endpoint}`);
-        }
-        return false;
-    }
-}
-
-/**
- * Détecte toutes les routes HTTP disponibles sur l'endpoint LMStudio
- * @param endpoint - Endpoint LMStudio
- * @param modelId - ID du modèle réel détecté (optionnel, améliore les tests)
- */
-export async function detectAvailableRoutes(endpoint: string, modelId?: string): Promise<LMStudioRoutes> {
-    const routes: LMStudioRoutes = {
-        models: false,
-        chatCompletions: false,
-        completions: false,
-        embeddings: false,
-        images: false,
-        audio: false
-    };
-
-    console.log(`[RouteDetection] Testing routes with model: ${modelId || 'test'}`);
-
-    // Test toutes les routes en parallèle pour performance
-    const routeTests = Object.entries(routeConfigs).map(async ([routeName, config]) => {
-        const available = await testRoute(endpoint, config, modelId);
-        return { routeName: routeName as keyof LMStudioRoutes, available };
-    });
-
-    const results = await Promise.all(routeTests);
-
-    // Agréger résultats
-    results.forEach(({ routeName, available }) => {
-        routes[routeName] = available;
-    });
-
-    return routes;
-}
-
-// ============================================================================
-// ADVANCED CAPABILITIES TESTING
-// ============================================================================
-
-/**
- * Test si le modèle supporte Function Calling (paramètre tools)
- * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
- * 
- * DÉSACTIVÉ TEMPORAIREMENT: Certains modèles (Mistral v0.2) rejettent les messages
- * avec des paramètres avancés. On assume Function Calling disponible par défaut.
- * 
- * ⚠️ LIMITATION CONNUE: Même si cette détection retourne true, certains modèles
- * locaux (ex: mistral-7b-instruct-v0.2 dans LMStudio) N'IMPLÉMENTENT PAS réellement
- * le function calling. Ils acceptent le paramètre 'tools' mais ne retournent jamais
- * de 'tool_calls' dans la réponse. Pour un vrai support function calling, utilisez:
- * - L'API officielle Mistral (cloud)
- * - Des modèles spécialement entraînés pour function calling (ex: Hermes, functionary)
- * - OpenAI/Gemini qui supportent nativement function calling
- */
-export async function testFunctionCalling(endpoint: string, modelName: string): Promise<boolean> {
-    // WORKAROUND: Retourner true par défaut pour éviter erreurs 500 avec Mistral
-    // Note: true signifie "accepte le paramètre tools" pas "utilise réellement function calling"
-    console.log(`[RouteDetection] Assuming function calling support for ${modelName} (test skipped)`);
-    return true;
-
-    /* Test désactivé temporairement - cause erreur 500 avec Mistral v0.2
-    try {
-        const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        // Étape 2: Appeler le backend proxy unique
+        const proxyUrl = `${getBackendUrl()}/api/local-llm/detect-capabilities?endpoint=${encodeURIComponent(endpoint)}`;
+        console.log(`[LocalLLMDetection] Calling backend proxy: ${proxyUrl}`);
 
         const response = await fetch(proxyUrl, {
-            method: 'POST',
-            signal: controller.signal,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [{ role: 'user', content: 'test' }],
-                tools: [{
-                    type: 'function',
-                    function: {
-                        name: 'test_tool',
-                        description: 'Test',
-                        parameters: { type: 'object', properties: {} }
-                    }
-                }],
-                max_tokens: 1,
-                stream: false
-            })
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            signal: AbortSignal.timeout(15000) // 15s timeout pour tous les tests
         });
-
-        clearTimeout(timeoutId);
-
-        if (response.status === 400) {
-            const text = await response.text().catch(() => '');
-            return !text.toLowerCase().includes('tool');
-        }
-        return response.ok;
-
-    } catch (error) {
-        return false;
-    }
-    */
-}
-
-/**
- * Test si le modèle supporte JSON Mode (paramètre response_format)
- * MIGRATION JALON 4: Passe par le backend proxy au lieu d'appeler LMStudio directement
- * 
- * DÉSACTIVÉ TEMPORAIREMENT: Certains modèles (Mistral v0.2) ont des templates jinja
- * qui rejettent certains paramètres. On assume OutputFormatting disponible par défaut.
- */
-export async function testJsonMode(endpoint: string, modelName: string): Promise<boolean> {
-    // WORKAROUND: Retourner true par défaut pour éviter erreurs 500 avec Mistral
-    // Les modèles récents supportent généralement JSON mode
-    console.log(`[RouteDetection] Assuming JSON mode support for ${modelName} (test skipped)`);
-    return true;
-
-    /* Test désactivé temporairement - cause erreur 500 avec Mistral v0.2
-    try {
-        const proxyUrl = buildLMStudioProxyUrl('chat', endpoint);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        let response = await fetch(proxyUrl, {
-            method: 'POST',
-            signal: controller.signal,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [{ role: 'user', content: 'test' }],
-                response_format: { type: 'json_schema', json_schema: { name: 'test', schema: { type: 'object' } } },
-                max_tokens: 1,
-                stream: false
-            })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok || response.status !== 400) {
-            return true;
-        }
-
-        const text = await response.text().catch(() => '');
-        if (text.includes('json_schema') || text.includes('response_format')) {
-            return false;
-        }
-
-        return false;
-
-    } catch (error) {
-        return false;
-    }
-    */
-}
-
-// ============================================================================
-// ROUTE → CAPABILITY MAPPING
-// ============================================================================
-
-/**
- * Convertit les routes détectées en capacités A-IR-DD2
- */
-export async function routesToCapabilities(
-    routes: LMStudioRoutes,
-    modelName: string,
-    endpoint: string
-): Promise<LLMCapability[]> {
-    const capabilities: LLMCapability[] = [];
-
-    // Chat + Streaming (route principale)
-    if (routes.chatCompletions) {
-        capabilities.push(LLMCapability.Chat);
-        // LMStudio supporte streaming par défaut sur chat completions
-        // (Note: pas de LLMCapability.Streaming dans l'enum actuel)
-    }
-
-    // Embeddings
-    if (routes.embeddings) {
-        capabilities.push(LLMCapability.Embedding);
-    }
-
-    // Image Generation
-    if (routes.images) {
-        capabilities.push(LLMCapability.ImageGeneration);
-    }
-
-    // Audio Transcription → OCR (approximation)
-    if (routes.audio) {
-        capabilities.push(LLMCapability.OCR);
-    }
-
-    // Tests capacités avancées (seulement si chat disponible)
-    if (routes.chatCompletions) {
-        try {
-            const [hasFunctionCalling, hasJsonMode] = await Promise.all([
-                testFunctionCalling(endpoint, modelName),
-                testJsonMode(endpoint, modelName)
-            ]);
-
-            if (hasFunctionCalling) {
-                capabilities.push(LLMCapability.FunctionCalling);
-            }
-
-            if (hasJsonMode) {
-                capabilities.push(LLMCapability.OutputFormatting);
-            }
-        } catch (error) {
-            console.warn('[RouteDetection] Advanced capability tests failed, using basic capabilities only:', error);
-            // Continue with basic capabilities only (Chat, Embeddings, LocalDeployment)
-        }
-    }
-
-    // Local Deployment (toujours vrai pour LMStudio)
-    capabilities.push(LLMCapability.LocalDeployment);
-
-    return capabilities;
-}
-
-// ============================================================================
-// MAIN DETECTION FUNCTION (avec cache)
-// ============================================================================
-
-/**
- * Détection complète d'un modèle LMStudio avec cache
- * Point d'entrée principal du service
- * MIGRATION JALON 4: Utilise le backend proxy /api/lmstudio/detect-endpoint
- */
-export async function detectLMStudioModel(endpoint: string): Promise<LMStudioModelDetection> {
-    // Vérifier cache
-    const cached = detectionCache.get(endpoint);
-    if (cached) {
-        console.log(`[RouteDetection] Cache hit for ${endpoint}`);
-        return cached;
-    }
-
-    console.log(`[RouteDetection] Starting detection via backend proxy for ${endpoint}`);
-
-    try {
-        // Appeler le backend proxy pour détecter l'endpoint LMStudio
-        const proxyUrl = buildLMStudioProxyUrl('detectEndpoint');
-        console.log(`[RouteDetection] Calling backend proxy: ${proxyUrl}`);
-
-        const response = await fetch(proxyUrl, {
-            signal: AbortSignal.timeout(10000) // Augmenté à 10s pour détection multi-endpoints
-        });
-
-        console.log(`[RouteDetection] Backend response status: ${response.status}`);
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => response.statusText);
-            throw new Error(`Backend proxy returned ${response.status}: ${errorText}`);
+            console.error(`[LocalLLMDetection] Backend returned ${response.status}: ${errorText}`);
+            
+            // Même en cas d'erreur, retourner un résultat structuré
+            return {
+                healthy: false,
+                endpoint,
+                capabilities: [],
+                detectedAt: new Date().toISOString(),
+                error: `Backend error: ${response.status}`
+            };
         }
 
-        const data = await response.json();
-        console.log('[RouteDetection] Backend response data:', data);
+        const result: DetectionResult = await response.json();
 
-        if (!data.healthy) {
-            throw new Error(data.error || 'LMStudio not available');
-        }
+        // Étape 3: Mettre en cache
+        detectionCache.set(endpoint, result);
 
-        // Récupérer le premier modèle disponible
-        const modelId = data.models && data.models.length > 0 ? data.models[0] : 'unknown';
-        console.log(`[RouteDetection] Using detected model for route tests: ${modelId}`);
-
-        // Détecter routes disponibles (via backend proxy) avec le vrai modèle
-        const routes = await detectAvailableRoutes(endpoint, modelId);
-
-        // Détecter capacités
-        const capabilities = await routesToCapabilities(routes, modelId, endpoint);
-
-        // Construire résultat
-        const detection: LMStudioModelDetection = {
-            modelId,
-            routes,
-            capabilities,
-            detectedAt: new Date().toISOString()
-        };
-
-        // Mettre en cache
-        detectionCache.set(endpoint, detection);
-
-        console.log(`[RouteDetection] Detection complete via backend proxy for ${endpoint}:`, {
-            modelId,
-            routesCount: Object.values(routes).filter(Boolean).length,
-            capabilitiesCount: capabilities.length
+        console.log(`[LocalLLMDetection] Detection complete for ${endpoint}:`, {
+            healthy: result.healthy,
+            modelId: result.modelId,
+            capabilitiesCount: result.capabilities.length
         });
 
-        return detection;
+        return result;
 
     } catch (error) {
-        console.error(`[RouteDetection] Detection failed for ${endpoint}:`, error);
-        throw error;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[LocalLLMDetection] Detection failed for ${endpoint}:`, errorMsg);
+
+        // Retourner un résultat structuré même en cas d'erreur réseau
+        return {
+            healthy: false,
+            endpoint,
+            capabilities: [],
+            detectedAt: new Date().toISOString(),
+            error: errorMsg
+        };
     }
 }
 
-// ============================================================================
-// CACHE MANAGEMENT
-// ============================================================================
-
 /**
- * Invalide le cache pour un endpoint spécifique ou tous les endpoints
+ * Alias pour compatibilité avec routeDetectionService existant
  */
-export function invalidateCache(endpoint?: string): void {
-    detectionCache.invalidate(endpoint);
-    console.log(`[RouteDetection] Cache invalidated${endpoint ? ` for ${endpoint}` : ' (all)'}`);
+export async function detectLMStudioModel(endpoint: string): Promise<DetectionResult | null> {
+    const result = await detectLocalLLMCapabilities(endpoint);
+    return result;
 }
 
 /**
- * Retourne la taille actuelle du cache
+ * Invalide le cache
+ */
+export function invalidateCache(endpoint?: string): void {
+    detectionCache.invalidate(endpoint);
+    console.log(`[LocalLLMDetection] Cache invalidated${endpoint ? ` for ${endpoint}` : ' (all)'}`);
+}
+
+/**
+ * Taille du cache
  */
 export function getCacheSize(): number {
     return detectionCache.size();
 }
+
+export type { DetectionResult };

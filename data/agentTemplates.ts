@@ -106,7 +106,7 @@ const getProviderCapabilities = (provider: LLMProvider): LLMCapability[] => {
     [LLMProvider.Perplexity]: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.WebSearch],
     [LLMProvider.Qwen]: [LLMCapability.Chat, LLMCapability.FileUpload, LLMCapability.FunctionCalling],
     [LLMProvider.Kimi]: [LLMCapability.Chat, LLMCapability.FunctionCalling],
-    [LLMProvider.LMStudio]: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+    [LLMProvider.LMStudio]: [LLMCapability.Chat, LLMCapability.FunctionCalling],
     [LLMProvider.ArcLLM]: [LLMCapability.VideoGeneration, LLMCapability.MapsGrounding, LLMCapability.WebSearchGrounding]
   };
 

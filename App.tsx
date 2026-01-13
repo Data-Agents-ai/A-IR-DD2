@@ -5,6 +5,9 @@ import { RobotPageRouter } from './components/RobotPageRouter';
 import { AgentFormModal } from './components/modals/AgentFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { Header } from './components/Header';
+import { GUEST_STORAGE_KEYS } from './utils/guestDataUtils';
+import { LoginModal } from './components/modals/LoginModal';
+import { RegisterModal } from './components/modals/RegisterModal';
 import { ImageGenerationPanel } from './components/panels/ImageGenerationPanel';
 import { ImageModificationPanel } from './components/panels/ImageModificationPanel';
 import { VideoGenerationConfigPanel } from './components/panels/VideoGenerationConfigPanel';
@@ -16,11 +19,21 @@ import { FullscreenChatModal } from './components/modals/FullscreenChatModal';
 import { AgentConfigurationModal } from './components/modals/AgentConfigurationModal';
 import { useRuntimeStore } from './stores/useRuntimeStore';
 import { useDesignStore } from './stores/useDesignStore';
-import { NotificationProvider } from './contexts/NotificationContext';
+import { useWorkflowStore } from './stores/useWorkflowStore';
+import { NotificationProvider } from './contexts';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationDisplay } from './components/NotificationDisplay';
+import { QueryProvider } from './providers';
+import { getSettingsStorage } from './utils/SettingsStorage';
+// ⭐ ÉTAPE 5: Import HydrationOverlay for loading state
+import { HydrationOverlay } from './components/HydrationOverlay';
+// ⭐ UX Polish: Import HyperspaceReveal for guest entry animation
+import { HyperspaceReveal } from './components/HyperspaceReveal';
+// ⭐ AUTO-SAVE: Import PersistenceService for immediate instance creation
+import { PersistenceService } from './services/persistenceService';
 
-
-const LLM_CONFIGS_KEY = 'llmAgentWorkflow_configs';
+// ⭐ J4.4: Use the key from guestDataUtils to ensure consistency with wipeGuestData()
+const LLM_CONFIGS_KEY = GUEST_STORAGE_KEYS.LLM_CONFIGS;
 
 interface EditingImageInfo {
   nodeId: string;
@@ -28,8 +41,11 @@ interface EditingImageInfo {
   mimeType: string;
 }
 
+// ⭐ CRITICAL FIX: ALL providers start disabled by default
+// Only providers saved in the database (with API keys) will be enabled
+// This prevents Gemini from always appearing when user hasn't configured it
 const initialLLMConfigs: LLMConfig[] = [
-  { provider: LLMProvider.Gemini, enabled: true, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.ImageModification]: true, [LLMCapability.WebSearch]: true, [LLMCapability.URLAnalysis]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.VideoGeneration]: true, [LLMCapability.MapsGrounding]: true, [LLMCapability.WebSearchGrounding]: true } },
+  { provider: LLMProvider.Gemini, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.ImageModification]: true, [LLMCapability.WebSearch]: true, [LLMCapability.URLAnalysis]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.VideoGeneration]: true, [LLMCapability.MapsGrounding]: true, [LLMCapability.WebSearchGrounding]: true } },
   { provider: LLMProvider.OpenAI, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
   { provider: LLMProvider.Mistral, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Embedding]: true, [LLMCapability.OCR]: true } },
   { provider: LLMProvider.Anthropic, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
@@ -38,27 +54,37 @@ const initialLLMConfigs: LLMConfig[] = [
   { provider: LLMProvider.Qwen, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
   { provider: LLMProvider.Kimi, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
   { provider: LLMProvider.DeepSeek, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Reasoning]: true, [LLMCapability.CacheOptimization]: true } },
-  { provider: LLMProvider.LMStudio, enabled: false, apiKey: 'http://localhost:3928', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Embedding]: false, [LLMCapability.LocalDeployment]: true, [LLMCapability.CodeSpecialization]: false } },
+  { provider: LLMProvider.LMStudio, enabled: false, apiKey: 'http://localhost:3928', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Embedding]: false, [LLMCapability.CodeSpecialization]: false } },
 ];
 
-const loadLLMConfigs = (): LLMConfig[] => {
+const loadLLMConfigs = (isAuthenticated: boolean = false, accessToken: string | null = null): LLMConfig[] => {
   try {
-    const storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
+    // ⭐ J4.4 CRITICAL: Guest-only fallback
+    // Authenticated users get configs from AuthContext.llmApiKeys (fetched at login)
+    // This localStorage ONLY for guest mode
+    
+    if (isAuthenticated && accessToken) {
+      // Authenticated mode: IGNORE localStorage, use llmApiKeys from AuthContext
+      // Return defaults here, real configs merged via useEffect when llmApiKeys loads
+      return initialLLMConfigs;
+    }
+    
+    // Guest mode: Load from localStorage
+    // ⭐ J4.5: Try new key first, then legacy key for backward compatibility
+    let storedConfigsJSON = localStorage.getItem(LLM_CONFIGS_KEY);
     if (!storedConfigsJSON) {
-      console.log('[App] No stored configs, using defaults');
+      // Try legacy key
+      storedConfigsJSON = localStorage.getItem(GUEST_STORAGE_KEYS.LLM_CONFIGS_LEGACY);
+      if (storedConfigsJSON) {
+        localStorage.setItem(LLM_CONFIGS_KEY, storedConfigsJSON);
+      }
+    }
+    if (!storedConfigsJSON) {
       return initialLLMConfigs;
     }
 
-    const storedConfigs = JSON.parse(storedConfigsJSON) as LLMConfig[];
+    const storedConfigs = JSON.parse(storedConfigsJSON) as any[];
     const storedProviders = new Map(storedConfigs.map(c => [c.provider, c]));
-
-    // DEBUG: Log LMStudio config loaded from localStorage
-    const lmStudioStored = storedConfigs.find(c => c.provider === LLMProvider.LMStudio);
-    console.log('[App] LMStudio config loaded from localStorage:', {
-      enabled: lmStudioStored?.enabled,
-      endpoint: lmStudioStored?.apiKey,
-      capabilities: lmStudioStored?.capabilities
-    });
 
     const syncedConfigs = initialLLMConfigs.map(initialConfig => {
       const storedConfig = storedProviders.get(initialConfig.provider);
@@ -67,24 +93,27 @@ const loadLLMConfigs = (): LLMConfig[] => {
         return initialConfig; // No user settings for this provider, use default.
       }
 
-      // Sync capabilities: Use initialConfig as the source of truth for which capabilities exist.
-      // Use storedConfig for the user's enabled/disabled preference.
+      // Sync capabilities
       const syncedCapabilities: { [key in LLMCapability]?: boolean } = {};
       for (const capKey in initialConfig.capabilities) {
         const cap = capKey as LLMCapability;
-        // If the user has a stored preference for this valid capability, use it. Otherwise, use the default.
-        if (storedConfig.capabilities[cap] !== undefined) {
+        if (storedConfig.capabilities && storedConfig.capabilities[cap] !== undefined) {
           syncedCapabilities[cap] = storedConfig.capabilities[cap];
         } else {
           syncedCapabilities[cap] = initialConfig.capabilities[cap];
         }
       }
 
-      // Merge: Start with the default, override with stored general settings, then add the synced capabilities.
+      // ⭐ J4.4.3 FIX: Support both LLMConfig format (apiKey) and ILLMConfigUI format (apiKeyPlaintext)
+      // llmConfigService stores as ILLMConfigUI with apiKeyPlaintext for guest mode
+      // Legacy code stored as LLMConfig with apiKey
+      const apiKey = storedConfig.apiKey || storedConfig.apiKeyPlaintext || '';
+
+      // Merge
       return {
         ...initialConfig,
         enabled: storedConfig.enabled,
-        apiKey: storedConfig.apiKey,
+        apiKey: apiKey,
         capabilities: syncedCapabilities,
       };
     });
@@ -92,8 +121,7 @@ const loadLLMConfigs = (): LLMConfig[] => {
     return syncedConfigs;
 
   } catch (error) {
-    console.error("Failed to load or sync LLM configs from localStorage", error);
-    // On failure, return the default to prevent a crash.
+    console.error("Failed to load LLM configs from localStorage", error);
     return initialLLMConfigs;
   }
 };
@@ -110,10 +138,19 @@ interface UpdateConfirmationState {
   count: number;
 }
 
+// ⭐ ÉTAPE 5: API URL for workspace hydration
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-function App() {
+/**
+ * Inner App component that uses Auth context
+ * Must be wrapped by AuthProvider to access useAuth()
+ */
+function AppContent() {
+  const { isAuthenticated, accessToken, llmApiKeys, user, logout } = useAuth();
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isAgentModalOpen, setAgentModalOpen] = useState(false);
+  const [isLoginModalOpen, setLoginModalOpen] = useState(false);
+  const [isRegisterModalOpen, setRegisterModalOpen] = useState(false);
   const [isImagePanelOpen, setImagePanelOpen] = useState(false);
   const [isImageModificationPanelOpen, setImageModificationPanelOpen] = useState(false);
   const [isVideoPanelOpen, setVideoPanelOpen] = useState(false);
@@ -122,7 +159,8 @@ function App() {
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [workflowNodes, setWorkflowNodes] = useState<WorkflowNode[]>([]);
-  const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>(loadLLMConfigs);
+  // ⭐ J4.4: Start with defaults - will be reloaded on first auth change
+  const [llmConfigs, setLlmConfigs] = useState<LLMConfig[]>(initialLLMConfigs);
   const [currentImageNodeId, setCurrentImageNodeId] = useState<string | null>(null);
   const [currentVideoNodeId, setCurrentVideoNodeId] = useState<string | null>(null);
   const [currentMapsNodeId, setCurrentMapsNodeId] = useState<string | null>(null);
@@ -136,16 +174,289 @@ function App() {
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; mimeType: string } | null>(null);
   const { t } = useLocalization();
 
+  // ⭐ ÉTAPE 5: Hydration state for authenticated users
+  const [isHydrating, setIsHydrating] = useState(false);
+  const [hydrationProgress, setHydrationProgress] = useState(0);
+
+  // ⭐ UX Polish: Hyperspace animation state for guests
+  // Shows when: first load as guest OR after logout
+  const [showHyperspace, setShowHyperspace] = useState(!isAuthenticated);
+  const [hyperspaceActive, setHyperspaceActive] = useState(false);
+  const wasAuthenticatedRef = React.useRef(isAuthenticated);
+  
+  // ⭐ J4.4.3: Ref to track previous llmApiKeys to prevent infinite loops
+  const prevApiKeysRef = React.useRef<string>('');
+
+  // ⭐ UX: Trigger hyperspace on logout (auth → guest transition)
+  useEffect(() => {
+    const wasAuth = wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = isAuthenticated;
+
+    // Transition: authenticated → guest (logout)
+    if (wasAuth && !isAuthenticated) {
+      setShowHyperspace(true);
+      setHyperspaceActive(false); // Reset to idle
+    }
+  }, [isAuthenticated]);
+
+  // ⭐ UX: Auto-trigger warp after short delay when hyperspace is shown
+  useEffect(() => {
+    if (showHyperspace && !hyperspaceActive) {
+      const timer = setTimeout(() => {
+        setHyperspaceActive(true);
+      }, 1500); // 1.5s idle phase before warp
+      return () => clearTimeout(timer);
+    }
+  }, [showHyperspace, hyperspaceActive]);
+
+  // ⭐ UX: Handle hyperspace animation complete
+  const handleHyperspaceComplete = useCallback(() => {
+    // Small delay to ensure smooth transition
+    setTimeout(() => {
+      setShowHyperspace(false);
+      setHyperspaceActive(false);
+    }, 100);
+  }, []);
+
   // Runtime Store access
   const { updateLLMConfigs, setNavigationHandler, addNodeMessage } = useRuntimeStore();
 
   // Design Store access for integrity validation  
-  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode } = useDesignStore();
+  const { validateWorkflowIntegrity, cleanupOrphanedInstances, addAgentInstance, deleteNode, hydrateFromServer, setNodes, setEdges } = useDesignStore();
+  
+  // ⭐ SELF-HEALING: Workflow Store for hydrating workflow ID
+  const { hydrateWorkflowFromServer, getCurrentWorkflowId } = useWorkflowStore();
 
-  // Sync LLM configs with runtime store
+  /**
+   * ⭐ ÉTAPE 5: Hydration for authenticated users
+   * Fetches workspace data from GET /api/user/workspace and populates stores
+   */
   useEffect(() => {
-    updateLLMConfigs(llmConfigs);
-  }, [llmConfigs, updateLLMConfigs]);
+    const hydrateWorkspace = async () => {
+      if (!isAuthenticated || !accessToken) {
+        setIsHydrating(false);
+        return;
+      }
+
+      setIsHydrating(true);
+      setHydrationProgress(10);
+
+      try {
+        console.log('[App] Starting workspace hydration...');
+        setHydrationProgress(30);
+
+        const response = await fetch(`${API_BASE_URL}/api/user/workspace`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        setHydrationProgress(60);
+
+        if (!response.ok) {
+          throw new Error(`Hydration failed: ${response.status}`);
+        }
+
+        const workspace = await response.json();
+        setHydrationProgress(80);
+
+        // ⭐ SELF-HEALING: Hydrate workflow with REAL MongoDB ID from server
+        // This is CRITICAL for persistence to work correctly
+        if (workspace.workflow) {
+          hydrateWorkflowFromServer({
+            id: workspace.workflow.id,  // ⭐ Real MongoDB ObjectId
+            name: workspace.workflow.name,
+            description: workspace.workflow.description,
+            isDefault: workspace.workflow.isDefault,
+            isActive: workspace.workflow.isActive,
+            canvasState: workspace.workflow.canvasState
+          });
+          
+          console.log('[App] ⭐ Workflow hydrated with ID:', workspace.workflow.id, {
+            wasCreated: workspace.metadata?.workflowWasCreated,
+            isDefault: workspace.workflow.isDefault
+          });
+        } else {
+          console.warn('[App] ⚠️ No workflow in server response - Self-Healing may have failed');
+        }
+
+        // Hydrate stores with server data
+        if (workspace.agentInstances) {
+          hydrateFromServer({
+            agentInstances: workspace.agentInstances
+          });
+        }
+
+        if (workspace.nodes) {
+          setNodes(workspace.nodes);
+        }
+
+        if (workspace.edges) {
+          setEdges(workspace.edges);
+        }
+
+        // Convert nodes to WorkflowNode format for legacy React state
+        if (workspace.agentInstances && workspace.agentInstances.length > 0) {
+          const now = new Date().toISOString();
+          const hydrationNodes: WorkflowNode[] = workspace.agentInstances.map((instance: any) => ({
+            id: instance.id,
+            agent: {
+              id: instance.id,
+              name: instance.name,
+              role: instance.systemInstruction || 'assistant',
+              systemPrompt: instance.systemInstruction || '',
+              llmProvider: (instance.provider as LLMProvider) || LLMProvider.Gemini,
+              model: instance.model || 'gemini-2.0-flash',
+              capabilities: [],
+              tools: [],
+              historyConfig: { enabled: false, llmProvider: LLMProvider.Gemini, model: '', role: '', systemPrompt: '', limits: { char: 0, word: 0, token: 0, sentence: 0, message: 50 } },
+              creator_id: RobotId.Archi,
+              created_at: instance.createdAt || now,
+              updated_at: now
+            } as Agent,
+            position: instance.position || { x: 0, y: 0 },
+            messages: instance.content?.filter((c: any) => c.type === 'chat').map((c: any) => ({
+              id: c.id || `msg-${Date.now()}`,
+              sender: c.role || 'agent',
+              text: c.message || ''
+            })) || [],
+            isMinimized: false,
+            isMaximized: false,
+            instanceId: instance.id
+          }));
+          setWorkflowNodes(hydrationNodes);
+        }
+
+        setHydrationProgress(100);
+        console.log('[App] Workspace hydration complete:', {
+          workflowId: workspace.workflow?.id,
+          nodes: workspace.nodes?.length || 0,
+          instances: workspace.agentInstances?.length || 0
+        });
+
+      } catch (err) {
+        console.error('[App] Workspace hydration error:', err);
+      } finally {
+        // Small delay to show 100% before hiding
+        setTimeout(() => {
+          setIsHydrating(false);
+          setHydrationProgress(0);
+        }, 500);
+      }
+    };
+
+    hydrateWorkspace();
+  }, [isAuthenticated, accessToken, hydrateFromServer, setNodes, setEdges, hydrateWorkflowFromServer]);
+
+  /**
+   * ⭐ CRITICAL J4.4: Reload LLM configs + WIPE STATE when auth state changes
+   * Prevents guest and authenticated sessions from contaminating each other
+   * 
+   * When user logs in/out or changes auth status:
+   * 1. Guest → Auth: configs cleared, defaults set, then real configs via llmApiKeys
+   * 2. Auth → Guest: configs cleared, guest configs from localStorage
+   * 3. Guest → Guest (new session): configs cleared
+   * 
+   * ⚠️ SECURITY: ALWAYS reload from scratch on auth change
+   * ⚠️ CRITICAL FIX: workflowNodes is React state NOT in Zustand stores
+   *    Must be explicitly cleared here to prevent agent leaks on canvas
+   * ⚠️ CRITICAL FIX J4.4.2: agents is ALSO React state NOT in Zustand
+   *    Must be cleared to prevent prototype leaks in sidebar/navigation
+   */
+  useEffect(() => {
+    // Reload LLM configs respecting new auth state
+    const freshConfigs = loadLLMConfigs(isAuthenticated, accessToken);
+    setLlmConfigs(freshConfigs);
+    updateLLMConfigs(freshConfigs);
+    
+    // ⭐ CRITICAL J4.4: Clear React state on auth change to prevent data leaks
+    setWorkflowNodes([]);
+    setAgents([]);
+    
+    // ⭐ FIX: Reset prevApiKeysRef on auth change to allow fresh hydration
+    // Bug: After logout/login, same configs would be skipped due to hash match
+    prevApiKeysRef.current = '';
+    console.log('[App] 🔄 Auth state changed - reset prevApiKeysRef for fresh hydration');
+  }, [isAuthenticated, accessToken, updateLLMConfigs]);
+
+  /**
+   * ⭐ J4.4.3 FIX: Sync LLM configs from AuthContext's llmApiKeys for authenticated users
+   * 
+   * Root Cause: The previous fix used useLLMConfigs() which returns ILLMConfigUI[]
+   * without the actual apiKey. AuthContext.llmApiKeys contains the decrypted keys
+   * from the backend endpoint /api/llm/get-all-api-keys.
+   * 
+   * Architecture:
+   * - Guest mode: loadLLMConfigs() reads from localStorage (LLMConfig[] format)
+   * - Auth mode: llmApiKeys from AuthContext (fetched at login with decrypted keys)
+   * 
+   * This effect runs AFTER auth change effect, merging real API keys with defaults.
+   */
+  useEffect(() => {
+    // ⭐ CRITICAL: Wait for llmApiKeys to be loaded (not null/undefined)
+    // When isAuthenticated but llmApiKeys is null, it means AuthContext is still fetching
+    if (!isAuthenticated) {
+      return; // Not authenticated, nothing to do
+    }
+    
+    if (llmApiKeys === null || llmApiKeys === undefined) {
+      return; // Still loading, wait for next trigger
+    }
+
+    console.log('[App] 🔍 useEffect triggered with llmApiKeys:', llmApiKeys.length, 'keys:', llmApiKeys.map(k => k.provider));
+
+    // ⭐ FIX: Prevent infinite loop by checking content equality
+    // Must be done BEFORE any state updates
+    const keysHash = JSON.stringify(llmApiKeys);
+    if (keysHash === prevApiKeysRef.current) {
+      console.log('[App] 🔍 Hash unchanged, skipping');
+      return;
+    }
+    prevApiKeysRef.current = keysHash;
+
+    // ⭐ FIX: If llmApiKeys is empty array, user has no configs in DB
+    // Set all providers to disabled (initialLLMConfigs with enabled:false)
+    if (llmApiKeys.length === 0) {
+      console.log('[App] 🔍 No API keys in database - setting all providers to disabled');
+      setLlmConfigs(initialLLMConfigs); // All disabled by default now
+      updateLLMConfigs(initialLLMConfigs);
+      return;
+    }
+    
+    // Convert LLMApiKey[] to LLMConfig[]
+    const apiConfigs: LLMConfig[] = llmApiKeys.map(key => ({
+      provider: key.provider as LLMProvider,
+      apiKey: key.apiKey,
+      enabled: key.enabled,
+      capabilities: (key.capabilities || {}) as { [k in LLMCapability]?: boolean }
+    }));
+    
+    console.log('[App] 🔍 Converted to apiConfigs:', apiConfigs.length);
+    
+    // Merge with initial configs to keep capabilities defaults for providers not in API
+    const mergedConfigs = initialLLMConfigs.map(initial => {
+      const apiConfig = apiConfigs.find(c => c.provider === initial.provider);
+      if (apiConfig) {
+        return {
+          ...initial,
+          ...apiConfig,
+          capabilities: { ...initial.capabilities, ...apiConfig.capabilities }
+        };
+      }
+      return initial;
+    });
+    
+    console.log('[App] 🔍 After merge, llmConfigs will have:', mergedConfigs.filter(c => c.enabled).length, 'enabled providers');
+    
+    const enabledProviders = mergedConfigs.filter(c => c.enabled).map(c => c.provider);
+    console.log('[App] 🔍 enabledProviders:', enabledProviders);
+    
+    setLlmConfigs(mergedConfigs);
+    console.log('[App] 🔍 setLlmConfigs called, should be in state now');
+    updateLLMConfigs(mergedConfigs);
+    console.log('[App] 🔍 updateLLMConfigs called for Zustand store');
+  }, [isAuthenticated, llmApiKeys, updateLLMConfigs]);
 
   // Configure navigation handler for agent nodes
   useEffect(() => {
@@ -194,45 +505,70 @@ function App() {
     console.log(`Navigating to robot ${robotId} at path ${path}`);
   };
 
-  const handleSaveSettings = (newLLMConfigs: LLMConfig[]) => {
+  const handleSaveAgent = async (agentData: Omit<Agent, 'id'>, agentId?: string) => {
     try {
-      console.log('[App] handleSaveSettings called with configs:', newLLMConfigs);
+      if (agentId) {
+        // Update existing agent
+        // TODO: Implement API call to update agent
+        console.log('Updating agent:', agentId, agentData);
+      } else {
+        // Create new agent
+        // TODO: Implement API call to create agent
+        console.log('Creating new agent:', agentData);
+      }
+      // Close the modal
+      setAgentModalOpen(false);
+      setEditingAgent(null);
+    } catch (error) {
+      console.error('Error saving agent:', error);
+    }
+  };
+
+  const handleSaveSettings = async (newLLMConfigs: LLMConfig[]) => {
+    try {
       const lmStudioConfig = newLLMConfigs.find(c => c.provider === LLMProvider.LMStudio);
-      console.log('[App] Saving LMStudio config:', {
-        enabled: lmStudioConfig?.enabled,
-        endpoint: lmStudioConfig?.apiKey
+
+      // Get appropriate storage based on auth state
+      const storage = getSettingsStorage({
+        isAuthenticated,
+        accessToken,
+        user: null,
+        login: async () => { },
+        register: async () => { },
+        logout: () => { },
+        refreshToken: async () => { },
+        llmApiKeys: null,
+        isLoading: false,
+        error: null
       });
 
-      localStorage.setItem(LLM_CONFIGS_KEY, JSON.stringify(newLLMConfigs));
-      console.log('[App] Configs saved to localStorage successfully');
-
-      setLlmConfigs(newLLMConfigs);
-      console.log('[App] React state updated with new configs');
-    } catch (error) {
-      console.error("[App] Failed to save settings to localStorage", error);
-    }
-  };
-
-  const handleOpenEditAgentModal = (agent: Agent) => {
-    setEditingAgent(agent);
-    setAgentModalOpen(true);
-  };
-
-  const handleSaveAgent = (agentData: Omit<Agent, 'id'>, agentId?: string) => {
-    if (agentId) { // Editing existing agent
-      const instancesCount = workflowNodes.filter(n => n.agent.id === agentId).length;
-      if (instancesCount > 0) {
-        setUpdateConfirmation({ agentData, agentId, count: instancesCount });
+      // NOTE J4.4: LLMConfigs are now managed separately via useLLMConfigs hook
+      // We only save PREFERENCES here (language, theme)
+      // LLMConfigs should be saved via LLMConfigModal -> useLLMConfigs -> updateConfig()
+      
+      // Save preferences only
+      await storage.saveSettings({
+        preferences: { language: 'fr' }
+      });
+      
+      if (!isAuthenticated) {
+        // ⭐ Guest mode: reload from localStorage
+        const freshConfigs = loadLLMConfigs(false, null);
+        setLlmConfigs(freshConfigs);
+        updateLLMConfigs(freshConfigs);
       } else {
-        // No instances, just save directly
-        const updatedAgent = { ...agentData, id: agentId };
-        setAgents(prev => prev.map(a => a.id === agentId ? updatedAgent : a));
+        // ⭐ FIX: For authenticated users, use the configs directly from modal
+        // refreshLLMApiKeys() was already called in SettingsModal before onSave()
+        // The newLLMConfigs reflect what was just saved to the database
+        // We also reset the hash so the useEffect will sync on next llmApiKeys update
+        console.log('[App] handleSaveSettings - applying', newLLMConfigs.filter(c => c.enabled).length, 'enabled configs');
+        setLlmConfigs(newLLMConfigs);
+        updateLLMConfigs(newLLMConfigs);
+        prevApiKeysRef.current = ''; // Reset for next llmApiKeys sync
       }
-    } else { // Creating new agent
-      setAgents(prev => [...prev, { ...agentData, id: `agent-${Date.now()}` }]);
+    } catch (error) {
+      console.error('[App] handleSaveSettings error:', error);
     }
-    setAgentModalOpen(false);
-    setEditingAgent(null);
   };
 
   const handleUpdateConfirmation = (updateInstances: boolean) => {
@@ -270,15 +606,71 @@ function App() {
     }
   };
 
-  const addAgentToWorkflow = useCallback((agent: Agent) => {
+  const handleOpenEditAgentModal = (agent: Agent) => {
+    setEditingAgent(agent);
+    setAgentModalOpen(true);
+  };
+
+  /**
+   * ⭐ AUTO-SAVE: Add agent to workflow with immediate API persistence
+   * 
+   * Per Dev_rules.md: Agent instances are ALWAYS auto-saved (independent of workflow save mode)
+   * This ensures the agent_instances collection is populated immediately on creation.
+   */
+  const addAgentToWorkflow = useCallback(async (agent: Agent) => {
     // Calculate position based on existing instances
     const position = {
       x: (workflowNodes.length % 4) * 420 + 20,
       y: Math.floor(workflowNodes.length / 4) * 540 + 20,
     };
 
-    // Add agent instance to DesignStore instead of local state
-    const instanceId = addAgentInstance(agent.id, position);
+    // Use instanceName if provided, otherwise use agent name
+    const instanceName = agent.instanceName || agent.name;
+
+    // Add agent instance to DesignStore with custom instance name (local state)
+    const instanceId = addAgentInstance(agent.id, position, instanceName);
+
+    // ⭐ AUTO-SAVE: Immediately persist to backend (if authenticated)
+    const workflowId = getCurrentWorkflowId();
+    
+    if (isAuthenticated && accessToken && workflowId) {
+      console.log('[App] 📤 Auto-saving new agent instance to backend:', {
+        instanceId,
+        prototypeId: agent.id,
+        workflowId
+      });
+      
+      const result = await PersistenceService.createAgentInstance(
+        {
+          id: instanceId,
+          prototypeId: agent.id,
+          name: instanceName,
+          position,
+          configuration_json: {
+            role: agent.role,
+            model: agent.model,
+            llmProvider: agent.llmProvider,
+            systemPrompt: agent.systemPrompt,
+            tools: agent.tools || [],
+            outputConfig: agent.outputConfig
+          },
+          // ⭐ Pass persistenceConfig override if provided from WorkflowValidationModal
+          persistenceConfig: agent.persistenceConfig
+        },
+        workflowId,
+        { isAuthenticated, accessToken }
+      );
+      
+      if (result.success) {
+        console.log('[App] ✅ Agent instance persisted to DB:', result.backendId);
+        // TODO: Update instanceId in store if backend returns different ID
+      } else {
+        console.error('[App] ❌ Failed to persist agent instance:', result.error);
+        // Don't block UI - instance exists locally, will sync later
+      }
+    } else {
+      console.log('[App] Guest mode - agent instance saved to localStorage via store');
+    }
 
     // Legacy: Also add to local state for now to maintain compatibility
     const newNode: WorkflowNode = {
@@ -291,7 +683,7 @@ function App() {
       instanceId // ✅ Stocker instanceId pour accès au modal de configuration
     };
     setWorkflowNodes(prev => [...prev, newNode]);
-  }, [workflowNodes, addAgentInstance]);
+  }, [workflowNodes, addAgentInstance, isAuthenticated, accessToken, getCurrentWorkflowId]);
 
   const handleDeleteNode = (nodeId: string) => {
     setWorkflowNodes(prev => prev.filter(node => node.id !== nodeId));
@@ -398,175 +790,227 @@ function App() {
   };
 
   return (
-    <NotificationProvider>
-      <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
-        <Header
-          onOpenSettings={() => setSettingsModalOpen(true)}
-        />
-        <div className="flex flex-1 overflow-hidden">
-          <NavigationLayout
-            agents={agents}
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
-            onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
-            onAddToWorkflow={addAgentToWorkflow}
-            onDeleteAgent={handleDeleteAgent}
-            onEditAgent={handleOpenEditAgentModal}
-            currentPath={currentPath}
-            onNavigate={handleRobotNavigation}
-          />
-          <main className="flex-1 bg-gray-800/50 overflow-hidden">
-            <RobotPageRouter
-              currentPath={currentPath}
-              llmConfigs={llmConfigs}
-              onNavigate={handleRobotNavigation}
-              agents={agents}
-              workflowNodes={workflowNodes}
-              onDeleteNode={handleDeleteNode}
-              onDeleteNodes={handleDeleteNodes}
-              onUpdateNodeMessages={handleUpdateNodeMessages}
-              onUpdateNodePosition={handleUpdateNodePosition}
-              onToggleNodeMinimize={handleToggleNodeMinimize}
-              onToggleNodeMaximize={handleToggleNodeMaximize}
-              onOpenImagePanel={handleOpenImagePanel}
-              onOpenImageModificationPanel={handleOpenImageModificationPanel}
-              onOpenVideoPanel={handleOpenVideoPanel}
-              onOpenMapsPanel={handleOpenMapsPanel}
-              onOpenFullscreen={handleOpenFullscreen}
-              onOpenAgentFullscreen={handleOpenAgentFullscreen}
-              onAddToWorkflow={handleAddToWorkflow}
-              isImagePanelOpen={isImagePanelOpen}
-              isImageModificationPanelOpen={isImageModificationPanelOpen}
-              isVideoPanelOpen={isVideoPanelOpen}
-              isMapsPanelOpen={isMapsPanelOpen}
-            />
-          </main>
-        </div>
-
-        {isSettingsModalOpen && (
-          <SettingsModal
-            llmConfigs={llmConfigs}
-            onClose={() => setSettingsModalOpen(false)}
-            onSave={handleSaveSettings}
-          />
-        )}
-
-        {isAgentModalOpen && (
-          <AgentFormModal
-            onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
-            onSave={handleSaveAgent}
-            llmConfigs={llmConfigs}
-            existingAgent={editingAgent}
-          />
-        )}
-
-        {updateConfirmation && (
-          <ConfirmationModal
-            isOpen={true}
-            title={t('dialog_update_title')}
-            message={t('dialog_update_message', { count: updateConfirmation.count })}
-            confirmText={t('dialog_update_confirmButton')}
-            cancelText={t('dialog_update_cancelButton')}
-            onConfirm={() => handleUpdateConfirmation(true)}
-            onCancel={() => handleUpdateConfirmation(false)}
-          />
-        )}
-
-        {deleteConfirmation && (
-          <ConfirmationModal
-            isOpen={true}
-            title={t('dialog_delete_title')}
-            message={t('dialog_delete_message', { agentName: deleteConfirmation.agentName })}
-            confirmText={t('dialog_delete_confirmButton')}
-            onConfirm={confirmDeleteAgent}
-            onCancel={() => setDeleteConfirmation(null)}
-            variant="danger"
-          />
-        )}
-
-        {isImagePanelOpen && (
-          <ImageGenerationPanel
-            isOpen={isImagePanelOpen}
-            nodeId={currentImageNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setImagePanelOpen(false)}
-            onImageGenerated={handleImageGenerated}
-            onOpenImageModificationPanel={handleOpenImageModificationPanel}
-          />
-        )}
-
-        {isImageModificationPanelOpen && (
-          <ImageModificationPanel
-            isOpen={isImageModificationPanelOpen}
-            editingImageInfo={editingImageInfo}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setImageModificationPanelOpen(false)}
-            onImageModified={handleImageModified}
-          />
-        )}
-
-        {isVideoPanelOpen && (
-          <VideoGenerationConfigPanel
-            isOpen={isVideoPanelOpen}
-            nodeId={currentVideoNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => setVideoPanelOpen(false)}
-          />
-        )}
-
-        {isMapsPanelOpen && (
-          <MapsGroundingConfigPanel
-            isOpen={isMapsPanelOpen}
-            nodeId={currentMapsNodeId}
-            llmConfigs={llmConfigs}
-            workflowNodes={workflowNodes}
-            onClose={() => {
-              setMapsPanelOpen(false);
-              setMapsPreloadedResults(null);
-            }}
-            preloadedResults={mapsPreloadedResults || undefined}
-          />
-        )}
-
-        {fullscreenImage && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
-            onClick={() => setFullscreenImage(null)}
+    <QueryProvider>
+      <NotificationProvider>
+        {/* ⭐ UX Polish: Hyperspace Entry Animation for Guests */}
+        {showHyperspace && !isAuthenticated && (
+          <HyperspaceReveal
+            isActive={hyperspaceActive}
+            onComplete={handleHyperspaceComplete}
+            className="fixed inset-0 z-[100]"
           >
-            <img
-              src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`}
-              alt={t('fullscreenModal_alt')}
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <Button
-              variant="ghost"
-              onClick={() => setFullscreenImage(null)}
-              className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
-              aria-label={t('fullscreenModal_close_aria')}
-            >
-              &times;
-            </Button>
-          </div>
+            {/* Empty children - the app will be revealed underneath */}
+            <div className="w-full h-full" />
+          </HyperspaceReveal>
         )}
 
-        {/* Fullscreen Chat Modal */}
-        <FullscreenChatModal
-          onDeleteNode={handleDeleteNode}
-          onOpenImagePanel={handleOpenImagePanel}
-          onOpenVideoPanel={handleOpenVideoPanel}
-          onOpenMapsPanel={handleOpenMapsPanel}
+        {/* ⭐ ÉTAPE 5: Hydration Overlay - Blur Racing Style (for authenticated users) */}
+        <HydrationOverlay 
+          isLoading={isHydrating} 
+          progress={hydrationProgress}
+          message="Chargement de votre workspace..."
         />
+        
+        <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
+          <Header
+            onOpenSettings={() => setSettingsModalOpen(true)}
+            onLogin={() => setLoginModalOpen(true)}
+            onRegister={() => setRegisterModalOpen(true)}
+            onLogout={logout}
+            isAuthenticated={isAuthenticated}
+            user={user}
+          />
+          <div className="flex flex-1 overflow-hidden">
+            <NavigationLayout
+              agents={agents}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed(!isSidebarCollapsed)}
+              onAddAgent={() => { setEditingAgent(null); setAgentModalOpen(true); }}
+              onAddToWorkflow={addAgentToWorkflow}
+              onDeleteAgent={handleDeleteAgent}
+              onEditAgent={handleOpenEditAgentModal}
+              currentPath={currentPath}
+              onNavigate={handleRobotNavigation}
+            />
+            <main className="flex-1 bg-gray-800/50 overflow-hidden">
+              <RobotPageRouter
+                currentPath={currentPath}
+                llmConfigs={llmConfigs}
+                onNavigate={handleRobotNavigation}
+                agents={agents}
+                workflowNodes={workflowNodes}
+                onDeleteNode={handleDeleteNode}
+                onDeleteNodes={handleDeleteNodes}
+                onUpdateNodeMessages={handleUpdateNodeMessages}
+                onUpdateNodePosition={handleUpdateNodePosition}
+                onToggleNodeMinimize={handleToggleNodeMinimize}
+                onToggleNodeMaximize={handleToggleNodeMaximize}
+                onOpenImagePanel={handleOpenImagePanel}
+                onOpenImageModificationPanel={handleOpenImageModificationPanel}
+                onOpenVideoPanel={handleOpenVideoPanel}
+                onOpenMapsPanel={handleOpenMapsPanel}
+                onOpenFullscreen={handleOpenFullscreen}
+                onOpenAgentFullscreen={handleOpenAgentFullscreen}
+                onAddToWorkflow={handleAddToWorkflow}
+                isImagePanelOpen={isImagePanelOpen}
+                isImageModificationPanelOpen={isImageModificationPanelOpen}
+                isVideoPanelOpen={isVideoPanelOpen}
+                isMapsPanelOpen={isMapsPanelOpen}
+              />
+            </main>
+          </div>
 
-        {/* Configuration Modal */}
-        <AgentConfigurationModal llmConfigs={llmConfigs} />
+          {isSettingsModalOpen && (
+            <SettingsModal
+              llmConfigs={llmConfigs}
+              onClose={() => setSettingsModalOpen(false)}
+              onSave={handleSaveSettings}
+            />
+          )}
 
-        <NotificationDisplay />
-      </div>
-    </NotificationProvider>
+          {isLoginModalOpen && (
+            <LoginModal
+              isOpen={isLoginModalOpen}
+              onClose={() => setLoginModalOpen(false)}
+            />
+          )}
+
+          {isRegisterModalOpen && (
+            <RegisterModal
+              isOpen={isRegisterModalOpen}
+              onClose={() => setRegisterModalOpen(false)}
+            />
+          )}
+
+          {isAgentModalOpen && (
+            <AgentFormModal
+              onClose={() => { setAgentModalOpen(false); setEditingAgent(null); }}
+              onSave={handleSaveAgent}
+              llmConfigs={llmConfigs}
+              existingAgent={editingAgent}
+            />
+          )}
+
+          {updateConfirmation && (
+            <ConfirmationModal
+              isOpen={true}
+              title={t('dialog_update_title')}
+              message={t('dialog_update_message', { count: updateConfirmation.count })}
+              confirmText={t('dialog_update_confirmButton')}
+              cancelText={t('dialog_update_cancelButton')}
+              onConfirm={() => handleUpdateConfirmation(true)}
+              onCancel={() => handleUpdateConfirmation(false)}
+            />
+          )}
+
+          {deleteConfirmation && (
+            <ConfirmationModal
+              isOpen={true}
+              title={t('dialog_delete_title')}
+              message={t('dialog_delete_message', { agentName: deleteConfirmation.agentName })}
+              confirmText={t('dialog_delete_confirmButton')}
+              onConfirm={confirmDeleteAgent}
+              onCancel={() => setDeleteConfirmation(null)}
+              variant="danger"
+            />
+          )}
+
+          {isImagePanelOpen && (
+            <ImageGenerationPanel
+              isOpen={isImagePanelOpen}
+              nodeId={currentImageNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setImagePanelOpen(false)}
+              onImageGenerated={handleImageGenerated}
+              onOpenImageModificationPanel={handleOpenImageModificationPanel}
+            />
+          )}
+
+          {isImageModificationPanelOpen && (
+            <ImageModificationPanel
+              isOpen={isImageModificationPanelOpen}
+              editingImageInfo={editingImageInfo}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setImageModificationPanelOpen(false)}
+              onImageModified={handleImageModified}
+            />
+          )}
+
+          {isVideoPanelOpen && (
+            <VideoGenerationConfigPanel
+              isOpen={isVideoPanelOpen}
+              nodeId={currentVideoNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => setVideoPanelOpen(false)}
+            />
+          )}
+
+          {isMapsPanelOpen && (
+            <MapsGroundingConfigPanel
+              isOpen={isMapsPanelOpen}
+              nodeId={currentMapsNodeId}
+              llmConfigs={llmConfigs}
+              workflowNodes={workflowNodes}
+              onClose={() => {
+                setMapsPanelOpen(false);
+                setMapsPreloadedResults(null);
+              }}
+              preloadedResults={mapsPreloadedResults || undefined}
+            />
+          )}
+
+          {fullscreenImage && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm"
+              onClick={() => setFullscreenImage(null)}
+            >
+              <img
+                src={`data:${fullscreenImage.mimeType};base64,${fullscreenImage.src}`}
+                alt={t('fullscreenModal_alt')}
+                className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <Button
+                variant="ghost"
+                onClick={() => setFullscreenImage(null)}
+                className="absolute top-4 right-4 text-white text-2xl px-2 py-2"
+                aria-label={t('fullscreenModal_close_aria')}
+              >
+                &times;
+              </Button>
+            </div>
+          )}
+
+          {/* Fullscreen Chat Modal */}
+          <FullscreenChatModal
+            onDeleteNode={handleDeleteNode}
+            onOpenImagePanel={handleOpenImagePanel}
+            onOpenVideoPanel={handleOpenVideoPanel}
+            onOpenMapsPanel={handleOpenMapsPanel}
+          />
+
+          {/* Configuration Modal */}
+          <AgentConfigurationModal llmConfigs={llmConfigs} />
+
+          <NotificationDisplay />
+        </div>
+      </NotificationProvider>
+    </QueryProvider>
+  );
+}
+
+/**
+ * Root App component with all providers
+ * AuthProvider wraps AppContent to enable useAuth() hook
+ */
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

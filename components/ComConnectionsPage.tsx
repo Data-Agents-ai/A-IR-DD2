@@ -5,6 +5,7 @@ import { Button, Card } from './UI';
 import { PlusIcon, AntennaIcon, SettingsIcon, CloseIcon } from './Icons';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useLocalization } from '../hooks/useLocalization';
+import { LLMConfigsList } from './LLMConfigsList';
 
 interface ComConnectionsPageProps {
   llmConfigs: LLMConfig[];
@@ -298,6 +299,29 @@ export const ComConnectionsPage: React.FC<ComConnectionsPageProps> = ({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Section 2: LLM Configurations (Jalon 3 Phase 2) */}
+      <div className="space-y-4 mt-8 pt-8 border-t border-gray-700">
+        <div className="flex items-center space-x-2">
+          <AntennaIcon className="w-6 h-6 text-yellow-400" />
+          <h2 className="text-2xl font-bold text-white">{t('com_llm_configs', 'Configurations LLM')}</h2>
+        </div>
+        <p className="text-gray-400">
+          {t('com_llm_configs_description', 'Gérez vos clés API LLM de manière sécurisée. Vos clés sont chiffrées côté serveur.')}
+        </p>
+
+        {/* LLMConfigsList Component - SOLID Pattern */}
+        <LLMConfigsList
+          onConfigAdded={() => {
+            addNotification({
+              type: 'success',
+              title: t('com_llm_config_added', 'Configuration LLM ajoutée'),
+              message: t('com_llm_config_added_desc', 'Votre configuration LLM a été sauvegardée de manière sécurisée.'),
+              duration: 3000
+            });
+          }}
+        />
       </div>
     </div>
   );

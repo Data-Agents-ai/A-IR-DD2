@@ -4,6 +4,8 @@ import { Button } from '../UI';
 import { CloseIcon } from '../Icons';
 import { useDesignStore } from '../../stores/useDesignStore';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useAuth } from '../../hooks/useAuth';
+import { deleteAgentPrototype } from '../../services/agentPrototypeAPI';
 
 interface AgentDeletionConfirmModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export const AgentDeletionConfirmModal: React.FC<AgentDeletionConfirmModalProps>
 }) => {
   const { getInstancesOfPrototype, deleteAgent } = useDesignStore();
   const { addNotification } = useNotifications();
+  const { isAuthenticated, accessToken } = useAuth();
 
   if (!isOpen || !agent) return null;
 
@@ -37,10 +40,18 @@ export const AgentDeletionConfirmModal: React.FC<AgentDeletionConfirmModalProps>
   const affectedInstances = getInstancesOfPrototype(agent.id);
   const hasActiveInstances = affectedInstances.length > 0;
 
-  const handleDeletePrototypeOnly = () => {
+  const handleDeletePrototypeOnly = async () => {
     // Supprimer uniquement le prototype, garder les instances orphelines
     const result = deleteAgent(agent.id, { deleteInstances: false });
     if (result.success) {
+      // PERSISTENCE: Si user connecté, supprimer aussi dans MongoDB
+      if (isAuthenticated && accessToken) {
+        const apiResult = await deleteAgentPrototype(agent.id, accessToken);
+        if (!apiResult.success) {
+          console.warn('API deletion failed but local deletion succeeded:', apiResult.error);
+        }
+      }
+      
       addNotification({
         type: 'success',
         title: 'Prototype supprimé',
@@ -60,13 +71,21 @@ export const AgentDeletionConfirmModal: React.FC<AgentDeletionConfirmModalProps>
     }
   };
 
-  const handleDeletePrototypeAndInstances = () => {
+  const handleDeletePrototypeAndInstances = async () => {
     // Identify instance IDs to delete (for syncing with App.tsx workflowNodes)
     const instancesToDelete = affectedInstances.map(inst => inst.id);
 
     // Supprimer le prototype ET toutes ses instances
     const result = deleteAgent(agent.id, { deleteInstances: true });
     if (result.success) {
+      // PERSISTENCE: Si user connecté, supprimer aussi dans MongoDB
+      if (isAuthenticated && accessToken) {
+        const apiResult = await deleteAgentPrototype(agent.id, accessToken);
+        if (!apiResult.success) {
+          console.warn('API deletion failed but local deletion succeeded:', apiResult.error);
+        }
+      }
+      
       // Sync with App.tsx workflowNodes if callback provided
       // Pass instance IDs so App.tsx can filter workflowNodes by instanceId
       if (onDeleteNodes && instancesToDelete.length > 0) {

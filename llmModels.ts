@@ -344,61 +344,69 @@ export const LLM_MODELS_DETAILED: Record<LLMProvider, LLMModelDefinition[]> = {
     ],
     [LLMProvider.LMStudio]: [
         {
+            id: 'mistral-3:8b',
+            name: 'Mistral 3 8B (Ollama)',
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding],
+            recommended: true,
+            description: 'Mistral 3 8B quantized model for local deployment via Ollama',
+            isDynamic: false
+        },
+        {
             id: 'qwen2.5-coder-7b',
             name: 'Qwen 2.5 Coder 7B',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.CodeSpecialization, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.CodeSpecialization],
             recommended: true,
             description: 'Alibaba coding specialist'
         },
         {
             id: 'mistral-7b-instruct-v0.2',
             name: 'Mistral 7B Instruct v0.2',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding],
             recommended: true,
             description: 'Mistral AI open source 7B instruct model v0.2'
         },
         {
             id: 'mistral-7b-instruct-v0.3',
             name: 'Mistral 7B Instruct v0.3',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.Embedding],
             recommended: true,
             description: 'Mistral AI open source 7B instruct model v0.3'
         },
         {
             id: 'mistral-small-3.1',
             name: 'Mistral Small 3.1',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding],
             description: 'Mistral Small v25.03 for local deployment'
         },
         {
             id: 'mistral-large-3.1',
             name: 'Mistral Large 3.1',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding, LLMCapability.Reasoning, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.OutputFormatting, LLMCapability.Embedding, LLMCapability.Reasoning],
             recommended: true,
             description: 'Mistral Large flagship model for complex tasks'
         },
         {
             id: 'gemma3-8b-instruct',
             name: 'Gemma 3 8B Instruct',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
             description: 'Google general purpose'
         },
         {
             id: 'gemma3-2b-instruct',
             name: 'Gemma 3 2B Instruct',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
             description: 'Efficient edge model'
         },
         {
             id: 'llama-3.2-1b',
             name: 'Llama 3.2 1B',
-            capabilities: [LLMCapability.Chat, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat],
             description: 'Meta efficient model'
         },
         {
             id: 'llama-3.2-3b',
             name: 'Llama 3.2 3B',
-            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling, LLMCapability.LocalDeployment],
+            capabilities: [LLMCapability.Chat, LLMCapability.FunctionCalling],
             description: 'Meta balanced model'
         },
     ],
@@ -447,7 +455,7 @@ export const getModelCapabilities = (provider: LLMProvider, modelId: string): LL
  * Map LMStudioModelInfo capabilities to LLMCapability[]
  */
 const mapLMStudioCapabilities = (info: LMStudioModelInfo): LLMCapability[] => {
-    const capabilities: LLMCapability[] = [LLMCapability.Chat, LLMCapability.LocalDeployment];
+    const capabilities: LLMCapability[] = [LLMCapability.Chat];
 
     if (info.capabilities.functionCalling) capabilities.push(LLMCapability.FunctionCalling);
     if (info.capabilities.reasoning) capabilities.push(LLMCapability.Reasoning);

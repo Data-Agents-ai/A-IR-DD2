@@ -18,8 +18,12 @@ import { useDayNightTheme } from '../hooks/useDayNightTheme';
 import { WorkflowCanvasProvider } from '../contexts/WorkflowCanvasContext';
 import { PrototypeEditConfirmationModal } from './modals/PrototypeEditConfirmationModal';
 import { AgentFormModal } from './modals/AgentFormModal';
+import { SavePrototypeButton } from './SavePrototypeButton';
+import { AutoSaveIndicator } from './AutoSaveIndicator';
+import { useAutoSave } from '../hooks/useAutoSave';
 import { Agent, WorkflowNode, LLMConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
+import { useWorkflowStore } from '../stores/useWorkflowStore';
 
 interface WorkflowCanvasProps {
   nodes?: WorkflowNode[];
@@ -45,6 +49,10 @@ interface WorkflowCanvasProps {
   isImageModificationPanelOpen?: boolean;
   isVideoPanelOpen?: boolean;
   isMapsPanelOpen?: boolean;
+  // ⭐ ÉTAPE 2: Persistence props
+  workflowId?: string;
+  workflowName?: string;
+  onSaveComplete?: (success: boolean) => void;
 }
 
 // nodeTypes défini GLOBALEMENT pour éviter les re-créations (React Flow best practice)
@@ -77,8 +85,24 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
     isImagePanelOpen = false,
     isImageModificationPanelOpen = false,
     isVideoPanelOpen = false,
-    isMapsPanelOpen = false
+    isMapsPanelOpen = false,
+    // ⭐ ÉTAPE 2: Persistence props
+    workflowId: workflowIdProp,
+    workflowName,
+    onSaveComplete
   } = props;
+
+  // ⭐ SELF-HEALING: Get real workflow ID from store (falls back to prop)
+  const { getCurrentWorkflowId } = useWorkflowStore();
+  const storeWorkflowId = getCurrentWorkflowId();
+  const workflowId = storeWorkflowId || workflowIdProp || 'default-workflow';
+  
+  // Log warning if using placeholder ID
+  useEffect(() => {
+    if (workflowId === 'default-workflow') {
+      console.warn('[WorkflowCanvas] ⚠️ Using placeholder workflowId - persistence may fail for authenticated users');
+    }
+  }, [workflowId]);
 
   // Hook de thème jour/nuit
   const theme = useDayNightTheme();
@@ -134,6 +158,18 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
 
   // Détecter si un panneau média est actif (pour calcul largeur maximized)
   const isMediaPanelActive = isImagePanelOpen || isImageModificationPanelOpen || isVideoPanelOpen || isMapsPanelOpen;
+
+  // ⭐ PLAN_DE_PERSISTENCE: Hook de sauvegarde automatique
+  const autoSave = useAutoSave({
+    workflowId,
+    workflowName,
+    canvasState: reactFlowInstance ? {
+      zoom: reactFlowInstance.getZoom(),
+      panX: reactFlowInstance.getViewport().x,
+      panY: reactFlowInstance.getViewport().y
+    } : undefined,
+    onSaveComplete
+  });
 
   // Mettre à jour les références SANS déclencher de re-render
   stableRefs.current.callbacks = {
@@ -476,6 +512,31 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
               }}
             />
           )}
+
+          {/* ⭐ ÉTAPE 2: Bouton de sauvegarde manuelle - Au-dessus des Controls, aligné verticalement */}
+          {/* Le bouton gère lui-même sa visibilité via useSaveMode (isManualSave && isAuthenticated) */}
+          <div className="workflow-save-button-fixed">
+            <SavePrototypeButton
+              workflowId={workflowId}
+              workflowName={workflowName}
+              canvasState={{
+                zoom: reactFlowInstance.getZoom(),
+                panX: reactFlowInstance.getViewport().x,
+                panY: reactFlowInstance.getViewport().y
+              }}
+              onSaveComplete={onSaveComplete}
+            />
+          </div>
+
+          {/* ⭐ PLAN_DE_PERSISTENCE: Indicateur de sauvegarde automatique */}
+          <div className="workflow-autosave-indicator-fixed">
+            <AutoSaveIndicator
+              status={autoSave.status}
+              lastSavedAt={autoSave.lastSavedAt}
+              error={autoSave.error}
+              isEnabled={autoSave.isEnabled}
+            />
+          </div>
         </ReactFlow>
 
         {/* Bouton flottant redirection vers prototypage Archi - Style Blur futuriste */}
