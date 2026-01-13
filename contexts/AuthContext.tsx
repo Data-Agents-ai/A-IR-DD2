@@ -172,6 +172,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
 
             if (!response.ok) {
+                console.error('[AuthContext] Failed to fetch LLM API keys:', response.status);
                 // Non-blocking: continue without keys
                 if (isMounted) {
                     setLlmApiKeys([]);
@@ -180,15 +181,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
 
             const keys: LLMApiKey[] = await response.json();
+            console.log('[AuthContext] ✅ Fetched keys count:', keys.length, 'providers:', keys.map(k => k.provider));
             
             // ⭐ J4.4: Only update state if component still mounted
             if (isMounted) {
                 setLlmApiKeys(keys);
+                console.log('[AuthContext] ✅ setLlmApiKeys called with', keys.length, 'keys');
             }
         } catch (err: any) {
             // ⭐ J4.4: Ignore abort errors (timeout) and unmount errors
             if (err.name === 'AbortError') {
+                console.warn('[AuthContext] Fetch timeout');
                 // Timeout reached
+            } else {
+                console.error('[AuthContext] Fetch error:', err.message);
             }
             
             // Only update state if component still mounted
@@ -370,6 +376,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setError(null);
     }, []);
 
+    /**
+     * ⭐ J4.6 FIX: Wrapper function to refresh LLM API keys
+     * Uses the current accessToken from context (not passed as parameter)
+     * This ensures we always use the most up-to-date token
+     * 
+     * NOTE: Do NOT include llmApiKeys in dependencies!
+     * Including it creates a circular dependency and causes cascade updates
+     */
+    const refreshLLMApiKeysWrapper = useCallback(async () => {
+        if (!accessToken) {
+            console.warn('[AuthContext] Cannot refresh LLM API keys: no access token');
+            return;
+        }
+        console.log('[AuthContext] 🔄 Refreshing LLM API keys...');
+        await fetchLLMApiKeys(accessToken);
+    }, [accessToken, fetchLLMApiKeys]);
+
     // Context value
     const value: AuthContextType = {
         user,
@@ -383,7 +406,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         register,
         logout,
         refreshAccessToken,
-        clearError
+        clearError,
+        refreshLLMApiKeys: refreshLLMApiKeysWrapper // ⭐ J4.6: Use wrapper that captures current accessToken
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

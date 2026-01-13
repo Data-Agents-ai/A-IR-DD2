@@ -105,7 +105,7 @@ router.post('/get-api-key', requireAuth, validateRequest(getApiKeySchema), async
 
 /**
  * POST /api/llm/get-all-api-keys
- * Récupère TOUTES les API keys déchiffrées des providers actifs
+ * Récupère TOUTES les API keys déchiffrées de TOUS les providers (activés ou non)
  * 
  * USAGE: Appelé une fois au login pour récupérer toutes les configs
  * 
@@ -118,13 +118,18 @@ router.post('/get-api-key', requireAuth, validateRequest(getApiKeySchema), async
  *     enabled: boolean
  *   }
  * ]
+ * 
+ * ⭐ J4.6 FIX: Récupère TOUS les configs (enabled + disabled)
+ * Raison: Quand l'utilisateur configure un nouveau provider, on doit retourner
+ * TOUS les providers de l'utilisateur, pas seulement les activés
+ * Sinon le formulaire perd les configs des providers désactivés
  */
 router.post('/get-all-api-keys', requireAuth, async (req: Request, res: Response) => {
     try {
         const user = req.user as any;
 
-        // Récupérer TOUTES les configs actives
-        const configs = await LLMConfig.find({ userId: user.id, enabled: true });
+        // ⭐ J4.6: Récupérer TOUS les configs (enabled=true ET enabled=false)
+        const configs = await LLMConfig.find({ userId: user.id });
 
         if (configs.length === 0) {
             return res.json([]); // Aucune config, retourner tableau vide

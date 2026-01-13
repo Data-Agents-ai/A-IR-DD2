@@ -20,9 +20,6 @@ import llmProxyRoutes from './routes/llm-proxy.routes';
 import userSettingsRoutes from './routes/user-settings.routes';
 import userWorkspaceRoutes from './routes/user-workspace.routes';
 
-// ⭐ V2 ROUTES - Nouvelle architecture de persistance (Jalon 2)
-import instancesRoutes from './routes/instances.routes';
-
 // SOLID: Valider la configuration au démarrage (fail-fast pattern)
 validateConfig();
 
@@ -37,8 +34,38 @@ app.use(helmet());
 app.use(mongoSanitize());
 
 // Configuration CORS
+// In development, accept any localhost port (5173, 5174, 5175, 3000, etc.)
+// In production, use FRONTEND_URL env var
+const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  if (!origin) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    callback(null, true);
+    return;
+  }
+
+  const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
+  const isProduction = process.env.NODE_ENV === 'production';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+  if (isProduction) {
+    // Production: strict CORS - only accept configured frontend URL
+    if (origin === frontendUrl) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  } else {
+    // Development: allow all localhost origins
+    if (isLocalhost) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: corsOrigin,
   credentials: true
 }));
 
@@ -60,13 +87,7 @@ app.use('/api/auth', authRoutes);
 // CORRECTION SOLID: agent-instances imbriquées SOUS workflows pour héritage des params
 app.use('/api/workflows', workflowsRoutes);
 workflowsRoutes.use('/:workflowId/instances', agentInstancesRoutes);
-// ⭐ AUTO-SAVE: Direct route for agent-instances (content update doesn't need workflowId)
-app.use('/api/agent-instances', agentInstancesRoutes);
 app.use('/api/agent-prototypes', agentPrototypesRoutes);
-
-// ⭐ V2 ROUTES - Instances avec lazy loading (Jalon 2)
-// Nouvelle architecture: GET/PATCH instances individuelles, journaux paginés
-app.use('/api/instances', instancesRoutes);
 
 // LLM routes (Jalon 3 - Phase 2)
 app.use('/api/llm-configs', llmConfigsRoutes);
@@ -172,7 +193,9 @@ async function startServer() {
     console.error('💀 Erreur critique au démarrage:', error);
     process.exit(1);
   }
-}// Lancer le serveur
+}
+
+// Lancer le serveur
 startServer();
 
 export { app };

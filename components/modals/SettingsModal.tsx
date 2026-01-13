@@ -23,8 +23,8 @@ interface LLMConfigWithHasKey extends LLMConfig {
 export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: SettingsModalProps) => {
   const [currentLLMConfigs, setCurrentLLMConfigs] = useState<LLMConfigWithHasKey[]>(JSON.parse(JSON.stringify(propConfigs)));
   const { t, locale, setLocale } = useLocalization();
-  const { user, isAuthenticated } = useAuth();
-  const { configs: hookConfigs, loading: hookLoading, updateConfig } = useLLMConfigs();
+  const { user, isAuthenticated, refreshLLMApiKeys } = useAuth();
+  const { configs: hookConfigs, loading: hookLoading, updateConfig, deleteConfig } = useLLMConfigs();
   const { saveMode, setSaveMode, isLoading: saveModeLoading } = useSaveMode();
   const [activeTab, setActiveTab] = useState<'llms' | 'save' | 'language'>('llms');
   const [isSaving, setIsSaving] = useState(false);
@@ -181,20 +181,72 @@ export const SettingsModal = ({ llmConfigs: propConfigs, onClose, onSave }: Sett
     setIsSaving(true);
     
     try {
-      // Save only configs that have non-empty API keys via the hook
-      // ⭐ J4.4.3 FIX: Save for BOTH auth and guest modes
-      // - Auth mode: updateConfig → llmConfigService → API backend
-      // - Guest mode: updateConfig → llmConfigService → localStorage
-      const configsToSave = currentLLMConfigs.filter(
-        config => config.apiKey && config.apiKey.trim().length > 0
-      );
+      // ⭐ FIX J4.7: Save configs that EITHER have a new key OR have changed enabled state
+      // Previous bug: configs with masked keys (•••) were never saved, so toggling
+      // enabled/disabled on an existing config was ignored
+      
+      // Build a map of original (API) configs for comparison
+      const originalConfigsMap = new Map(hookConfigs.map(hc => [hc.provider, hc]));
+      
+      const configsToSave = currentLLMConfigs.filter(config => {
+        const hasNewKey = config.apiKey 
+          && config.apiKey.trim().length > 0 
+          && !config.apiKey.includes('•');
+          
+        // Check if enabled state changed from original
+        const originalConfig = originalConfigsMap.get(config.provider);
+        const enabledChanged = originalConfig && originalConfig.enabled !== config.enabled;
+        
+        // Save if:
+        // 1. Has a NEW (non-masked) API key, OR
+        // 2. enabled state changed AND has an existing key (hasApiKey)
+        return hasNewKey || (enabledChanged && config.hasApiKey);
+      });
+      
+      // ⭐ CRITICAL: Detect deleted configs (user explicitly erased a key)
+      // A config is deleted if:
+      // - It had a key before (hasApiKey was true OR had masked key)
+      // - Now it's COMPLETELY EMPTY (user erased it)
+      const configsToDelete = currentLLMConfigs.filter(config => {
+        const hadKey = config.hasApiKey || (config.apiKey && config.apiKey.includes('•'));
+        const isNowEmpty = !config.apiKey || config.apiKey.trim().length === 0;
+        const wasErased = hadKey && isNowEmpty;
+        return wasErased;
+      });
 
+      console.log('[SettingsModal] Saving:', configsToSave.map(c => c.provider));
+      console.log('[SettingsModal] Deleting:', configsToDelete.map(c => c.provider));
+
+      // Save new/updated configs
       for (const config of configsToSave) {
+        const hasNewKey = config.apiKey 
+          && config.apiKey.trim().length > 0 
+          && !config.apiKey.includes('•');
+          
+        // If hasApiKey but no new key entered, send the masked key
+        // Backend will detect masked key and only update enabled/capabilities
+        const apiKeyToSend = hasNewKey ? config.apiKey : (config.hasApiKey ? '•••masked•••' : config.apiKey);
+        
         await updateConfig(config.provider, {
-          apiKey: config.apiKey,
+          apiKey: apiKeyToSend,
           enabled: config.enabled,
           capabilities: config.capabilities
         });
+      }
+      
+      // Delete removed configs (user explicitly erased them)
+      for (const config of configsToDelete) {
+        try {
+          await deleteConfig(config.provider);
+        } catch (err) {
+          console.error(`Failed to delete config for ${config.provider}:`, err);
+        }
+      }
+      
+      // ⭐ J4.6 FIX: Refetch ALL LLM API keys from backend after saving
+      // This ensures new/updated/deleted configs are reflected in AuthContext
+      if (isAuthenticated && refreshLLMApiKeys) {
+        await refreshLLMApiKeys();
       }
     } catch (err) {
       console.error('[SettingsModal] Failed to save configs:', err);

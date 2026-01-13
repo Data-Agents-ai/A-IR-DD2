@@ -81,6 +81,30 @@ export interface OutputConfig {
   useCodestralCompletion?: boolean;
 }
 
+/**
+ * ⭐ PERSISTENCE CONFIG: Configuration granulaire de persistance par agent
+ * Définit ce qui est sauvegardé pour chaque agent individuellement
+ */
+export type MediaStorageType = 'db' | 'local' | 'cloud';
+
+export interface PersistenceConfig {
+  saveChat: boolean;             // Défaut: true - Sauvegarder les messages de chat
+  saveErrors: boolean;           // Défaut: true - Sauvegarder les erreurs rencontrées
+  saveHistorySummary: boolean;   // Défaut: false - Générer et stocker un résumé périodique (économie tokens)
+  saveLinks: boolean;            // Défaut: false - Sauvegarder les liens entre agents (placeholder)
+  saveTasks: boolean;            // Défaut: false - Sauvegarder les tâches assignées (placeholder)
+  mediaStorage: MediaStorageType; // Défaut: 'db' - GridFS, local filesystem, ou cloud storage
+}
+
+export const defaultPersistenceConfig: PersistenceConfig = {
+  saveChat: true,
+  saveErrors: true,
+  saveHistorySummary: false,
+  saveLinks: false,
+  saveTasks: false,
+  mediaStorage: 'db'
+};
+
 export interface Agent {
   id: string;
   name: string;
@@ -92,6 +116,7 @@ export interface Agent {
   historyConfig?: HistoryConfig;
   tools?: Tool[];
   outputConfig?: OutputConfig;
+  persistenceConfig?: PersistenceConfig; // ⭐ NEW: Configuration de persistance
   // V2 Governance: Robot creator validation
   creator_id: RobotId;
   created_at: string; // ISO timestamp

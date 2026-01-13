@@ -22,6 +22,7 @@
  */
 
 import { GUEST_STORAGE_KEYS } from '../utils/guestDataUtils';
+import { PersistenceConfig } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -220,6 +221,7 @@ export interface CreateAgentInstanceData {
     name: string;
     position: { x: number; y: number };
     configuration_json?: Record<string, any>;
+    persistenceConfig?: PersistenceConfig; // ⭐ NEW: Override config from WorkflowValidationModal
 }
 
 export async function createAgentInstance(
@@ -265,7 +267,8 @@ export async function createAgentInstance(
             workflowId,
             prototypeId: data.prototypeId,
             name: data.name,
-            position: data.position
+            position: data.position,
+            persistenceConfig: data.persistenceConfig
         });
 
         const response = await fetch(`${API_BASE_URL}/api/workflows/${workflowId}/instances/from-prototype`, {
@@ -278,7 +281,8 @@ export async function createAgentInstance(
                 prototypeId: data.prototypeId,
                 position: data.position,
                 name: data.name,
-                configuration_json: data.configuration_json
+                configuration_json: data.configuration_json,
+                persistenceConfig: data.persistenceConfig // ⭐ Pass override config to backend
             })
         });
 

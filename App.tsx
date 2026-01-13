@@ -6,6 +6,8 @@ import { AgentFormModal } from './components/modals/AgentFormModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { Header } from './components/Header';
 import { GUEST_STORAGE_KEYS } from './utils/guestDataUtils';
+import { LoginModal } from './components/modals/LoginModal';
+import { RegisterModal } from './components/modals/RegisterModal';
 import { ImageGenerationPanel } from './components/panels/ImageGenerationPanel';
 import { ImageModificationPanel } from './components/panels/ImageModificationPanel';
 import { VideoGenerationConfigPanel } from './components/panels/VideoGenerationConfigPanel';
@@ -39,8 +41,11 @@ interface EditingImageInfo {
   mimeType: string;
 }
 
+// ⭐ CRITICAL FIX: ALL providers start disabled by default
+// Only providers saved in the database (with API keys) will be enabled
+// This prevents Gemini from always appearing when user hasn't configured it
 const initialLLMConfigs: LLMConfig[] = [
-  { provider: LLMProvider.Gemini, enabled: true, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.ImageModification]: true, [LLMCapability.WebSearch]: true, [LLMCapability.URLAnalysis]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.VideoGeneration]: true, [LLMCapability.MapsGrounding]: true, [LLMCapability.WebSearchGrounding]: true } },
+  { provider: LLMProvider.Gemini, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.ImageModification]: true, [LLMCapability.WebSearch]: true, [LLMCapability.URLAnalysis]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.VideoGeneration]: true, [LLMCapability.MapsGrounding]: true, [LLMCapability.WebSearchGrounding]: true } },
   { provider: LLMProvider.OpenAI, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.ImageGeneration]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
   { provider: LLMProvider.Mistral, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true, [LLMCapability.Embedding]: true, [LLMCapability.OCR]: true } },
   { provider: LLMProvider.Anthropic, enabled: false, apiKey: '', capabilities: { [LLMCapability.Chat]: true, [LLMCapability.FileUpload]: true, [LLMCapability.FunctionCalling]: true, [LLMCapability.OutputFormatting]: true } },
@@ -141,9 +146,11 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
  * Must be wrapped by AuthProvider to access useAuth()
  */
 function AppContent() {
-  const { isAuthenticated, accessToken, llmApiKeys } = useAuth();
+  const { isAuthenticated, accessToken, llmApiKeys, user, logout } = useAuth();
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false);
   const [isAgentModalOpen, setAgentModalOpen] = useState(false);
+  const [isLoginModalOpen, setLoginModalOpen] = useState(false);
+  const [isRegisterModalOpen, setRegisterModalOpen] = useState(false);
   const [isImagePanelOpen, setImagePanelOpen] = useState(false);
   const [isImageModificationPanelOpen, setImageModificationPanelOpen] = useState(false);
   const [isVideoPanelOpen, setVideoPanelOpen] = useState(false);
@@ -176,6 +183,9 @@ function AppContent() {
   const [showHyperspace, setShowHyperspace] = useState(!isAuthenticated);
   const [hyperspaceActive, setHyperspaceActive] = useState(false);
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
+  
+  // ⭐ J4.4.3: Ref to track previous llmApiKeys to prevent infinite loops
+  const prevApiKeysRef = React.useRef<string>('');
 
   // ⭐ UX: Trigger hyperspace on logout (auth → guest transition)
   useEffect(() => {
@@ -363,6 +373,11 @@ function AppContent() {
     // ⭐ CRITICAL J4.4: Clear React state on auth change to prevent data leaks
     setWorkflowNodes([]);
     setAgents([]);
+    
+    // ⭐ FIX: Reset prevApiKeysRef on auth change to allow fresh hydration
+    // Bug: After logout/login, same configs would be skipped due to hash match
+    prevApiKeysRef.current = '';
+    console.log('[App] 🔄 Auth state changed - reset prevApiKeysRef for fresh hydration');
   }, [isAuthenticated, accessToken, updateLLMConfigs]);
 
   /**
@@ -388,34 +403,59 @@ function AppContent() {
     if (llmApiKeys === null || llmApiKeys === undefined) {
       return; // Still loading, wait for next trigger
     }
-    
-    if (llmApiKeys.length > 0) {
-      // Convert LLMApiKey[] to LLMConfig[]
-      const apiConfigs: LLMConfig[] = llmApiKeys.map(key => ({
-        provider: key.provider as LLMProvider,
-        apiKey: key.apiKey,
-        enabled: key.enabled,
-        capabilities: (key.capabilities || {}) as { [k in LLMCapability]?: boolean }
-      }));
-      
-      // Merge with initial configs to keep capabilities defaults for providers not in API
-      const mergedConfigs = initialLLMConfigs.map(initial => {
-        const apiConfig = apiConfigs.find(c => c.provider === initial.provider);
-        if (apiConfig) {
-          return {
-            ...initial,
-            ...apiConfig,
-            capabilities: { ...initial.capabilities, ...apiConfig.capabilities }
-          };
-        }
-        return initial;
-      });
-      
-      const enabledProviders = mergedConfigs.filter(c => c.enabled).map(c => c.provider);
-      
-      setLlmConfigs(mergedConfigs);
-      updateLLMConfigs(mergedConfigs);
+
+    console.log('[App] 🔍 useEffect triggered with llmApiKeys:', llmApiKeys.length, 'keys:', llmApiKeys.map(k => k.provider));
+
+    // ⭐ FIX: Prevent infinite loop by checking content equality
+    // Must be done BEFORE any state updates
+    const keysHash = JSON.stringify(llmApiKeys);
+    if (keysHash === prevApiKeysRef.current) {
+      console.log('[App] 🔍 Hash unchanged, skipping');
+      return;
     }
+    prevApiKeysRef.current = keysHash;
+
+    // ⭐ FIX: If llmApiKeys is empty array, user has no configs in DB
+    // Set all providers to disabled (initialLLMConfigs with enabled:false)
+    if (llmApiKeys.length === 0) {
+      console.log('[App] 🔍 No API keys in database - setting all providers to disabled');
+      setLlmConfigs(initialLLMConfigs); // All disabled by default now
+      updateLLMConfigs(initialLLMConfigs);
+      return;
+    }
+    
+    // Convert LLMApiKey[] to LLMConfig[]
+    const apiConfigs: LLMConfig[] = llmApiKeys.map(key => ({
+      provider: key.provider as LLMProvider,
+      apiKey: key.apiKey,
+      enabled: key.enabled,
+      capabilities: (key.capabilities || {}) as { [k in LLMCapability]?: boolean }
+    }));
+    
+    console.log('[App] 🔍 Converted to apiConfigs:', apiConfigs.length);
+    
+    // Merge with initial configs to keep capabilities defaults for providers not in API
+    const mergedConfigs = initialLLMConfigs.map(initial => {
+      const apiConfig = apiConfigs.find(c => c.provider === initial.provider);
+      if (apiConfig) {
+        return {
+          ...initial,
+          ...apiConfig,
+          capabilities: { ...initial.capabilities, ...apiConfig.capabilities }
+        };
+      }
+      return initial;
+    });
+    
+    console.log('[App] 🔍 After merge, llmConfigs will have:', mergedConfigs.filter(c => c.enabled).length, 'enabled providers');
+    
+    const enabledProviders = mergedConfigs.filter(c => c.enabled).map(c => c.provider);
+    console.log('[App] 🔍 enabledProviders:', enabledProviders);
+    
+    setLlmConfigs(mergedConfigs);
+    console.log('[App] 🔍 setLlmConfigs called, should be in state now');
+    updateLLMConfigs(mergedConfigs);
+    console.log('[App] 🔍 updateLLMConfigs called for Zustand store');
   }, [isAuthenticated, llmApiKeys, updateLLMConfigs]);
 
   // Configure navigation handler for agent nodes
@@ -511,14 +551,23 @@ function AppContent() {
         preferences: { language: 'fr' }
       });
       
-      // ⭐ J4.5 FIX: Reload configs from fresh source to ensure synchronization
-      // For guests: reload from localStorage (useLLMConfigs already saved there)
-      // For auth: use the provided newLLMConfigs (which came from API via useLLMConfigs)
-      const freshConfigs = loadLLMConfigs(isAuthenticated, accessToken);
-      setLlmConfigs(freshConfigs);
-      updateLLMConfigs(freshConfigs);
+      if (!isAuthenticated) {
+        // ⭐ Guest mode: reload from localStorage
+        const freshConfigs = loadLLMConfigs(false, null);
+        setLlmConfigs(freshConfigs);
+        updateLLMConfigs(freshConfigs);
+      } else {
+        // ⭐ FIX: For authenticated users, use the configs directly from modal
+        // refreshLLMApiKeys() was already called in SettingsModal before onSave()
+        // The newLLMConfigs reflect what was just saved to the database
+        // We also reset the hash so the useEffect will sync on next llmApiKeys update
+        console.log('[App] handleSaveSettings - applying', newLLMConfigs.filter(c => c.enabled).length, 'enabled configs');
+        setLlmConfigs(newLLMConfigs);
+        updateLLMConfigs(newLLMConfigs);
+        prevApiKeysRef.current = ''; // Reset for next llmApiKeys sync
+      }
     } catch (error) {
-      // Handle error silently
+      console.error('[App] handleSaveSettings error:', error);
     }
   };
 
@@ -604,7 +653,9 @@ function AppContent() {
             systemPrompt: agent.systemPrompt,
             tools: agent.tools || [],
             outputConfig: agent.outputConfig
-          }
+          },
+          // ⭐ Pass persistenceConfig override if provided from WorkflowValidationModal
+          persistenceConfig: agent.persistenceConfig
         },
         workflowId,
         { isAuthenticated, accessToken }
@@ -763,6 +814,11 @@ function AppContent() {
         <div className="flex flex-col h-screen bg-gray-900 text-gray-100 font-sans">
           <Header
             onOpenSettings={() => setSettingsModalOpen(true)}
+            onLogin={() => setLoginModalOpen(true)}
+            onRegister={() => setRegisterModalOpen(true)}
+            onLogout={logout}
+            isAuthenticated={isAuthenticated}
+            user={user}
           />
           <div className="flex flex-1 overflow-hidden">
             <NavigationLayout
@@ -809,6 +865,20 @@ function AppContent() {
               llmConfigs={llmConfigs}
               onClose={() => setSettingsModalOpen(false)}
               onSave={handleSaveSettings}
+            />
+          )}
+
+          {isLoginModalOpen && (
+            <LoginModal
+              isOpen={isLoginModalOpen}
+              onClose={() => setLoginModalOpen(false)}
+            />
+          )}
+
+          {isRegisterModalOpen && (
+            <RegisterModal
+              isOpen={isRegisterModalOpen}
+              onClose={() => setRegisterModalOpen(false)}
             />
           )}
 

@@ -182,6 +182,15 @@ body {
   pointer-events: auto !important;
 }
 
+/* AutoSave Indicator - Mode automatique, position discrète */
+.workflow-autosave-indicator-fixed {
+  position: fixed !important;
+  bottom: 85px !important;
+  right: 15px !important;
+  z-index: 4 !important;
+  pointer-events: auto !important;
+}
+
 /* MiniMap nodes - Motif rayé léger pour meilleure identification visuelle */
 .minimap-node-striped {
   background-image: repeating-linear-gradient(45deg,

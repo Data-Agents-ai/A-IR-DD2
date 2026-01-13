@@ -1,5 +1,18 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+/**
+ * ⭐ PERSISTENCE CONFIG: Configuration granulaire par agent
+ * Permet de définir ce qui est sauvegardé pour chaque agent
+ */
+export interface IPersistenceConfig {
+    saveChat: boolean;             // Défaut: true - Sauvegarder les messages de chat
+    saveErrors: boolean;           // Défaut: true - Sauvegarder les erreurs rencontrées
+    saveHistorySummary: boolean;   // Défaut: false - Générer et stocker un résumé périodique
+    saveLinks: boolean;            // Défaut: false - Sauvegarder les liens entre agents (placeholder)
+    saveTasks: boolean;            // Défaut: false - Sauvegarder les tâches assignées (placeholder)
+    mediaStorage: 'db' | 'local' | 'cloud'; // Défaut: 'db' - Stockage GridFS
+}
+
 export interface IAgentPrototype extends Document {
     userId: mongoose.Types.ObjectId;
     name: string;
@@ -13,9 +26,24 @@ export interface IAgentPrototype extends Document {
     outputConfig?: object;
     robotId: string;
     isPrototype: true;
+    persistenceConfig: IPersistenceConfig; // ⭐ NEW: Configuration de persistance
     createdAt: Date;
     updatedAt: Date;
 }
+
+// ⭐ Sub-schema for persistence config
+const PersistenceConfigSchema = new Schema<IPersistenceConfig>({
+    saveChat: { type: Boolean, default: true },
+    saveErrors: { type: Boolean, default: true },
+    saveHistorySummary: { type: Boolean, default: false },
+    saveLinks: { type: Boolean, default: false },
+    saveTasks: { type: Boolean, default: false },
+    mediaStorage: { 
+        type: String, 
+        enum: ['db', 'local', 'cloud'], 
+        default: 'db' 
+    }
+}, { _id: false });
 
 const AgentPrototypeSchema = new Schema<IAgentPrototype>({
     userId: {
@@ -71,6 +99,18 @@ const AgentPrototypeSchema = new Schema<IAgentPrototype>({
         type: Boolean,
         default: true,
         immutable: true
+    },
+    // ⭐ NEW: Configuration de persistance granulaire par agent
+    persistenceConfig: {
+        type: PersistenceConfigSchema,
+        default: () => ({
+            saveChat: true,
+            saveErrors: true,
+            saveHistorySummary: false,
+            saveLinks: false,
+            saveTasks: false,
+            mediaStorage: 'db'
+        })
     }
 }, {
     timestamps: true,

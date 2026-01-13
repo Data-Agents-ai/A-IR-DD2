@@ -77,4 +77,5 @@ export interface AuthContextType {
     logout: () => void;
     refreshAccessToken: () => Promise<void>;
     clearError: () => void;
+    refreshLLMApiKeys: () => Promise<void>; // ⭐ J4.6: Refetch keys after config changes
 }

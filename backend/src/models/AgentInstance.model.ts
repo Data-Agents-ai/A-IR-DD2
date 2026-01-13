@@ -1,6 +1,23 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 // ============================================
+// PERSISTENCE CONFIG (copie de AgentPrototype)
+// ============================================
+
+/**
+ * ⭐ PERSISTENCE CONFIG: Configuration granulaire par agent instance
+ * Hérité du prototype avec possibilité d'override à l'instanciation
+ */
+export interface IPersistenceConfig {
+    saveChat: boolean;             // Défaut: true - Sauvegarder les messages de chat
+    saveErrors: boolean;           // Défaut: true - Sauvegarder les erreurs rencontrées
+    saveHistorySummary: boolean;   // Défaut: false - Générer et stocker un résumé périodique
+    saveLinks: boolean;            // Défaut: false - Sauvegarder les liens entre agents (placeholder)
+    saveTasks: boolean;            // Défaut: false - Sauvegarder les tâches assignées (placeholder)
+    mediaStorage: 'db' | 'local' | 'cloud'; // Défaut: 'db' - Stockage GridFS
+}
+
+// ============================================
 // TYPES DE CONTENU POLYMORPHE (ÉTAPE 1.6)
 // ============================================
 
@@ -120,6 +137,9 @@ export interface IAgentInstance extends Document {
     // ⭐ NOUVEAU: Contexte utilisateur (ÉTAPE 1.6)
     userNotes?: string;
     tags?: string[];
+
+    // ⭐ NOUVEAU: Configuration de persistance (héritée du prototype avec override possible)
+    persistenceConfig: IPersistenceConfig;
 
     createdAt: Date;
     updatedAt: Date;
@@ -276,7 +296,31 @@ const AgentInstanceSchema = new Schema<IAgentInstance>({
     tags: [{
         type: String,
         maxlength: 50
-    }]
+    }],
+
+    // ⭐ NOUVEAU: Configuration de persistance (héritée du prototype avec override possible)
+    persistenceConfig: {
+        type: {
+            saveChat: { type: Boolean, default: true },
+            saveErrors: { type: Boolean, default: true },
+            saveHistorySummary: { type: Boolean, default: false },
+            saveLinks: { type: Boolean, default: false },
+            saveTasks: { type: Boolean, default: false },
+            mediaStorage: { 
+                type: String, 
+                enum: ['db', 'local', 'cloud'], 
+                default: 'db' 
+            }
+        },
+        default: {
+            saveChat: true,
+            saveErrors: true,
+            saveHistorySummary: false,
+            saveLinks: false,
+            saveTasks: false,
+            mediaStorage: 'db'
+        }
+    }
 }, {
     timestamps: true,
     collection: 'agent_instances'

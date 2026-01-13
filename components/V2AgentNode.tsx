@@ -204,10 +204,9 @@ export const V2AgentNode: React.FC<NodeProps<V2AgentNodeData>> = ({ data, id, se
 
   const handleFullscreen = () => {
     // Open fullscreen chat modal for this node
-    // Pass instanceId (not nodeId) so getResolvedInstance can retrieve the instance with its custom name
-    if (agentInstance) {
-      setFullscreenChatNodeId(agentInstance.id);
-    }
+    // Use the ReactFlow node id (same key used for storing messages in nodeMessages)
+    // NOT agentInstance.id which is different and would cause messages to be lost
+    setFullscreenChatNodeId(id);
   };
 
 

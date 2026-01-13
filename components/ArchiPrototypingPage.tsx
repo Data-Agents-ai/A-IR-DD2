@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Agent, LLMConfig, RobotId } from '../types';
+import { Agent, LLMConfig, RobotId, PersistenceConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
 import { useAuth } from '../contexts/AuthContext';
 import { AgentFormModal } from './modals/AgentFormModal';
@@ -174,18 +174,20 @@ export const ArchiPrototypingPage: React.FC<ArchiPrototypingPageProps> = ({
     setWorkflowValidationOpen(true);
   };
 
-  const confirmAddToWorkflow = (instanceName: string) => {
+  const confirmAddToWorkflow = (instanceName: string, persistenceConfig?: PersistenceConfig) => {
     if (!agentToAdd) return;
 
-    // Create an agent instance with custom name if provided
-    const agentWithInstanceName = {
+    // Create an agent instance with custom name and persistence config if provided
+    const agentWithInstanceData = {
       ...agentToAdd,
-      instanceName: instanceName || agentToAdd.name
+      instanceName: instanceName || agentToAdd.name,
+      // ⭐ Include persistenceConfig override if provided from modal
+      ...(persistenceConfig && { persistenceConfig })
     };
 
     // Use the global onAddToWorkflow prop instead of local store
     if (onAddToWorkflow) {
-      onAddToWorkflow(agentWithInstanceName);
+      onAddToWorkflow(agentWithInstanceData);
 
       // Show success notification
       addNotification({

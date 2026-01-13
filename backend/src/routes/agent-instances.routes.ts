@@ -143,11 +143,12 @@ router.post('/',
 );
 
 // POST /api/workflows/:workflowId/instances/from-prototype - Créer instance depuis prototype
+// ⭐ MERGE STRATEGY: prototype (source) + body overrides (name, persistenceConfig)
 router.post('/from-prototype', requireAuth, async (req: Request<WorkflowParams>, res: Response) => {
     try {
         const user = req.user as IUser;
         const { workflowId } = req.params;
-        const { prototypeId, position } = req.body;
+        const { prototypeId, position, name, persistenceConfig } = req.body;
 
         if (!workflowId || !mongoose.Types.ObjectId.isValid(workflowId)) {
             return res.status(400).json({ error: 'workflowId invalide' });
@@ -171,29 +172,89 @@ router.post('/from-prototype', requireAuth, async (req: Request<WorkflowParams>,
             return res.status(404).json({ error: 'Workflow introuvable' });
         }
 
-        // Créer instance avec snapshot du prototype
+        // ⭐ GÉNÉRER executionId unique (UUID format)
+        const executionId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+        // ⭐ MERGE STRATEGY: prototype comme base + overrides frontend + FALLBACKS
+        // 1. Name: utiliser override si fourni, sinon prototype.name, sinon fallback
+        const finalName = name?.trim() || prototype.name || 'Agent sans nom';
+        
+        // 2. Champs requis avec fallbacks robustes (évite ValidationError)
+        const finalRole = prototype.role?.trim() || 'Assistant généraliste';
+        const finalSystemPrompt = prototype.systemPrompt?.trim() || 'Tu es un assistant IA utile et professionnel.';
+        const finalLlmProvider = prototype.llmProvider || 'openai';
+        const finalLlmModel = prototype.llmModel || 'gpt-4o-mini';
+        const finalRobotId = prototype.robotId || 'AR_001';
+        
+        // 3. Tableaux: s'assurer qu'ils ne sont jamais undefined
+        const finalCapabilities = Array.isArray(prototype.capabilities) ? prototype.capabilities : [];
+        const finalTools = Array.isArray(prototype.tools) ? prototype.tools : [];
+        
+        // 4. PersistenceConfig: merge prototype config avec overrides
+        const prototypePersistenceConfig = prototype.persistenceConfig || {
+            saveChat: true,
+            saveErrors: true,
+            saveHistorySummary: false,
+            saveLinks: false,
+            saveTasks: false,
+            mediaStorage: 'db'
+        };
+        
+        const finalPersistenceConfig = persistenceConfig 
+            ? { ...prototypePersistenceConfig, ...persistenceConfig }
+            : prototypePersistenceConfig;
+
+        // Log des valeurs finales pour debugging
+        console.log('[AgentInstances] 📋 Instance data prepared:', {
+            name: finalName,
+            role: finalRole,
+            llmProvider: finalLlmProvider,
+            llmModel: finalLlmModel,
+            robotId: finalRobotId,
+            hasTools: finalTools.length,
+            hasCapabilities: finalCapabilities.length
+        });
+
+        // Créer instance avec snapshot du prototype + overrides + fallbacks
         const instance = new AgentInstance({
             workflowId,
             userId: user.id,
             prototypeId: prototype.id,
 
-            // Snapshot config
-            name: prototype.name,
-            role: prototype.role,
-            systemPrompt: prototype.systemPrompt,
-            llmProvider: prototype.llmProvider,
-            llmModel: prototype.llmModel,
-            capabilities: prototype.capabilities,
-            historyConfig: prototype.historyConfig,
-            tools: prototype.tools,
-            outputConfig: prototype.outputConfig,
-            robotId: prototype.robotId,
+            // ⭐ executionId unique (required)
+            executionId,
+            status: 'running',
+
+            // Snapshot config avec fallbacks robustes
+            name: finalName,
+            role: finalRole,
+            systemPrompt: finalSystemPrompt,
+            llmProvider: finalLlmProvider,
+            llmModel: finalLlmModel,
+            capabilities: finalCapabilities,
+            historyConfig: prototype.historyConfig || {},
+            tools: finalTools,
+            outputConfig: prototype.outputConfig || {},
+            robotId: finalRobotId,
 
             // Canvas properties
             position,
             isMinimized: false,
             isMaximized: false,
-            zIndex: 0
+            zIndex: 0,
+
+            // persistenceConfig avec overrides
+            persistenceConfig: finalPersistenceConfig,
+
+            // initialisation contenu et métriques
+            content: [],
+            metrics: {
+                totalTokens: 0,
+                totalErrors: 0,
+                totalMediaGenerated: 0,
+                callCount: 0
+            },
+            startedAt: new Date()
         });
 
         await instance.save();
@@ -202,10 +263,45 @@ router.post('/from-prototype', requireAuth, async (req: Request<WorkflowParams>,
         workflow.isDirty = true;
         await workflow.save();
 
+        console.log('[AgentInstances] ✅ Instance créée depuis prototype:', {
+            instanceId: instance._id,
+            executionId,
+            prototypeId: prototype.id,
+            name: finalName
+        });
+
         res.status(201).json(instance);
-    } catch (error) {
-        console.error('[AgentInstances] POST/from-prototype error:', error);
-        res.status(500).json({ error: 'Erreur création instance depuis prototype' });
+    } catch (error: any) {
+        // ⭐ LOGGING AMÉLIORÉ: afficher les détails de l'erreur de validation
+        console.error('[AgentInstances] ❌ POST/from-prototype error:', {
+            message: error.message,
+            name: error.name,
+            // Si c'est une ValidationError Mongoose, afficher les champs en erreur
+            validationErrors: error.errors 
+                ? Object.keys(error.errors).map(key => ({
+                    field: key,
+                    message: error.errors[key].message,
+                    value: error.errors[key].value
+                }))
+                : undefined,
+            stack: error.stack?.split('\n').slice(0, 5).join('\n')
+        });
+        
+        // Réponse avec plus de détails (en dev uniquement)
+        const errorResponse: any = { 
+            error: 'Erreur création instance depuis prototype',
+            message: error.message
+        };
+        
+        // Ajouter les détails de validation si disponibles
+        if (error.name === 'ValidationError' && error.errors) {
+            errorResponse.validationErrors = Object.keys(error.errors).map(key => ({
+                field: key,
+                message: error.errors[key].message
+            }));
+        }
+        
+        res.status(500).json(errorResponse);
     }
 });
 

@@ -19,6 +19,8 @@ import { WorkflowCanvasProvider } from '../contexts/WorkflowCanvasContext';
 import { PrototypeEditConfirmationModal } from './modals/PrototypeEditConfirmationModal';
 import { AgentFormModal } from './modals/AgentFormModal';
 import { SavePrototypeButton } from './SavePrototypeButton';
+import { AutoSaveIndicator } from './AutoSaveIndicator';
+import { useAutoSave } from '../hooks/useAutoSave';
 import { Agent, WorkflowNode, LLMConfig } from '../types';
 import { useDesignStore } from '../stores/useDesignStore';
 import { useWorkflowStore } from '../stores/useWorkflowStore';
@@ -156,6 +158,18 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
 
   // Détecter si un panneau média est actif (pour calcul largeur maximized)
   const isMediaPanelActive = isImagePanelOpen || isImageModificationPanelOpen || isVideoPanelOpen || isMapsPanelOpen;
+
+  // ⭐ PLAN_DE_PERSISTENCE: Hook de sauvegarde automatique
+  const autoSave = useAutoSave({
+    workflowId,
+    workflowName,
+    canvasState: reactFlowInstance ? {
+      zoom: reactFlowInstance.getZoom(),
+      panX: reactFlowInstance.getViewport().x,
+      panY: reactFlowInstance.getViewport().y
+    } : undefined,
+    onSaveComplete
+  });
 
   // Mettre à jour les références SANS déclencher de re-render
   stableRefs.current.callbacks = {
@@ -511,6 +525,16 @@ const WorkflowCanvasInner = memo(function WorkflowCanvasInner(props: WorkflowCan
                 panY: reactFlowInstance.getViewport().y
               }}
               onSaveComplete={onSaveComplete}
+            />
+          </div>
+
+          {/* ⭐ PLAN_DE_PERSISTENCE: Indicateur de sauvegarde automatique */}
+          <div className="workflow-autosave-indicator-fixed">
+            <AutoSaveIndicator
+              status={autoSave.status}
+              lastSavedAt={autoSave.lastSavedAt}
+              error={autoSave.error}
+              isEnabled={autoSave.isEnabled}
             />
           </div>
         </ReactFlow>

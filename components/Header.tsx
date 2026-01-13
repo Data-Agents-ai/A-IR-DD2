@@ -8,6 +8,11 @@ import { RegisterModal } from './modals/RegisterModal';
 
 interface HeaderProps {
   onOpenSettings: () => void;
+  onLogin: () => void;
+  onRegister: () => void;
+  onLogout: () => void;
+  isAuthenticated: boolean;
+  user: User;
 }
 
 /**
