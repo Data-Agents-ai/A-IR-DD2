@@ -14,8 +14,7 @@ const WorkflowNodeSchema = new Schema<IWorkflowNode>({
     ownerId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
     },
     nodeType: {
         type: String,

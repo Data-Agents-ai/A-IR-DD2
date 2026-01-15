@@ -111,8 +111,7 @@ const AgentInstanceV2Schema = new Schema<IAgentInstanceV2>({
     workflowId: {
         type: Schema.Types.ObjectId,
         ref: 'Workflow',
-        required: true,
-        index: true
+        required: true
     },
     userId: {
         type: Schema.Types.ObjectId,

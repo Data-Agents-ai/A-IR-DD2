@@ -17,8 +17,7 @@ const LLMConfigSchema = new Schema<ILLMConfig>({
     userId: {
         type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true,
-        index: true
+        required: true
     },
     provider: {
         type: String,
