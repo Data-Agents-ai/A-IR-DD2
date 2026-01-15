@@ -54,8 +54,7 @@ const userSettingsSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: true,
-            unique: true,
-            index: true
+            unique: true
         },
 
         // User Preferences only (J4.4: llmConfigs removed)

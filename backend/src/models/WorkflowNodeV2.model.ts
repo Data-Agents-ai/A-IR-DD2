@@ -92,7 +92,6 @@ const WorkflowNodeV2Schema = new Schema<IWorkflowNodeV2>({
     instanceId: {
         type: Schema.Types.ObjectId,
         ref: 'AgentInstanceV2',
-        index: true,
         sparse: true // Permet null pour les types non-agent
     },
     
