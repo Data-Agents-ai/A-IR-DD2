@@ -79,8 +79,7 @@ const WorkflowNodeV2Schema = new Schema<IWorkflowNodeV2>({
     workflowId: {
         type: Schema.Types.ObjectId,
         ref: 'Workflow',
-        required: true,
-        index: true
+        required: true
     },
     ownerId: {
         type: Schema.Types.ObjectId,
@@ -91,8 +90,7 @@ const WorkflowNodeV2Schema = new Schema<IWorkflowNodeV2>({
     // Lien instance agent
     instanceId: {
         type: Schema.Types.ObjectId,
-        ref: 'AgentInstanceV2',
-        sparse: true // Permet null pour les types non-agent
+        ref: 'AgentInstanceV2'
     },
     
     // Type

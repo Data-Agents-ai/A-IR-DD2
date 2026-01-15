@@ -97,7 +97,6 @@ const userSettingsSchema = new Schema(
 /**
  * Indices for performance
  */
-userSettingsSchema.index({ userId: 1 }, { unique: true });
 userSettingsSchema.index({ updatedAt: 1 });
 
 export const UserSettings = mongoose.model<IUserSettings>(

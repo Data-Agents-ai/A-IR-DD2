@@ -182,8 +182,7 @@ const AgentJournalSchema = new Schema<IAgentJournal>({
     // Timestamp
     timestamp: {
         type: Date,
-        default: Date.now,
-        index: true
+        default: Date.now
     },
     
     // Contenu polymorphe - Mixed pour flexibilité
@@ -195,8 +194,7 @@ const AgentJournalSchema = new Schema<IAgentJournal>({
     
     // Groupement
     sessionId: {
-        type: String,
-        index: true
+        type: String
     }
 }, {
     timestamps: false, // On utilise notre propre timestamp
