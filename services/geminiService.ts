@@ -2,10 +2,6 @@
 import { GoogleGenAI, Modality, Content } from "@google/genai";
 import { ChatMessage, Tool, OutputConfig } from "../types";
 
-// Per coding guidelines, the API key must come exclusively from process.env.API_KEY.
-// The API key passed in from the UI will be ignored for this service.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const formatTools = (tools?: Tool[]) => {
     if (!tools || tools.length === 0) return undefined;
     return {
@@ -59,11 +55,15 @@ const formatHistory = (history?: ChatMessage[]): Content[] => {
 
 
 export const generateContentStream = async function* (
-    apiKey: string, // This parameter is ignored to comply with security guidelines.
+    apiKey: string,
     model: string,
     systemInstruction?: string, history?: ChatMessage[], tools?: Tool[], outputConfig?: OutputConfig
 ) {
-    // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const formattedTools = formatTools(tools);
     const formattedHistory = formatHistory(history);
 
@@ -118,11 +118,15 @@ export const generateContentStream = async function* (
 };
 
 export const generateContent = async (
-    apiKey: string, // This parameter is ignored to comply with security guidelines.
+    apiKey: string,
     model: string,
     systemInstruction?: string, history?: ChatMessage[], tools?: Tool[], outputConfig?: OutputConfig
 ): Promise<{ text: string }> => {
-    // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const formattedTools = formatTools(tools);
     const formattedHistory = formatHistory(history);
 
@@ -161,12 +165,16 @@ export const generateContent = async (
 };
 
 export const generateContentWithSearch = async (
-    apiKey: string, // This parameter is ignored to comply with security guidelines.
+    apiKey: string,
     model: string,
     prompt: string,
     systemInstruction?: string
 ): Promise<{ text: string; citations: { title: string; uri: string }[] }> => {
-    // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     try {
         const config: any = {
             tools: [{ googleSearch: {} }],
@@ -198,11 +206,15 @@ export const generateContentWithSearch = async (
 };
 
 export const generateImage = async (
-    apiKey: string, // This parameter is ignored to comply with security guidelines.
+    apiKey: string,
     prompt: string,
     model?: string // Optional model parameter (defaults to imagen-3.0)
 ): Promise<{ image: string; error?: undefined } | { error: string; image?: undefined }> => {
-    // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     try {
         const imageModel = model || 'imagen-3.0-generate-001';
         const response = await ai.models.generateImages({
@@ -219,11 +231,15 @@ export const generateImage = async (
 };
 
 export const editImage = async (
-    apiKey: string, // This parameter is ignored to comply with security guidelines.
+    apiKey: string,
     prompt: string,
     image: { mimeType: string; data: string }
 ): Promise<{ image?: string; text?: string; error?: string }> => {
-    // The global `ai` instance, initialized with process.env.API_KEY, is used instead.
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     try {
         const imagePart = { inlineData: { mimeType: image.mimeType, data: image.data } };
         const textPart = { text: prompt };
@@ -264,10 +280,15 @@ export const editImage = async (
  * @returns VideoGenerationStatus with operationId for polling
  */
 export const generateVideo = async (
-    apiKey: string, // Ignored, uses global ai instance
+    apiKey: string,
     options: import("../types").VideoGenerationOptions,
     model?: string // Optional model parameter (defaults to veo-001)
 ): Promise<import("../types").VideoGenerationStatus> => {
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     try {
         // Build config
         const config: any = {
@@ -339,9 +360,14 @@ export const generateVideo = async (
  * @returns Updated VideoGenerationStatus with videoUrl when completed
  */
 export const pollVideoOperation = async (
-    apiKey: string, // Ignored, uses global ai instance
+    apiKey: string,
     operationId: string
 ): Promise<import("../types").VideoGenerationStatus> => {
+    if (!apiKey) {
+        throw new Error('API key is required for Gemini service');
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     try {
         const operation = await ai.operations.get({ name: operationId });
 
