@@ -54,8 +54,7 @@ const userSettingsSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: 'User',
             required: true,
-            unique: true,
-            index: true
+            unique: true
         },
 
         // User Preferences only (J4.4: llmConfigs removed)
@@ -98,7 +97,6 @@ const userSettingsSchema = new Schema(
 /**
  * Indices for performance
  */
-userSettingsSchema.index({ userId: 1 }, { unique: true });
 userSettingsSchema.index({ updatedAt: 1 });
 
 export const UserSettings = mongoose.model<IUserSettings>(
